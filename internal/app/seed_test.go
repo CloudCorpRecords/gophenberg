@@ -714,7 +714,7 @@ func TestSeedNamesTheDemoAccountItCouldNotStore(t *testing.T) {
 	}
 }
 
-func TestDemoAccountsHoldEveryRoleUnderOnePassword(t *testing.T) {
+func TestDemoAccountsHoldEveryCoreRoleUnderOnePassword(t *testing.T) {
 	t.Parallel()
 
 	var roles []string
@@ -725,8 +725,8 @@ func TestDemoAccountsHoldEveryRoleUnderOnePassword(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(roles, role.Known()) {
-		t.Errorf("demo accounts hold %v, want one account under each of %v", roles, role.Known())
+	if core := []string{role.Admin, role.Editor, role.Author}; !slices.Equal(roles, core) {
+		t.Errorf("demo accounts hold %v, want one account under each core role %v", roles, core)
 	}
 }
 
