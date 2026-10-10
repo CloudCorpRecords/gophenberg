@@ -42,6 +42,23 @@ func TestCoreGrantsEachCoreRoleItsCapabilities(t *testing.T) {
 	}
 }
 
+func TestRegistryHoldsTheCoreRolesAlone(t *testing.T) {
+	t.Parallel()
+
+	registry := role.Registry()
+
+	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor}) {
+		t.Errorf("Roles() = %v, want the three core roles alone", roles)
+	}
+	if held := registry.HoldersOf(string(role.ManageUsers)); !slices.Equal(held, []string{role.Admin}) {
+		t.Errorf("HoldersOf(ManageUsers) = %v, want admin alone", held)
+	}
+	editorChanges := registry.Can(role.Editor, string(role.ChangeOthersWork))
+	if !editorChanges || registry.Can(role.Author, string(role.ChangeOthersWork)) {
+		t.Error("the registry does not carry the core's table, want editor to change others' work and author not")
+	}
+}
+
 func TestCoreCannotBeChangedByItsCaller(t *testing.T) {
 	t.Parallel()
 
@@ -215,26 +232,26 @@ func TestMayChange(t *testing.T) {
 
 	owner := uuid.New()
 	stranger := uuid.New()
+	changes := []string{string(role.ManageUsers), string(role.ChangeOthersWork)}
 	tests := map[string]struct {
-		role  string
-		actor uuid.UUID
-		want  bool
+		capabilities []string
+		actor        uuid.UUID
+		want         bool
 	}{
-		"an admin changes another account's work":         {role.Admin, stranger, true},
-		"an editor changes another account's work":        {role.Editor, stranger, true},
-		"an author changes its own work":                  {role.Author, owner, true},
-		"an author is refused another account's":          {role.Author, stranger, false},
-		"an unreadable role is refused another's":         {"archivist", stranger, false},
-		"an unreadable role still changes its own":        {"archivist", owner, true},
-		"an account holding no role is refused another's": {"", stranger, false},
+		"an account changing others' work changes another's":     {changes, stranger, true},
+		"an account carrying nothing changes its own work":       {nil, owner, true},
+		"an account carrying nothing is refused another's":       {nil, stranger, false},
+		"an account carrying other capabilities is refused":      {[]string{string(role.ManageThemes)}, stranger, false},
+		"an account carrying a plugin's capability is refused":   {[]string{"notes.manage"}, stranger, false},
+		"an account changing others' work still changes its own": {changes, owner, true},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := role.MayChange(test.role, test.actor, owner); got != test.want {
-				t.Errorf("MayChange(%q, actor, owner) = %v, want %v", test.role, got, test.want)
+			if got := role.MayChange(test.capabilities, test.actor, owner); got != test.want {
+				t.Errorf("MayChange(%v, actor, owner) = %v, want %v", test.capabilities, got, test.want)
 			}
 		})
 	}
