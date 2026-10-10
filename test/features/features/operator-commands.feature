@@ -128,3 +128,52 @@ Feature: Operators run Gophenberg from one command line
     When the operator runs "check"
     Then the command exits with code 1
     And the error says "needs -since, which it does not declare"
+
+  @wip
+  Scenario: An account takes a role a plugin declares
+    Given a plugin declaring the role "archivist" with the capability "notes.manage"
+    And the administrator "admin@example.com"
+    And the author "author@example.com"
+    When the operator gives "author@example.com" the role "archivist" acting as "admin@example.com"
+    Then the command succeeds
+    And the account "author@example.com" holds the role "archivist"
+
+  @wip
+  Scenario: An administrator runs a plugin command needing a capability its plugin declares
+    Given a plugin declaring the role "archivist" with the capability "notes.manage"
+    And a plugin offering "notes:purge", which asks for "notes.manage"
+    And the administrator "admin@example.com"
+    When the operator runs "notes:purge -as admin@example.com -yes"
+    Then the command succeeds
+    And the records list "notes:purge" applied by "admin@example.com"
+
+  @wip
+  Scenario: An editor lacks a capability a plugin declares for another role
+    Given a plugin declaring the role "archivist" with the capability "notes.manage"
+    And a plugin offering "notes:purge", which asks for "notes.manage"
+    And the editor "editor@example.com"
+    When the operator runs "notes:purge -as editor@example.com -yes"
+    Then the command exits with code 1
+    And the error says "which lacks notes.manage"
+    And the plugin command never ran
+
+  @wip
+  Scenario: A role carrying only the account capability cannot make an administrator
+    Given a plugin declaring the role "team_lead" with the capability "manage_users"
+    And the administrator "admin@example.com"
+    And the author "lead@example.com"
+    And the author "author@example.com"
+    And the administrator "admin@example.com" gave "lead@example.com" the role "team_lead"
+    When the operator gives "author@example.com" the role "admin" acting as "lead@example.com"
+    Then the command exits with code 1
+    And the error says "the role admin carries"
+    And the error says "which the account lead@example.com lacks"
+    And the account "author@example.com" still holds the role "author"
+
+  @wip
+  Scenario: A plugin declaring a capability outside its prefix stops the account commands
+    Given a plugin declaring the role "archivist" with the capability "manage_archive"
+    When the operator creates the administrator "admin@example.com" with a password on standard input
+    Then the command exits with code 1
+    And the error says "plugin notes"
+    And the error says "outside the source's prefix"
