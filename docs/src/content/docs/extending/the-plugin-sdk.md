@@ -45,13 +45,15 @@ so `Register` can return it as it is.
 
 ## The lifecycle interfaces
 
-`sdk.Plugin` is required: `ID`, `Start`, `Stop`. Five optional
+`sdk.Plugin` is required: `ID`, `Start`, `Stop`. Six optional
 interfaces add capabilities the host discovers automatically:
 `Migrator` for database migrations, `RouteProvider` for HTTP under
 `/api/plugins/{id}`, `PublicPathProvider` for the exact paths that
 answer without a login, `TypeDeclarer` for content types, field
-groups and fields the plugin brings with it, and `CommandProvider`
-for [commands](#commands) on the `gophenberg` command line.
+groups and fields the plugin brings with it, `CommandProvider`
+for [commands](#commands) on the `gophenberg` command line, and
+`RoleProvider` for the [roles and capabilities](#roles-and-capabilities)
+the plugin brings.
 
 `Register` only checks the plugin's settings and builds it. It
 opens nothing, no connection, no file and no goroutine. `Start`
@@ -192,7 +194,7 @@ func (p plugin) Commands() []sdk.Command {
 | `Needs` | The names of the flags every run must set, each one declared by `Flags` and taking a value |
 | `Writes` | Makes the command a dry run until `-yes` |
 | `JSON` | Offers `-json` |
-| `Capability` | One of the capabilities the built-in roles carry, such as `manage_users`, which adds `-as <email>` |
+| `Capability` | A capability the core or a plugin declares, such as `manage_users` or `notes.manage`, which adds `-as <email>` |
 | `Run` | Does the work |
 
 `Run` receives a `sdk.Call`. `Args` holds the arguments, and `Flags`
@@ -214,10 +216,11 @@ would change and changes nothing. The command line then adds
 A command that names a `Capability` is refused before `Run` unless
 the `-as` account exists, is enabled and activated, and holds a
 role with that capability. Each run it applies is stored as one
-record, which `gophenberg account:records` lists. Plugins cannot add
-capabilities. Name one the roles already carry, `manage_users`,
-`manage_themes`, `manage_types`, `manage_settings` or
-`change_others_work`, or every account is refused.
+record, which `gophenberg account:records` lists. Name a capability
+the core declares, such as `manage_users`, or one your plugin
+declares through [`RoleProvider`](#roles-and-capabilities), such as
+`notes.manage`. No account carries a capability nobody declares, so
+a command naming one refuses every account.
 
 An error from `Run` exits with code 1. Wrap it in `sdk.Misuse` when
 the command line itself is wrong, a bad argument value for example.
@@ -286,6 +289,60 @@ above, so the run exits 2 with the help page the same way.
 [Writing commands](https://docs.gopherium.org/command-line/writing-commands/)
 covers `Needs` in full.
 
+## Roles and capabilities
+
+A capability is one named permission, such as `notes.manage`. A role
+is a set of capabilities an account holds. The core declares three
+roles, `admin`, `editor` and `author`, and five capabilities. A
+plugin adds its own through `RoleProvider`, which returns them as
+data:
+
+```go
+// Roles returns the role the notes plugin brings and the capability it adds to editors.
+func (plugin) Roles() []sdk.RoleDeclaration {
+	return []sdk.RoleDeclaration{
+		{Name: "archivist", Capabilities: []string{"notes.manage"}},
+		{Name: "editor", Capabilities: []string{"notes.edit"}},
+	}
+}
+```
+
+The first entry brings a new role. The second adds a capability to a
+role the core already has. In WordPress, these are `add_role` and
+`add_cap`. The site declares every plugin's roles into one
+[registry](https://docs.gopherium.org/authorization/plugin-roles/),
+under these rules:
+
+- **A new capability starts with your plugin's id and a dot,** such
+  as `notes.manage`, so two plugins never share one by accident. You
+  may still grant a capability that already exists, such as the
+  core's `manage_users`.
+- **The administrator carries every capability a plugin declares,**
+  so it can hand out your roles.
+- **Names** use lowercase letters, digits, `_`, `.` and `-`, start
+  with a letter, and hold at most 64 characters. Role names take no
+  prefix, and two plugins that declare the same role widen it
+  together.
+- **Order matters.** Plugins declare in the order of their folders
+  under `plugins/`. A plugin that grants another plugin's capability
+  must come after it, so name it after its parent, such as
+  `notes-tags` after `notes`. The id `core` is reserved.
+- **A declaration that breaks a rule stops** `serve`, the account
+  commands and every plugin command, and the error names your
+  plugin:
+  `plugin notes: goncierge: new capability outside the source's prefix "notes.": "manage_archive"`.
+
+Ask for a capability, never a role name: `session.Can("notes.manage")`
+in a route, and `Capability: "notes.manage"` on a command. The
+account commands take your roles too:
+
+```sh
+gophenberg account:role maria@example.com archivist -yes -as admin@example.com
+```
+
+An account whose role nobody declares any more, after its plugin is
+removed, keeps the stored name and carries no capability.
+
 ## The signed-in account
 
 A request reaches your routes only with a login, except on the
@@ -303,7 +360,8 @@ if !ok || !session.Can("manage_settings") {
 `ok` is false on a public path, where nobody has to sign in. An
 `sdk.Session` carries `ID`, an `sdk.ID` like an item's, and the
 account's `Email`, `Name` and `Role`. `Can` reports whether the
-account's role holds a capability, such as `manage_users`.
+account's role holds a capability, such as `manage_users` or one a
+plugin declares.
 
 ## What the SDK withholds
 
