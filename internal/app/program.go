@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 
@@ -15,7 +16,8 @@ import (
 
 // Program returns the gophenberg command line over getenv and the compiled plugins.
 func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, error)) gonsole.Program {
-	accountCommands := accountConfig()
+	roles := goncierge.New()
+	accountCommands := accountConfig(roles)
 	return gonsole.Program{
 		Name:       "gophenberg",
 		Title:      "Gophenberg",
@@ -28,7 +30,7 @@ func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, e
 		Migrations: migrations(),
 		Seed:       seedSite,
 		Commands:   append(accounts.Commands(accountCommands), accounts.Records(accountCommands)),
-		Plugins:    loadPlugins(plugins),
+		Plugins:    loadPlugins(plugins, roles),
 		Authorize:  accounts.Authorize(accountCommands),
 		Record:     accounts.Record(accountCommands),
 	}
