@@ -10,7 +10,23 @@ import (
 	"testing"
 
 	"github.com/gopherium/framework/pluginkit/wire"
+
+	"github.com/gopherium/gophenberg/internal/role"
 )
+
+func TestConfigRefusesThePluginIDTheCoreDeclaresItsRolesUnder(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writePlugin(t, root, role.Source, fmt.Sprintf(
+		`{"id": %q, "name": "Core", "backend": "github.com/gopherium/gophenberg/plugins/%s"}`, role.Source, role.Source))
+
+	err := wire.Run(root, config)
+
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("id %q is reserved", role.Source)) {
+		t.Errorf("wire.Run() error = %v, want the id %q refused as reserved", err, role.Source)
+	}
+}
 
 func TestConfigRefusesAPluginIDTheCommandLineKeeps(t *testing.T) {
 	t.Parallel()
