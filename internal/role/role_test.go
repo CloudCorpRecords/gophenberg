@@ -7,9 +7,54 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/gopherium/framework/goncierge"
 
 	"github.com/gopherium/gophenberg/internal/role"
 )
+
+func TestCoreGrantsEachCoreRoleItsCapabilities(t *testing.T) {
+	t.Parallel()
+
+	registry := goncierge.New()
+	err := registry.Replace(role.Source, role.Core())
+
+	if err != nil {
+		t.Fatalf("Replace(%q, Core()) = %v, want the core's names accepted", role.Source, err)
+	}
+	tests := map[string][]string{
+		role.Admin: {
+			string(role.ChangeOthersWork), string(role.ManageSettings), string(role.ManageThemes),
+			string(role.ManageTypes), string(role.ManageUsers),
+		},
+		role.Editor: {string(role.ChangeOthersWork)},
+		role.Author: nil,
+	}
+	for named, want := range tests {
+		if held := registry.CapabilitiesOf(named); !slices.Equal(held, want) {
+			t.Errorf("CapabilitiesOf(%q) = %v, want %v", named, held, want)
+		}
+	}
+	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor}) {
+		t.Errorf("Roles() = %v, want the three core roles", roles)
+	}
+	if held := registry.HoldersOf(string(role.ManageUsers)); !slices.Equal(held, []string{role.Admin}) {
+		t.Errorf("HoldersOf(ManageUsers) = %v, want admin alone", held)
+	}
+}
+
+func TestCoreCannotBeChangedByItsCaller(t *testing.T) {
+	t.Parallel()
+
+	core := role.Core()
+	core[0].Capabilities[0] = "manage_everything"
+	core[1].Name = "owner"
+
+	again := role.Core()
+
+	if again[0].Capabilities[0] == "manage_everything" || again[1].Name == "owner" {
+		t.Errorf("Core() = %v after a caller wrote to it, want the table untouched", again)
+	}
+}
 
 func TestKnownListsTheRolesInDeclarationOrder(t *testing.T) {
 	t.Parallel()
