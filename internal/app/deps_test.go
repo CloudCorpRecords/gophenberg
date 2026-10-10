@@ -123,6 +123,9 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 		cfg.Types != built.types || cfg.Settings != built.settings || cfg.Readers != built.readers {
 		t.Error("serverConfig() serves other stores or another registry than the ones compose built")
 	}
+	if cfg.Roles != built.roles {
+		t.Error("serverConfig() serves other roles than the ones compose declared")
+	}
 	if cfg.Cache != cachePolicyFrom(settings) || cfg.Cache.AssetMaxAge != 2*time.Hour {
 		t.Errorf("Cache = %+v, want the windows the settings name", cfg.Cache)
 	}
