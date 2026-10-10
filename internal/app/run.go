@@ -110,6 +110,7 @@ func serverConfig(
 		UploadTimeout:        settings.uploadTimeout,
 		Declarations:         walked,
 		Lists:                settings.lists,
+		Roles:                built.roles,
 	}
 	if settings.webDir != "" {
 		cfg.Web = os.DirFS(settings.webDir)
