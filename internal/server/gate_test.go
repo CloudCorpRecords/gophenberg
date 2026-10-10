@@ -201,6 +201,31 @@ func concrete(pattern string) string {
 	return replaced.Replace(pattern)
 }
 
+func TestARoleTheRegistryGivesTheAccountCapabilityReachesTheUsers(t *testing.T) {
+	t.Parallel()
+
+	roles := role.Registry()
+	if err := roles.Grant("teams", "team_lead", string(role.ManageUsers)); err != nil {
+		t.Fatalf("Grant() = %v, want the plugin role granted", err)
+	}
+	users := newFakeUserStore()
+	addWithRole(t, users, "lead@example.com", "Maria Perez", "team_lead")
+	handler := server.NewServer(server.Config{Users: users, Roles: roles})
+	signedIn := doLogin(t, handler, `{"email":"lead@example.com","password":"correct horse battery"}`)
+	if signedIn.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d", signedIn.Code, http.StatusOK)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	request.AddCookie(sessionCookie(t, signedIn))
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Errorf("GET /api/users status = %d for a role carrying manage_users, want %d", recorder.Code, http.StatusOK)
+	}
+}
+
 func TestAnUnprivilegedRoleIsRefusedEveryAdminRoute(t *testing.T) {
 	t.Parallel()
 
