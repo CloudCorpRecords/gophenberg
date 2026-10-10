@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/gopherium/framework/pluginkit/wire"
+
+	"github.com/gopherium/gophenberg/internal/role"
 )
 
 // config parameterizes the shared wiring generator for Gophenberg.
@@ -18,7 +20,7 @@ var config = wire.Config{
 	GoWiringPath: "cmd/gophenberg/plugins_gen.go",
 	TSWiringPath: "frontend/src/plugins/index.ts",
 	License:      "Apache-2.0",
-	Reserved:     []string{"help", "list", "version", "check", "serve", "migrate", "seed", "account"},
+	Reserved:     []string{"help", "list", "version", "check", "serve", "migrate", "seed", "account", role.Source},
 }
 
 // main regenerates the plugin wiring files.
