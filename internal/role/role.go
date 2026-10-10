@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gopherium/framework/goncierge"
-	"github.com/gopherium/gouncer"
 )
 
 // Source is the source the core grants its roles under in a registry.
@@ -72,52 +71,6 @@ func Registry() *goncierge.Registry {
 	registry := goncierge.New()
 	_ = registry.Replace(Source, Core())
 	return registry
-}
-
-// Known returns every role an account may hold, in declaration order.
-func Known() []string {
-	known := make([]string, 0, len(carried))
-	for _, entry := range carried {
-		known = append(known, entry.role)
-	}
-	return known
-}
-
-// Can reports whether a role holds the capability, an unknown role holding none.
-func Can(role string, capability Capability) bool {
-	return slices.Contains(capabilitiesOf(role), capability)
-}
-
-// CapabilitiesOf returns the capabilities a role carries, named for a caller outside this package.
-func CapabilitiesOf(role string) []string {
-	own := capabilitiesOf(role)
-	held := make([]string, 0, len(own))
-	for _, capability := range own {
-		held = append(held, string(capability))
-	}
-	return held
-}
-
-// capabilitiesOf returns the capabilities the table gives role, none for an unknown role.
-func capabilitiesOf(role string) []Capability {
-	for _, entry := range carried {
-		if entry.role == role {
-			return entry.capabilities
-		}
-	}
-	return nil
-}
-
-// Privileged returns the roles that administer accounts.
-func Privileged() gouncer.Roles {
-	var roles gouncer.Roles
-	for _, entry := range carried {
-		if slices.Contains(entry.capabilities, ManageUsers) {
-			roles = append(roles, entry.role)
-		}
-	}
-	slices.Sort(roles)
-	return roles
 }
 
 // MayChange reports whether an account carrying the capabilities may change work the author owns.
