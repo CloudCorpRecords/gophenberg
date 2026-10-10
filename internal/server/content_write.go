@@ -247,7 +247,7 @@ func (s *server) patchContent(
 	if err != nil {
 		return content.Content{}, err
 	}
-	if err := refuseUnlessAuthor(r, stored.AuthorID); err != nil {
+	if err := s.refuseUnlessAuthor(r, stored.AuthorID); err != nil {
 		return content.Content{}, err
 	}
 	previous := stored

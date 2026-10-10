@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/pluginkit"
 	"github.com/gopherium/gouncer/authkit"
 	"github.com/gopherium/gouncer/authkit/ratelimit"
@@ -76,6 +77,16 @@ type Config struct {
 	Declarations definitions.Walked
 	// Lists is what the admin lists read once. A zero value serves its default.
 	Lists ListSettings
+	// Roles holds the roles accounts take and the capabilities each carries. Nil holds the core's roles alone.
+	Roles *goncierge.Registry
+}
+
+// rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
+func rolesOf(cfg Config) *goncierge.Registry {
+	if cfg.Roles != nil {
+		return cfg.Roles
+	}
+	return role.Registry()
 }
 
 // registryOf returns the registry the configuration hands over, or one built over its type store.
@@ -98,12 +109,14 @@ func loggerOf(cfg Config) *slog.Logger {
 // requires a login session except login, logout, and each plugin's
 // declared public paths.
 func NewServer(cfg Config) http.Handler {
+	roles := rolesOf(cfg)
+	privileged := roles.HoldersOf(string(role.ManageUsers))
 	auth := authkit.New(authkit.Config{
-		Store: cfg.Users, CookieName: sessionCookieName, Privileged: role.Privileged(),
+		Store: cfg.Users, CookieName: sessionCookieName, Privileged: privileged,
 	})
-	admin := authkit.NewAdmin(authkit.AdminConfig{Store: cfg.Users, Privileged: role.Privileged()})
+	admin := authkit.NewAdmin(authkit.AdminConfig{Store: cfg.Users, Privileged: privileged})
 	s := &server{
-		auth: auth, users: cfg.Users, content: cfg.Content, themes: cfg.Themes,
+		auth: auth, users: cfg.Users, content: cfg.Content, themes: cfg.Themes, roles: roles,
 		media: cfg.Media, mediaStore: cfg.MediaStore, version: cfg.Version,
 		settings: cfg.Settings, readers: cfg.Readers,
 		types:          registryOf(cfg),
@@ -142,7 +155,7 @@ func NewServer(cfg Config) http.Handler {
 	})
 	for id, handler := range cfg.Plugins {
 		prefix := "/api/plugins/" + id
-		guarded := pluginkit.Protect(handler, cfg.PluginPublicPaths[id], guardPlugin(auth))
+		guarded := pluginkit.Protect(handler, cfg.PluginPublicPaths[id], guardPlugin(auth, roles))
 		router.Mount(prefix, http.StripPrefix(prefix, guarded))
 	}
 	router.With(identify(cfg.Version)).Handle(assetPrefix+"/*", siteAssets(cfg.Web, headers.asset))
@@ -251,4 +264,5 @@ type server struct {
 	declarations   definitions.Walked
 	logger         *slog.Logger
 	lists          ListSettings
+	roles          *goncierge.Registry
 }

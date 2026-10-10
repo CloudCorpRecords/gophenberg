@@ -18,9 +18,9 @@ import (
 var errNotAuthor = errors.New("not the author of this item")
 
 // refuseUnlessAuthor refuses unless the session may change work the author owns.
-func refuseUnlessAuthor(r *http.Request, author uuid.UUID) error {
+func (s *server) refuseUnlessAuthor(r *http.Request, author uuid.UUID) error {
 	identity := authkit.IdentityFromContext(r.Context())
-	if role.MayChange(identity.Role, identity.ID, author) {
+	if role.MayChange(s.roles.CapabilitiesOf(identity.Role), identity.ID, author) {
 		return nil
 	}
 	return errNotAuthor
@@ -32,7 +32,7 @@ func (s *server) ownedContent(r *http.Request, id uuid.UUID) (content.Content, e
 	if err != nil {
 		return content.Content{}, err
 	}
-	if err := refuseUnlessAuthor(r, stored.AuthorID); err != nil {
+	if err := s.refuseUnlessAuthor(r, stored.AuthorID); err != nil {
 		return content.Content{}, err
 	}
 	return stored, nil

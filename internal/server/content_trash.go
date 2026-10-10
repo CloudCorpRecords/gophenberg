@@ -32,7 +32,7 @@ func (s *server) handleTrashEmpty() http.HandlerFunc {
 			respondDomainError(w, err)
 			return
 		}
-		deleted, kept, err := s.content.EmptyTrash(r.Context(), contentType.Key, trashOwner(r))
+		deleted, kept, err := s.content.EmptyTrash(r.Context(), contentType.Key, s.trashOwner(r))
 		if err != nil {
 			respondDomainError(w, err)
 			return
@@ -42,9 +42,9 @@ func (s *server) handleTrashEmpty() http.HandlerFunc {
 }
 
 // trashOwner returns the account whose trash the session may empty, none when it may empty every account's.
-func trashOwner(r *http.Request) *uuid.UUID {
+func (s *server) trashOwner(r *http.Request) *uuid.UUID {
 	identity := authkit.IdentityFromContext(r.Context())
-	if role.Can(identity.Role, role.ChangeOthersWork) {
+	if s.roles.Can(identity.Role, string(role.ChangeOthersWork)) {
 		return nil
 	}
 	return &identity.ID
