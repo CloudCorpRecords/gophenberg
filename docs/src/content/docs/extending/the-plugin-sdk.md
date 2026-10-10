@@ -313,8 +313,6 @@ The absences are deliberate, so build against them:
   editor is the one writer.
 - **No account changes.** You read the signed-in account, and the
   SDK gives you nothing to change accounts with.
-- **No shared database pool.** You get the URL, you own your
-  connections and your schema.
 
 ## Admin screens for plugins
 
