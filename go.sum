@@ -64,6 +64,8 @@ github.com/gopherium/framework/dbkit v0.1.0 h1:jeFld4uZu555PkgbZQRKkDK1WOOB8am+W
 github.com/gopherium/framework/dbkit v0.1.0/go.mod h1:M837GTBK4MLEt0oqvEKhCQydKFNhVLWvsDlAcqT21co=
 github.com/gopherium/framework/dbkit/postgres v0.2.0 h1:me2xl+MdtitkwCUxVxrnXH0WJbGvi8tWHv4R0+PeESs=
 github.com/gopherium/framework/dbkit/postgres v0.2.0/go.mod h1:ZUsvp2lOkhX+08sstBErt+jN6FM5HkhxV7hXgToRd+A=
+github.com/gopherium/framework/goncierge v0.1.0 h1:9Zn2zxAuWTrhKeMEHNSncAb1jmjFrkEpVYXGdZrxTG8=
+github.com/gopherium/framework/goncierge v0.1.0/go.mod h1:ekTJKyCbU0s659tjHvH/sjEZfPp2S4iuOGaLRRULZuA=
 github.com/gopherium/framework/gonsole v0.6.1 h1:yi0te8BDJLuotbrd24bQDMWSJ0KgIhSIAfOjF0jpDnQ=
 github.com/gopherium/framework/gonsole v0.6.1/go.mod h1:n0aJzbwPGPryrWKZ8WzDVub+6R+GUBzeHSzvhMvZR64=
 github.com/gopherium/framework/gonsole/auth v0.4.1 h1:0bzXtMIUv15FK3KmLIEPlriNbZKPVZgFpcx9v4QKrDU=
