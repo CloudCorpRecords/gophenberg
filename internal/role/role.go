@@ -67,6 +67,13 @@ func Core() []goncierge.Role {
 	return roles
 }
 
+// Registry returns a registry holding the core's roles alone.
+func Registry() *goncierge.Registry {
+	registry := goncierge.New()
+	_ = registry.Replace(Source, Core())
+	return registry
+}
+
 // Known returns every role an account may hold, in declaration order.
 func Known() []string {
 	known := make([]string, 0, len(carried))
@@ -113,7 +120,7 @@ func Privileged() gouncer.Roles {
 	return roles
 }
 
-// MayChange reports whether an account of the given role may change work the author owns.
-func MayChange(role string, actor, author uuid.UUID) bool {
-	return Can(role, ChangeOthersWork) || actor == author
+// MayChange reports whether an account carrying the capabilities may change work the author owns.
+func MayChange(capabilities []string, actor, author uuid.UUID) bool {
+	return slices.Contains(capabilities, string(ChangeOthersWork)) || actor == author
 }
