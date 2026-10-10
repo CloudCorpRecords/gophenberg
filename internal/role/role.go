@@ -7,9 +7,12 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/gouncer"
 )
+
+// Source is the source the core grants its roles under in a registry.
+const Source = "core"
 
 // Admin is the role holding every authority over the site.
 const Admin = "admin"
@@ -49,6 +52,19 @@ var carried = []grant{
 	{Admin, []Capability{ManageUsers, ManageThemes, ManageTypes, ManageSettings, ChangeOthersWork}},
 	{Editor, []Capability{ChangeOthersWork}},
 	{Author, nil},
+}
+
+// Core returns the core's roles with the capabilities each carries, for a registry to grant.
+func Core() []goncierge.Role {
+	roles := make([]goncierge.Role, 0, len(carried))
+	for _, entry := range carried {
+		held := make([]string, 0, len(entry.capabilities))
+		for _, capability := range entry.capabilities {
+			held = append(held, string(capability))
+		}
+		roles = append(roles, goncierge.Role{Name: entry.role, Capabilities: held})
+	}
+	return roles
 }
 
 // Known returns every role an account may hold, in declaration order.
