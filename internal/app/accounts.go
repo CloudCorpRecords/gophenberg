@@ -35,6 +35,11 @@ func declaredRoles(registry *goncierge.Registry) func(context.Context, gonsole.C
 		if _, err := call.Plugins(ctx); err != nil {
 			return accounts.Roles{}, err
 		}
-		return accounts.RolesFrom(registry, registry.HoldersOf(string(role.ManageUsers))), nil
+		return accountRoles(registry), nil
 	}
+}
+
+// accountRoles returns the roles registry holds, privileged where they carry manage_users.
+func accountRoles(registry *goncierge.Registry) accounts.Roles {
+	return accounts.RolesFrom(registry, registry.HoldersOf(string(role.ManageUsers)))
 }
