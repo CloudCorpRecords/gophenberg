@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"time"
 
@@ -151,7 +152,90 @@ func theLibraryListsInThatOrder(ctx context.Context, names string) error {
 	return nil
 }
 
-// registerMediaListSteps binds the steps that sort the media library.
+// dateRange reads a range a scenario names, `after "D"`, `before "D"` or both, into its bounds.
+var dateRange = regexp.MustCompile(`^(?:after "(\d{4}-\d{2}-\d{2})")?(?:(?: and )?before "(\d{4}-\d{2}-\d{2})")?$`)
+
+// filtersTheLibraryToTheUploadsOfThatAuthor lists only the uploads of the other author.
+func filtersTheLibraryToTheUploadsOfThatAuthor(ctx context.Context) error {
+	return listsTheUploadsOfAnotherAuthor(ctx, "author")
+}
+
+// leavesTheUploadsOfThatAuthorOut lists the library without the uploads of the other author.
+func leavesTheUploadsOfThatAuthorOut(ctx context.Context) error {
+	return listsTheUploadsOfAnotherAuthor(ctx, "author_exclude")
+}
+
+// listsTheUploadsOfAnotherAuthor lists the library naming the other author's account under the parameter.
+func listsTheUploadsOfAnotherAuthor(ctx context.Context, parameter string) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	author, err := w.users.UserByEmail(ctx, anotherAuthorEmail)
+	if err != nil {
+		return fmt.Errorf("finding another author: %w", err)
+	}
+	return w.get(mediaPath + "?" + url.Values{parameter: {author.ID.String()}}.Encode())
+}
+
+// filtersTheLibraryToTheItemsAdded lists the items added within the range, on the before and after bounds.
+func filtersTheLibraryToTheItemsAdded(ctx context.Context, between string) error {
+	return listsWithinTheRange(ctx, between, "after", "before")
+}
+
+// filtersTheLibraryToTheItemsModified lists the items last modified within the range.
+func filtersTheLibraryToTheItemsModified(ctx context.Context, between string) error {
+	return listsWithinTheRange(ctx, between, "modified_after", "modified_before")
+}
+
+// listsWithinTheRange lists the library with the range's days, at midnight UTC, under the two bound parameters.
+func listsWithinTheRange(ctx context.Context, between, afterParameter, beforeParameter string) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	bounds := dateRange.FindStringSubmatch(between)
+	if bounds == nil {
+		return fmt.Errorf("no range reads %s", between)
+	}
+	query := url.Values{}
+	for parameter, day := range map[string]string{afterParameter: bounds[1], beforeParameter: bounds[2]} {
+		if day != "" {
+			query.Set(parameter, day+"T00:00:00Z")
+		}
+	}
+	return w.get(mediaPath + "?" + query.Encode())
+}
+
+// theLibraryListsOnly asserts the last listing carries exactly the titles, in any order.
+func theLibraryListsOnly(ctx context.Context, names string) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if err := w.expect(http.StatusOK); err != nil {
+		return fmt.Errorf("listing the library: %w", err)
+	}
+	var listed struct {
+		Items []listedMedia `json:"items"`
+	}
+	if err := w.answer.decode(&listed); err != nil {
+		return err
+	}
+	titles := make([]string, len(listed.Items))
+	for i, item := range listed.Items {
+		titles[i] = item.Title
+	}
+	want := quotedTitles(names)
+	slices.Sort(titles)
+	slices.Sort(want)
+	if !slices.Equal(titles, want) {
+		return fmt.Errorf("the library lists %q, want only %q", titles, want)
+	}
+	return nil
+}
+
+// registerMediaListSteps binds the steps that sort and narrow the media library.
 func registerMediaListSteps(sc *godog.ScenarioContext) {
 	sc.Given(`^"([^"]*)" was added and last modified on "([^"]*)"$`, wasAddedAndLastModifiedOn)
 	sc.Given(`^"([^"]*)" was added on "([^"]*)" and last modified on "([^"]*)"$`, wasAddedOnAndLastModifiedOn)
@@ -160,5 +244,11 @@ func registerMediaListSteps(sc *godog.ScenarioContext) {
 	sc.Given(`^"([^"]*)" was uploaded by an author whose name sorts first$`, wasUploadedByAnAuthorWhoseNameSortsFirst)
 	sc.When(`^the administrator lists the library sorted by "([^"]*)" "([^"]*)"$`, listsTheLibrarySortedByIn)
 	sc.When(`^the administrator lists the library sorted by "([^"]*)"$`, listsTheLibrarySortedBy)
+	sc.When(`^the administrator filters the library to the uploads of that author$`,
+		filtersTheLibraryToTheUploadsOfThatAuthor)
+	sc.When(`^the administrator leaves the uploads of that author out of the library$`, leavesTheUploadsOfThatAuthorOut)
+	sc.When(`^the administrator filters the library to the items added (.+)$`, filtersTheLibraryToTheItemsAdded)
+	sc.When(`^the administrator filters the library to the items modified (.+)$`, filtersTheLibraryToTheItemsModified)
 	sc.Then(`^the library lists ((?:"[^"]*"(?:, | and )?)+) in that order$`, theLibraryListsInThatOrder)
+	sc.Then(`^the library lists only ((?:"[^"]*"(?:, | and )?)+)$`, theLibraryListsOnly)
 }

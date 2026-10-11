@@ -655,12 +655,18 @@ func listsTheLibraryWith(ctx context.Context, parameters string) error {
 		return err
 	}
 	queries := map[string]string{
-		`the type "audio"`:          "?type=audio",
-		`the page "0"`:              "?page=0",
-		`the page size "0"`:         "?per_page=0",
-		`the page size "x"`:         "?per_page=x",
-		`the sort "slug"`:           "?orderby=slug",
-		`the sort order "sideways"`: "?order=sideways",
+		`the type "audio"`:                     "?type=audio",
+		`the page "0"`:                         "?page=0",
+		`the page size "0"`:                    "?per_page=0",
+		`the page size "x"`:                    "?per_page=x",
+		`the sort "slug"`:                      "?orderby=slug",
+		`the sort order "sideways"`:            "?order=sideways",
+		`the author "nobody"`:                  "?author=nobody",
+		`the excluded author "nobody"`:         "?author_exclude=nobody",
+		`the date added before "yesterday"`:    "?before=yesterday",
+		`the date added after "yesterday"`:     "?after=yesterday",
+		`the date modified before "yesterday"`: "?modified_before=yesterday",
+		`the date modified after "yesterday"`:  "?modified_after=yesterday",
 	}
 	query, known := queries[parameters]
 	if !known {

@@ -121,7 +121,7 @@ func matches(m media.Media, f media.Filter) bool {
 	if f.Type != "" && m.Type != f.Type {
 		return false
 	}
-	if !matchesMime(m, f.Mimes) {
+	if !matchesMime(m, f.Mimes) || !withinAuthorsAndDates(m, f) {
 		return false
 	}
 	if f.Search == "" {
@@ -130,6 +130,19 @@ func matches(m media.Media, f media.Filter) bool {
 	search := strings.ToLower(f.Search)
 	return strings.Contains(strings.ToLower(m.Title), search) ||
 		strings.Contains(strings.ToLower(m.File), search)
+}
+
+// withinAuthorsAndDates reports whether the item stands within the authors and the date bounds the filter narrows to.
+func withinAuthorsAndDates(m media.Media, f media.Filter) bool {
+	switch {
+	case len(f.Authors) > 0 && !slices.Contains(f.Authors, m.AuthorID), slices.Contains(f.ExcludeAuthors, m.AuthorID):
+		return false
+	case f.Before != nil && !m.CreatedAt.Before(*f.Before), f.After != nil && !m.CreatedAt.After(*f.After):
+		return false
+	case f.ModifiedBefore != nil && !m.UpdatedAt.Before(*f.ModifiedBefore):
+		return false
+	}
+	return f.ModifiedAfter == nil || m.UpdatedAt.After(*f.ModifiedAfter)
 }
 
 // matchesMime reports whether the item's content type starts with any prefix.

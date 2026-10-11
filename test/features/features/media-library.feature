@@ -89,19 +89,16 @@ Feature: Managing the media library
     Then the library lists no plain files
     And the library still lists every image
 
-  @wip
   Scenario: Filtering the library to the uploads of one author
     Given the image "pier.jpg" was uploaded by another author
     When the administrator filters the library to the uploads of that author
     Then the library lists only "pier"
 
-  @wip
   Scenario: Leaving the uploads of one author out of the library
     Given the image "pier.jpg" was uploaded by another author
     When the administrator leaves the uploads of that author out of the library
     Then the library lists only "harbor", "cliff" and "manual"
 
-  @wip
   Scenario Outline: Filtering the library by the date added
     Given "cliff" was added on "2026-03-10" and last modified on "2026-09-10"
     And "manual" was added and last modified on "2026-05-10"
@@ -117,7 +114,6 @@ Feature: Managing the media library
       | before "2026-05-10"                        | "cliff"              |
       | after "2026-05-10"                         | "harbor"             |
 
-  @wip
   Scenario Outline: Filtering the library by the date modified
     Given "cliff" was added on "2026-03-10" and last modified on "2026-09-10"
     And "manual" was added and last modified on "2026-05-10"
@@ -202,7 +198,6 @@ Feature: Managing the media library
       | the sort "slug"           |
       | the sort order "sideways" |
 
-  @wip
   Scenario Outline: A filter value the library cannot read is refused
     When the administrator lists the library with <parameters>
     Then the request is refused with the code "list_parameters_invalid"
