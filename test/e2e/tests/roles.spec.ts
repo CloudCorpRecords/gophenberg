@@ -13,6 +13,12 @@ interface ListedPost {
 	updated_at: string
 }
 
+/** A refusal naming the capability the request lacks. */
+interface CapabilityRefusal {
+	code: string
+	meta: { capability: string }
+}
+
 /**
  * Returns a seeded post another account wrote, as seen by the signed in request context.
  * @param request - The request context of the signed in account.
@@ -99,7 +105,9 @@ test.describe('an editor', () => {
 		const answer = await request.get('/api/themes')
 
 		expect(answer.status()).toBe(403)
-		expect(((await answer.json()) as { code: string }).code).toBe('role_insufficient')
+		const refusal = (await answer.json()) as CapabilityRefusal
+		expect(refusal.code).toBe('capability_missing')
+		expect(refusal.meta.capability).toBe('manage_themes')
 	})
 
 	test('opens a post another account wrote as the editor', async ({ page, request }) => {
