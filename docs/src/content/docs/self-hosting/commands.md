@@ -58,8 +58,9 @@ Every command is described at https://docs.gophenberg.org/self-hosting/commands/
   plugin offers. They are named after the plugin's id.
 - A `Not loaded:` part at the end names each plugin that failed to
   register, and why, such as a bad `GOPHENBERG_FEED_ITEMS`. The
-  listing still exits with code 0, but `serve`, `check`, `migrate`
-  and `seed -yes` fail until the setting is fixed.
+  listing still exits with code 0, but `serve`, `check`, `migrate`,
+  `seed -yes` and every account command except `account:list` and
+  `account:records` fail until the setting is fixed.
 
 Every command answers `-h`. `gophenberg account:role -h` and
 `gophenberg help account:role` print the same page, and neither needs
@@ -161,8 +162,9 @@ gophenberg: the role admin carries change_others_work, which the account lead@ex
 ```
 
 A role is one of the core's, `admin`, `editor` and `author`, or one
-a plugin declares. The account commands register the plugins before
-they run, so `account:role` and `-role` take a plugin's roles too.
+a plugin declares. Every account command except `account:list` and
+`account:records` registers the plugins before it runs, so
+`account:role` and `-role` take a plugin's roles too.
 Naming a role nobody declares exits with code 2 and lists the roles
 there are.
 
