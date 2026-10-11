@@ -320,41 +320,6 @@ func isTypeTargeted(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == fieldTargetConstraint
 }
 
-// CreateField declares the field on its type's group, raising the group when none matches.
-func (s *TypeStore) CreateField(ctx context.Context, f content.Field) (content.Field, error) {
-	var created content.Field
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		queries := s.queries.WithTx(tx)
-		target, err := groupForWrite(ctx, queries, f.TypeKey)
-		if err != nil {
-			return err
-		}
-		row, err := queries.CreateContentField(ctx, db.CreateContentFieldParams{
-			GroupID:   int32(target.ID),
-			Origin:    originColumn(f.Origin),
-			Key:       f.Key,
-			Label:     f.Label,
-			Kind:      string(f.Kind),
-			RelatesTo: targetOf(f),
-			Many:      f.Many,
-			Required:  f.Required,
-			CreatedAt: f.CreatedAt,
-			UpdatedAt: f.UpdatedAt,
-			Settings:  settingsJSON(f.Settings),
-		})
-		if err != nil {
-			return err
-		}
-		created = toField(row)
-		created.TypeKey = f.TypeKey
-		return nil
-	})
-	if err != nil {
-		return content.Field{}, fieldWriteFailure(err)
-	}
-	return created, nil
-}
-
 // fieldWriteFailure returns the error a field write carries, and wraps anything else.
 func fieldWriteFailure(err error) error {
 	var pgErr *pgconn.PgError
@@ -368,9 +333,6 @@ func fieldWriteFailure(err error) error {
 		if pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == fieldGroupConstraint {
 			return content.ErrGroupNotFound
 		}
-	}
-	if errors.Is(err, content.ErrTypeNotFound) || errors.Is(err, content.ErrGroupNotFound) {
-		return err
 	}
 	return fmt.Errorf("postgres: create content field: %w", err)
 }
