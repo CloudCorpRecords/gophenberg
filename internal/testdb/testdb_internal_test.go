@@ -190,6 +190,24 @@ func TestDotenvReadsTheFileBesideTheNearestGoMod(t *testing.T) {
 	}
 }
 
+func TestDotenvReadsExportedIndentedAndReferencedLines(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/site\n")
+	writeFile(t, filepath.Join(root, ".env"), "GOPHENBERG_DATABASE_URL="+fileAddress+"\n"+
+		"  export "+addressKey+"=${GOPHENBERG_DATABASE_URL}\n"+
+		"export "+maxAgeKey+"=1h\n")
+
+	values, err := dotenv(root)
+	if err != nil {
+		t.Fatalf("dotenv() error = %v, want nil", err)
+	}
+	if values[addressKey] != fileAddress || values[maxAgeKey] != "1h" {
+		t.Errorf("dotenv() = %v, want the referenced address and 1h from the exported lines", values)
+	}
+}
+
 func TestDotenvStopsAtTheNearestGoMod(t *testing.T) {
 	t.Parallel()
 
