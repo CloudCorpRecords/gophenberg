@@ -11,11 +11,59 @@ import (
 // ErrConflict reports that the media item changed after the update was prepared.
 var ErrConflict = errors.New("media: conflicting update")
 
-// Filter narrows a media listing to the type, content type prefixes and search it carries.
+// ErrInvalidOrderBy reports that a sort column is not one the library sorts by.
+var ErrInvalidOrderBy = errors.New("media: invalid orderby")
+
+// ErrInvalidOrder reports that a sort direction is not one the library sorts in.
+var ErrInvalidOrder = errors.New("media: invalid order")
+
+// OrderBy names a column a media listing can be sorted by.
+type OrderBy string
+
+// The columns a media listing can be sorted by.
+const (
+	OrderByDate     OrderBy = "date"
+	OrderByModified OrderBy = "modified"
+	OrderByTitle    OrderBy = "title"
+	OrderByAuthor   OrderBy = "author"
+)
+
+// Order names a sort direction.
+type Order string
+
+// The directions a media listing can be sorted in.
+const (
+	OrderAsc  Order = "asc"
+	OrderDesc Order = "desc"
+)
+
+// ParseOrderBy returns the column named by raw, or [ErrInvalidOrderBy].
+func ParseOrderBy(raw string) (OrderBy, error) {
+	switch OrderBy(raw) {
+	case OrderByDate, OrderByModified, OrderByTitle, OrderByAuthor:
+		return OrderBy(raw), nil
+	default:
+		return "", ErrInvalidOrderBy
+	}
+}
+
+// ParseOrder returns the direction named by raw, or [ErrInvalidOrder].
+func ParseOrder(raw string) (Order, error) {
+	switch Order(raw) {
+	case OrderAsc, OrderDesc:
+		return Order(raw), nil
+	default:
+		return "", ErrInvalidOrder
+	}
+}
+
+// Filter narrows a media listing to the type, content type prefixes and search it carries, in the order it names.
 type Filter struct {
 	Type    Type
 	Mimes   []string
 	Search  string
+	OrderBy OrderBy
+	Order   Order
 	Page    int
 	PerPage int
 }
