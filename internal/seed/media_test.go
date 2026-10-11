@@ -21,12 +21,13 @@ import (
 	"github.com/gopherium/gophenberg/internal/media"
 )
 
-// recordingLibrary remembers what it was asked to ingest, finish and remove.
+// recordingLibrary remembers what it was asked to ingest, finish and remove, stamping uploads at now when set.
 type recordingLibrary struct {
 	ingested []string
 	finished []string
 	removed  []string
 	err      error
+	now      time.Time
 }
 
 // Ingest records the upload and returns the media item it stands for.
@@ -42,6 +43,9 @@ func (l *recordingLibrary) Ingest(
 		return media.Media{}, err
 	}
 	m.Filesize = int64(len(data))
+	if !l.now.IsZero() {
+		m.CreatedAt, m.UpdatedAt = l.now, l.now
+	}
 	return m, nil
 }
 
@@ -345,9 +349,9 @@ func TestMediaFilesEachUploadUnderItsAuthorOnItsDays(t *testing.T) {
 
 	ids := map[string]uuid.UUID{AdminEmail: uuid.New(), EditorEmail: uuid.New(), AuthorEmail: uuid.New()}
 	store := &countingMediaStore{}
-	seeded := time.Now().UTC()
+	seeded := time.Date(2026, time.October, 11, 9, 30, 0, 0, time.UTC)
 
-	if err := Media(t.Context(), &recordingLibrary{}, store, emailUserStore{ids: ids}); err != nil {
+	if err := Media(t.Context(), &recordingLibrary{now: seeded}, store, emailUserStore{ids: ids}); err != nil {
 		t.Fatalf("Media() error = %v, want nil", err)
 	}
 
@@ -360,8 +364,9 @@ func TestMediaFilesEachUploadUnderItsAuthorOnItsDays(t *testing.T) {
 		if stored.AuthorID != ids[scripted.author] {
 			t.Errorf("%q is filed under %v, want the account of %s", scripted.title, stored.AuthorID, scripted.author)
 		}
-		if added := seeded.AddDate(0, 0, -scripted.daysAgo); stored.CreatedAt.Sub(added).Abs() > time.Minute {
-			t.Errorf("%q was added at %v, want %d days before the seeding", scripted.title, stored.CreatedAt, scripted.daysAgo)
+		if added := seeded.AddDate(0, 0, -scripted.daysAgo); !stored.CreatedAt.Equal(added) {
+			t.Errorf("%q was added at %v, want %v, %d days before its upload", scripted.title, stored.CreatedAt, added,
+				scripted.daysAgo)
 		}
 		if edit := stored.UpdatedAt.Sub(stored.CreatedAt); edit != time.Duration(scripted.editedAfter)*24*time.Hour {
 			t.Errorf("%q was modified %v after its upload, want %d days", scripted.title, edit, scripted.editedAfter)
