@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -55,7 +56,14 @@ func lending(lenders ...*lender) func(sdk.Deps) ([]sdk.Plugin, error) {
 // pooled returns the address of an empty database whose pool holds the connections.
 func pooled(t *testing.T, connections int) string {
 	t.Helper()
-	return emptyDatabaseURL(t) + "&pool_max_conns=" + strconv.Itoa(connections)
+	address, err := url.Parse(emptyDatabaseURL(t))
+	if err != nil {
+		t.Fatalf("parsing the test database address: %v", err)
+	}
+	query := address.Query()
+	query.Set("pool_max_conns", strconv.Itoa(connections))
+	address.RawQuery = query.Encode()
+	return address.String()
 }
 
 // lentSite composes a site over an empty database with a pool of 16, lending the plugins their share.
