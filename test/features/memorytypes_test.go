@@ -49,7 +49,7 @@ func (s *memoryTypes) List(context.Context) ([]content.Type, error) {
 	stored := make([]content.Type, len(s.types))
 	copy(stored, s.types)
 	for i, held := range stored {
-		stored[i].Fields = s.flattened(held.Key, held.Fields)
+		stored[i].Fields = s.flattened(held.Key)
 	}
 	return stored, nil
 }
@@ -57,13 +57,10 @@ func (s *memoryTypes) List(context.Context) ([]content.Type, error) {
 // memoryParams holds the rule sources the memory store evaluates locations with.
 var memoryParams = content.DefaultParamRegistry(nil)
 
-// flattened returns the type's own fields beside those its matching groups place on it.
-func (s *memoryTypes) flattened(typeKey string, own []content.Field) []content.Field {
-	fields := append([]content.Field(nil), own...)
-	served := make(map[string]bool, len(fields))
-	for _, f := range fields {
-		served[f.Key] = true
-	}
+// flattened returns the fields the active groups matching the type place on it.
+func (s *memoryTypes) flattened(typeKey string) []content.Field {
+	var fields []content.Field
+	served := make(map[string]bool)
 	screen := content.Screen{content.ScreenContentType: typeKey}
 	for _, g := range s.groups {
 		if !g.Active || !g.Location.Match(screen, memoryParams) {
@@ -810,7 +807,7 @@ func holdsIdentity(declared []content.Field, id int) bool {
 	return found
 }
 
-// ListGroups returns the stored groups beside one per type already holding fields, as frozen while a view is held.
+// ListGroups returns the stored groups, as frozen while a view is held.
 func (s *memoryTypes) ListGroups(context.Context) ([]content.Group, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -854,26 +851,14 @@ func clonedFields(fields []content.Field) []content.Field {
 	return held
 }
 
-// listing returns the stored groups beside one per type already holding fields.
+// listing returns a copy of the stored groups.
 func (s *memoryTypes) listing() []content.Group {
-	groups := make([]content.Group, 0, len(s.types)+len(s.groups))
-	for i, t := range s.types {
-		if len(t.Fields) == 0 {
-			continue
-		}
-		groups = append(groups, content.Group{
-			ID: -(i + 1), Title: t.SingularLabel + " fields", Active: true, Fields: t.Fields,
-		})
-	}
-	return append(groups, s.groups...)
+	return append([]content.Group{}, s.groups...)
 }
 
-// declaredKeys returns the key of every field a type or a group declares, the caller holding the store's lock.
+// declaredKeys returns the key of every field a group declares, the caller holding the store's lock.
 func (s *memoryTypes) declaredKeys() map[string]bool {
 	declared := make(map[string]bool)
-	for _, t := range s.types {
-		keysInside(declared, t.Fields)
-	}
 	for _, g := range s.groups {
 		keysInside(declared, g.Fields)
 	}
@@ -902,14 +887,14 @@ func (s *memoryTypes) ByKey(_ context.Context, key string) (content.Type, error)
 func (s *memoryTypes) typeHeld(key string) (content.Type, bool) {
 	for _, stored := range s.types {
 		if stored.Key == key {
-			stored.Fields = s.flattened(key, stored.Fields)
+			stored.Fields = s.flattened(key)
 			return stored, true
 		}
 	}
 	return content.Type{}, false
 }
 
-// Create stores a new type, or reports the key or the route word taken.
+// Create stores a new type without the fields it carries, or reports the key or the route word taken.
 func (s *memoryTypes) Create(_ context.Context, t content.Type) (content.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -921,6 +906,7 @@ func (s *memoryTypes) Create(_ context.Context, t content.Type) (content.Type, e
 	if s.routeWordTaken(t.Key, t.RouteWord) {
 		return content.Type{}, content.ErrRouteWordTaken
 	}
+	t.Fields = nil
 	s.types = append(s.types, t)
 	return t, nil
 }
@@ -965,7 +951,6 @@ func (s *memoryTypes) Update(ctx context.Context, t content.Type) (content.Type,
 			s.types = held
 			return content.Type{}, err
 		}
-		written.Fields = nil
 		return written, nil
 	}
 	return content.Type{}, content.ErrTypeNotFound
@@ -1006,22 +991,6 @@ func (s *memoryTypes) handRootOver(at time.Time) (typeCarry, error) {
 		return typeCarry{key: stored.Key, was: was, now: stored.RouteWord, at: at}, nil
 	}
 	return typeCarry{}, nil
-}
-
-// CreateField stores a field on its type, mirroring the schema's identity column.
-func (s *memoryTypes) CreateField(_ context.Context, f content.Field) (content.Field, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, stored := range s.types {
-		if stored.Key != f.TypeKey {
-			continue
-		}
-		s.fieldIDs++
-		f.ID = s.fieldIDs
-		s.types[i].Fields = append(s.types[i].Fields, f)
-		return f, nil
-	}
-	return content.Field{}, content.ErrTypeNotFound
 }
 
 // Delete removes the type, or reports it missing, still holding content or still targeted by a stored relation field.
