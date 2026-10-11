@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/gopherium/gophenberg/internal/media"
 	"github.com/gopherium/gophenberg/internal/mediahost"
 	"github.com/gopherium/gophenberg/internal/server"
@@ -33,6 +35,7 @@ type fakeMediaStore struct {
 	mu          sync.Mutex
 	next        int64
 	items       map[int64]media.Media
+	authors     map[uuid.UUID]string
 	updateCalls int
 	lastFilter  media.Filter
 	createErr   error
@@ -86,18 +89,18 @@ func (s *fakeMediaStore) ByIDs(_ context.Context, ids []int64) ([]media.Media, e
 	return listed, nil
 }
 
-// List returns the filter's page of the stored items newest first with their count, or fails as told.
-func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Media, int, error) {
+// List returns the filter's page of the stored items newest first beside their authors' names, or fails as told.
+func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Listed, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastFilter = f
 	if s.listErr != nil {
 		return nil, 0, s.listErr
 	}
-	items := make([]media.Media, 0, len(s.items))
+	items := make([]media.Listed, 0, len(s.items))
 	for _, m := range s.items {
 		if f.Type == "" || m.Type == f.Type {
-			items = append(items, m)
+			items = append(items, media.Listed{Media: m, AuthorName: s.authors[m.AuthorID]})
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID > items[j].ID })
@@ -222,17 +225,18 @@ func sendMediaUpload(t *testing.T, handler http.Handler, filename string, data [
 
 // mediaBody is the media item shape the admin API answers.
 type mediaBody struct {
-	ID        int64     `json:"id"`
-	Type      string    `json:"type"`
-	File      string    `json:"file"`
-	Title     string    `json:"title"`
-	AltText   string    `json:"alt_text"`
-	MimeType  string    `json:"mime_type"`
-	Width     int       `json:"width"`
-	Height    int       `json:"height"`
-	AuthorID  string    `json:"author_id"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Sizes     map[string]struct {
+	ID         int64     `json:"id"`
+	Type       string    `json:"type"`
+	File       string    `json:"file"`
+	Title      string    `json:"title"`
+	AltText    string    `json:"alt_text"`
+	MimeType   string    `json:"mime_type"`
+	Width      int       `json:"width"`
+	Height     int       `json:"height"`
+	AuthorID   string    `json:"author_id"`
+	AuthorName string    `json:"author_name"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Sizes      map[string]struct {
 		File  string `json:"file"`
 		Width int    `json:"width"`
 	} `json:"sizes"`
@@ -445,6 +449,39 @@ func TestListingMediaAnswersItemsWithTheirTotal(t *testing.T) {
 	}
 	if body.Items[0].ID <= body.Items[1].ID {
 		t.Errorf("listing leads with id %d, want newest first", body.Items[0].ID)
+	}
+}
+
+func TestListingMediaNamesTheAuthorOfEveryRow(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeMediaStore()
+	first, second := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	store.authors = map[uuid.UUID]string{first: "Maria Perez", second: "Second Author"}
+	for i, author := range []uuid.UUID{first, second, first} {
+		if _, err := store.Create(context.Background(), media.Media{
+			Type: media.TypeImage, Title: fmt.Sprintf("item %d", i), MimeType: "image/jpeg", AuthorID: author,
+		}); err != nil {
+			t.Fatalf("storing item %d: %v", i, err)
+		}
+	}
+	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+
+	recorder := doRequest(t, handler, http.MethodGet, "/api/media", "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := decodeBody[struct {
+		Items []mediaBody `json:"items"`
+	}](t, recorder)
+	if len(body.Items) != 3 {
+		t.Fatalf("listing = %d items, want all three", len(body.Items))
+	}
+	for _, item := range body.Items {
+		if want := store.authors[uuid.MustParse(item.AuthorID)]; item.AuthorName != want {
+			t.Errorf("%q names its author %q, want %q", item.Title, item.AuthorName, want)
+		}
 	}
 }
 

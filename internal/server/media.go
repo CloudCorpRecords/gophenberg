@@ -153,11 +153,17 @@ func (s *server) handleMediaUpload() http.HandlerFunc {
 	}
 }
 
+// mediaRow is one row of the admin media listing, carrying its author's name.
+type mediaRow struct {
+	mediaView
+	AuthorName string `json:"author_name"`
+}
+
 // mediaListResponse is a page of media items with the total matching the filter and the page size the server used.
 type mediaListResponse struct {
-	Items   []mediaView `json:"items"`
-	Total   int         `json:"total"`
-	PerPage int         `json:"per_page"`
+	Items   []mediaRow `json:"items"`
+	Total   int        `json:"total"`
+	PerPage int        `json:"per_page"`
 }
 
 // mediaByIDsResponse is the media items a request named by identity with their count.
@@ -248,9 +254,9 @@ func (s *server) handleMediaList() http.HandlerFunc {
 			respondDomainError(w, err)
 			return
 		}
-		items := make([]mediaView, len(rows))
+		items := make([]mediaRow, len(rows))
 		for i, m := range rows {
-			items[i] = newMediaView(m)
+			items[i] = mediaRow{mediaView: newMediaView(m.Media), AuthorName: m.AuthorName}
 		}
 		authkit.Respond(w, http.StatusOK, mediaListResponse{Items: items, Total: total, PerPage: filter.PerPage})
 	}
