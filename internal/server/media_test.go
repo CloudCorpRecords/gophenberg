@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -513,6 +514,49 @@ func TestListingMediaNarrowsByContentType(t *testing.T) {
 	}
 }
 
+func TestListingMediaNarrowsByAuthorAndDates(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeMediaStore()
+	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+	kept := []uuid.UUID{
+		uuid.MustParse("0199a1b2-0000-7000-8000-000000000001"), uuid.MustParse("0199a1b2-0000-7000-8000-000000000002"),
+	}
+	left := uuid.MustParse("0199a1b2-0000-7000-8000-000000000003")
+	at := func(month time.Month) time.Time { return time.Date(2026, month, 1, 0, 0, 0, 0, time.UTC) }
+	query := url.Values{
+		"author":          {kept[0].String() + "," + kept[1].String()},
+		"author_exclude":  {left.String()},
+		"after":           {"2026-03-01T00:00:00Z"},
+		"before":          {"2026-04-01T02:00:00+02:00"},
+		"modified_after":  {"2026-05-01T00:00:00Z"},
+		"modified_before": {"2026-06-01T00:00:00Z"},
+	}
+
+	recorder := doRequest(t, handler, http.MethodGet, "/api/media?"+query.Encode(), "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	f := store.lastFilter
+	if !slices.Equal(f.Authors, kept) || !slices.Equal(f.ExcludeAuthors, []uuid.UUID{left}) {
+		t.Errorf("the store was asked for authors %v leaving out %v, want %v leaving out %v",
+			f.Authors, f.ExcludeAuthors, kept, left)
+	}
+	for _, bound := range []struct {
+		name string
+		got  *time.Time
+		want time.Time
+	}{
+		{"after", f.After, at(time.March)}, {"before", f.Before, at(time.April)},
+		{"modified_after", f.ModifiedAfter, at(time.May)}, {"modified_before", f.ModifiedBefore, at(time.June)},
+	} {
+		if bound.got == nil || !bound.got.Equal(bound.want) || bound.got.Location() != time.UTC {
+			t.Errorf("the store was asked for %s %v, want %v in UTC", bound.name, bound.got, bound.want)
+		}
+	}
+}
+
 func TestListingMediaSortsAsTheQueryNames(t *testing.T) {
 	t.Parallel()
 
@@ -555,6 +599,8 @@ func TestListingMediaRefusesParametersItCannotMakeSenseOf(t *testing.T) {
 	badQueries := []string{
 		"?type=audio", "?page=0", "?page=x", "?per_page=x", "?per_page=0",
 		"?orderby=slug", "?orderby=", "?order=sideways", "?order=",
+		"?author=nobody", "?author_exclude=nobody", "?before=yesterday", "?after=yesterday",
+		"?modified_before=yesterday", "?modified_after=yesterday",
 	}
 	for _, badQuery := range badQueries {
 		recorder := doRequest(t, handler, http.MethodGet, "/api/media"+badQuery, "")

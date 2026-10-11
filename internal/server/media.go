@@ -193,10 +193,30 @@ func (s *server) parseMediaFilter(query url.Values) (media.Filter, error) {
 		}
 		filter.Type = kind
 	}
-	if err := applyMediaOrdering(query, &filter); err != nil {
-		return media.Filter{}, err
+	for _, apply := range []func(url.Values, *media.Filter) error{applyMediaOrdering, applyMediaAuthors, applyMediaDates} {
+		if err := apply(query, &filter); err != nil {
+			return media.Filter{}, err
+		}
 	}
 	return filter, nil
+}
+
+// applyMediaAuthors reads the author and author_exclude query parameters, comma lists of account ids, into filter.
+func applyMediaAuthors(query url.Values, filter *media.Filter) error {
+	authors, excluded, err := listAuthors(query)
+	if err != nil {
+		return err
+	}
+	filter.Authors, filter.ExcludeAuthors = authors, excluded
+	return nil
+}
+
+// applyMediaDates reads the date added and date modified bounds, RFC 3339 instants, into filter.
+func applyMediaDates(query url.Values, filter *media.Filter) error {
+	return applyInstants(query,
+		instantBound{"before", &filter.Before}, instantBound{"after", &filter.After},
+		instantBound{"modified_before", &filter.ModifiedBefore}, instantBound{"modified_after", &filter.ModifiedAfter},
+	)
 }
 
 // applyMediaOrdering reads the orderby and order query parameters into filter.
