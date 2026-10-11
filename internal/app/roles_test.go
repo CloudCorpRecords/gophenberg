@@ -205,3 +205,18 @@ func TestComposeRefusesAPluginDeclarationTheRulesRefuse(t *testing.T) {
 		t.Errorf("compose() = %v, want the prefix refusal naming the plugin", err)
 	}
 }
+
+func TestComposeKeepsARegistrationFailureBesideTheDeclarationItBroke(t *testing.T) {
+	t.Parallel()
+
+	failed := errors.New("plugin notes: a setting is missing")
+
+	_, err := compose(t.Context(), composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
+		func(sdk.Deps) ([]sdk.Plugin, error) {
+			return []sdk.Plugin{declaringRole("notes-tags", role.Editor, "notes.manage")}, failed
+		})
+
+	if !errors.Is(err, failed) || !errors.Is(err, goncierge.ErrOutsidePrefix) {
+		t.Errorf("compose() = %v, want the registration failure beside the prefix refusal", err)
+	}
+}
