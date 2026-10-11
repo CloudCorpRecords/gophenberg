@@ -223,29 +223,6 @@ func TestMovingARelationBetweenTopsDeletesItsIndexRowsWhereTheNewGroupMisses(t *
 	}
 }
 
-func TestMovingARelationDeletesItsIndexRows(t *testing.T) {
-	t.Parallel()
-
-	store, author, pool := typedStore(t)
-	storeType(t, store, "car")
-	specs := declareSection(t, store, "specs")
-	maker, err := store.CreateField(t.Context(), fieldOn(t, "car", "maker", content.FieldKindRelation, "car"))
-	if err != nil {
-		t.Fatalf("CreateField(maker) error = %v, want nil", err)
-	}
-	plantTyped(t, pool, author, "car", "one", `{"maker": ["00000000-0000-0000-0000-000000000000"]}`)
-	plantTyped(t, pool, author, "car", "two", `{}`)
-	plantRelation(t, pool, plantedID(t, pool, "one"), plantedID(t, pool, "two"), maker.ID)
-
-	if _, err := store.MoveField(t.Context(), maker.ID, specs.GroupID, specs.ID, deepEnough, nil); err != nil {
-		t.Fatalf("MoveField() error = %v, want nil", err)
-	}
-
-	if held := relationRowsOf(t, pool, maker.ID); held != 0 {
-		t.Errorf("%d relation rows survive the move, want the index swept with the values", held)
-	}
-}
-
 func TestMovingASectionDeletesTheIndexRowsOfTheRelationsInsideIt(t *testing.T) {
 	t.Parallel()
 

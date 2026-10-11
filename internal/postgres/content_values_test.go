@@ -20,6 +20,18 @@ func declareField(t *testing.T, pool *pgxpool.Pool, key string, kind content.Fie
 	declareOnType(t, postgres.NewTypeStore(pool), "post", fieldOn(t, "post", key, kind, ""))
 }
 
+// storedFields reads the raw fields column of the content row carrying the slug.
+func storedFields(t *testing.T, pool *pgxpool.Pool, slug string) string {
+	t.Helper()
+	var held string
+	if err := pool.QueryRow(
+		t.Context(), `SELECT fields::text FROM core.content WHERE slug = $1`, slug,
+	).Scan(&held); err != nil {
+		t.Fatalf("reading the fields of %q: %v, want nil", slug, err)
+	}
+	return held
+}
+
 func TestContentStoreWaitsForAFieldDeletionInFlight(t *testing.T) {
 	t.Parallel()
 
