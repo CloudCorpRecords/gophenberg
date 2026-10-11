@@ -115,21 +115,7 @@ func dotenv(dir string) (map[string]string, error) {
 	}
 }
 
-// Config returns the pgtestdb configuration for the local compose database.
-func Config() pgtestdb.Config {
-	return pgtestdb.Config{
-		DriverName: "pgx",
-		User:       "postgres",
-		Password:   "gophenberg",
-		Host:       "localhost",
-		Port:       "5435",
-		Database:   "postgres",
-		Options:    "sslmode=disable",
-	}
-}
-
-// Migrator returns a pgtestdb migrator applying the authkit migrations
-// before the core ones, matching the application's boot order.
+// Migrator returns a pgtestdb migrator that applies the authkit migrations and then the core ones.
 func Migrator() pgtestdb.Migrator {
 	return migrator{}
 }
@@ -166,11 +152,6 @@ func (migrator) Hash() (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Prepare does nothing before migrating.
-func (migrator) Prepare(context.Context, *sql.DB, pgtestdb.Config) error {
-	return nil
-}
-
 // Migrate applies the authkit migrations and then the core ones to the template database.
 func (migrator) Migrate(ctx context.Context, _ *sql.DB, cfg pgtestdb.Config) error {
 	if err := authkitpg.Migrate(ctx, cfg.URL()); err != nil {
@@ -179,10 +160,5 @@ func (migrator) Migrate(ctx context.Context, _ *sql.DB, cfg pgtestdb.Config) err
 	if err := postgres.Migrate(ctx, cfg.URL()); err != nil {
 		return fmt.Errorf("testdb: core migrations: %w", err)
 	}
-	return nil
-}
-
-// Verify accepts any migrated database.
-func (migrator) Verify(context.Context, *sql.DB, pgtestdb.Config) error {
 	return nil
 }
