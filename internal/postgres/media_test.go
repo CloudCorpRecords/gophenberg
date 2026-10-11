@@ -164,6 +164,36 @@ func TestMediaStoreListsNewestFirst(t *testing.T) {
 	}
 }
 
+func TestMediaStoreListNamesTheAuthorOfEveryRow(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newMediaStoreWithPool(t)
+	second := addAuthor(t, pool, "Second Author")
+	mustCreateMedia(t, store, mustImage(t, "2026/08/harbor.jpg", "harbor", author))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/cliff.jpg", "cliff", second))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/pier.jpg", "pier", author))
+
+	items, total, err := store.List(t.Context(), media.Filter{Page: 1, PerPage: 10})
+
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if total != 3 || len(items) != total {
+		t.Fatalf("List() = %d items with total %d, want the count equal to the three rows", len(items), total)
+	}
+	want := map[uuid.UUID]string{author: "Maria Perez", second: "Second Author"}
+	named := make(map[string]bool, len(want))
+	for _, item := range items {
+		if item.AuthorName != want[item.AuthorID] {
+			t.Errorf("%q names its author %q, want %q", item.Title, item.AuthorName, want[item.AuthorID])
+		}
+		named[item.AuthorName] = true
+	}
+	if len(named) != len(want) {
+		t.Errorf("List() names %d authors, want both", len(named))
+	}
+}
+
 func TestMediaStoreListFiltersByType(t *testing.T) {
 	t.Parallel()
 

@@ -176,8 +176,10 @@ func (q *Queries) GetMedia(ctx context.Context, id int64) (CoreMedia, error) {
 
 const listMedia = `-- name: ListMedia :many
 SELECT m.id, m.media_type, m.file, m.title, m.alt_text, m.caption, m.description,
-    m.mime_type, m.width, m.height, m.filesize, m.sizes, m.author_id, m.created_at, m.updated_at
+    m.mime_type, m.width, m.height, m.filesize, m.sizes, m.author_id, m.created_at, m.updated_at,
+    u.name AS author_name
 FROM core.media m
+JOIN auth.users u ON u.id = m.author_id
 WHERE ($1::text = '' OR m.media_type = $1)
     AND (
         cardinality($2::text[]) = 0
@@ -203,7 +205,26 @@ type ListMediaParams struct {
 	RowLimit  int32
 }
 
-func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]CoreMedia, error) {
+type ListMediaRow struct {
+	ID          int64
+	MediaType   string
+	File        string
+	Title       string
+	AltText     string
+	Caption     string
+	Description string
+	MimeType    string
+	Width       int32
+	Height      int32
+	Filesize    int64
+	Sizes       media.RenditionMap
+	AuthorID    uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	AuthorName  string
+}
+
+func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]ListMediaRow, error) {
 	rows, err := q.db.Query(ctx, listMedia,
 		arg.MediaType,
 		arg.Mimes,
@@ -215,9 +236,9 @@ func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]CoreMed
 		return nil, err
 	}
 	defer rows.Close()
-	var items []CoreMedia
+	var items []ListMediaRow
 	for rows.Next() {
-		var i CoreMedia
+		var i ListMediaRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MediaType,
@@ -234,6 +255,7 @@ func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]CoreMed
 			&i.AuthorID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthorName,
 		); err != nil {
 			return nil, err
 		}

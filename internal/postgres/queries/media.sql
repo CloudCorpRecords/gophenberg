@@ -31,8 +31,10 @@ WHERE m.file = ANY(@files::text []);
 
 -- name: ListMedia :many
 SELECT m.id, m.media_type, m.file, m.title, m.alt_text, m.caption, m.description,
-    m.mime_type, m.width, m.height, m.filesize, m.sizes, m.author_id, m.created_at, m.updated_at
+    m.mime_type, m.width, m.height, m.filesize, m.sizes, m.author_id, m.created_at, m.updated_at,
+    u.name AS author_name
 FROM core.media m
+JOIN auth.users u ON u.id = m.author_id
 WHERE (@media_type::text = '' OR m.media_type = @media_type)
     AND (
         cardinality(@mimes::text[]) = 0

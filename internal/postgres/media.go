@@ -92,9 +92,8 @@ func (s *MediaStore) Saved(ctx context.Context, files []string) (map[string]bool
 	return saved, nil
 }
 
-// List returns the media items matching the filter, newest first, and the
-// total number matching it.
-func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Media, int, error) {
+// List returns the media items matching the filter, newest first, beside their authors' names, with their total.
+func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Listed, int, error) {
 	search := escapeLike(f.Search)
 	mimes := escapedPrefixes(f.Mimes)
 	total, err := s.queries.CountMedia(ctx, db.CountMediaParams{
@@ -115,9 +114,9 @@ func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Media, i
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: list media: %w", err)
 	}
-	items := make([]media.Media, len(rows))
+	items := make([]media.Listed, len(rows))
 	for i, row := range rows {
-		items[i] = toMedia(row)
+		items[i] = listedMedia(row)
 	}
 	return items, int(total), nil
 }
@@ -184,5 +183,29 @@ func toMedia(row db.CoreMedia) media.Media {
 		AuthorID:    row.AuthorID,
 		CreatedAt:   row.CreatedAt.UTC(),
 		UpdatedAt:   row.UpdatedAt.UTC(),
+	}
+}
+
+// listedMedia maps a listed row to the media item it stands for, beside its author's name, with UTC timestamps.
+func listedMedia(row db.ListMediaRow) media.Listed {
+	return media.Listed{
+		Media: media.Media{
+			ID:          row.ID,
+			Type:        media.Type(row.MediaType),
+			File:        row.File,
+			Title:       row.Title,
+			AltText:     row.AltText,
+			Caption:     row.Caption,
+			Description: row.Description,
+			MimeType:    row.MimeType,
+			Width:       int(row.Width),
+			Height:      int(row.Height),
+			Filesize:    row.Filesize,
+			Sizes:       row.Sizes,
+			AuthorID:    row.AuthorID,
+			CreatedAt:   row.CreatedAt.UTC(),
+			UpdatedAt:   row.UpdatedAt.UTC(),
+		},
+		AuthorName: row.AuthorName,
 	}
 }
