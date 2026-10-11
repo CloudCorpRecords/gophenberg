@@ -9,6 +9,7 @@ import { chooseSiteSettings, fetchListSettings, fetchSiteSettings } from '../set
 const LIST_SETTINGS = {
 	list_page_sizes: [10, 20, 50],
 	list_page_size: 20,
+	picker_page_size: 50,
 	toast_milliseconds: 6000,
 	toast_name_length: 45,
 	format_locale: 'de-DE',
