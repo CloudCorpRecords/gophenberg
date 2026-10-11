@@ -11,7 +11,6 @@ Feature: Managing the media library
     When the administrator uploads a new image named "jetty.jpg"
     Then the library lists "jetty" first
 
-  @wip
   Scenario Outline: Sorting the library by title
     When the administrator lists the library sorted by "title" "<order>"
     Then the library lists <titles> in that order
@@ -21,12 +20,10 @@ Feature: Managing the media library
       | asc   | "cliff", "harbor" and "manual" |
       | desc  | "manual", "harbor" and "cliff" |
 
-  @wip
   Scenario: A sort naming no order lists in descending order
     When the administrator lists the library sorted by "title"
     Then the library lists "manual", "harbor" and "cliff" in that order
 
-  @wip
   Scenario Outline: Sorting the library by a date
     Given "cliff" was added on "2026-03-10" and last modified on "2026-09-10"
     And "manual" was added and last modified on "2026-05-10"
@@ -41,7 +38,6 @@ Feature: Managing the media library
       | modified | asc   | "manual", "harbor" and "cliff" |
       | modified | desc  | "cliff", "harbor" and "manual" |
 
-  @wip
   Scenario Outline: Items modified at the same moment list the newest upload first
     Given "harbor" and "manual" were modified at the same moment
     And "cliff" was modified after them
@@ -53,7 +49,6 @@ Feature: Managing the media library
       | asc   | "manual", "harbor" and "cliff" |
       | desc  | "cliff", "manual" and "harbor" |
 
-  @wip
   Scenario Outline: Sorting the library by the name of the author
     Given "cliff" was uploaded by an author whose name sorts first
     When the administrator lists the library sorted by "author" "<order>"
@@ -198,7 +193,6 @@ Feature: Managing the media library
       | the page size "0" |
       | the page size "x" |
 
-  @wip
   Scenario Outline: A sort the library does not offer is refused
     When the administrator lists the library with <parameters>
     Then the request is refused with the code "list_parameters_invalid"

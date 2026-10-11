@@ -3,9 +3,10 @@
 package features_test
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -66,7 +67,7 @@ func (s *memoryMedia) ByIDs(_ context.Context, ids []int64) ([]media.Media, erro
 	return listed, nil
 }
 
-// List returns the media items matching the filter, newest first, beside their authors' names, with their total.
+// List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
 func (s *memoryMedia) List(_ context.Context, f media.Filter) ([]media.Listed, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -76,8 +77,43 @@ func (s *memoryMedia) List(_ context.Context, f media.Filter) ([]media.Listed, i
 			matched = append(matched, media.Listed{Media: m, AuthorName: s.accounts.nameOf(m.AuthorID)})
 		}
 	}
-	sort.Slice(matched, func(i, j int) bool { return matched[i].ID > matched[j].ID })
+	slices.SortFunc(matched, func(a, b media.Listed) int {
+		return cmp.Or(mediaListOrder(f, a, b), cmp.Compare(b.ID, a.ID))
+	})
 	return page(matched, f), len(matched), nil
+}
+
+// mediaListOrder compares two listed items by the column and direction the filter names, the date added by default.
+func mediaListOrder(f media.Filter, a, b media.Listed) int {
+	var by int
+	switch f.OrderBy {
+	case media.OrderByTitle:
+		by = collated(a.Title, b.Title)
+	case media.OrderByAuthor:
+		by = collated(a.AuthorName, b.AuthorName)
+	case media.OrderByModified:
+		by = a.UpdatedAt.Compare(b.UpdatedAt)
+	default:
+		by = a.CreatedAt.Compare(b.CreatedAt)
+	}
+	if f.Order != media.OrderAsc {
+		return -by
+	}
+	return by
+}
+
+// changeTitled applies the change to the stored item carrying the title.
+func (s *memoryMedia) changeTitled(title string, change func(*media.Media)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, item := range s.items {
+		if item.Title == title {
+			change(&item)
+			s.items[id] = item
+			return nil
+		}
+	}
+	return fmt.Errorf("no media item carries the title %q", title)
 }
 
 // matches reports whether the item satisfies the filter.

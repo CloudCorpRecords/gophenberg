@@ -655,10 +655,12 @@ func listsTheLibraryWith(ctx context.Context, parameters string) error {
 		return err
 	}
 	queries := map[string]string{
-		`the type "audio"`:  "?type=audio",
-		`the page "0"`:      "?page=0",
-		`the page size "0"`: "?per_page=0",
-		`the page size "x"`: "?per_page=x",
+		`the type "audio"`:          "?type=audio",
+		`the page "0"`:              "?page=0",
+		`the page size "0"`:         "?per_page=0",
+		`the page size "x"`:         "?per_page=x",
+		`the sort "slug"`:           "?orderby=slug",
+		`the sort order "sideways"`: "?order=sideways",
 	}
 	query, known := queries[parameters]
 	if !known {
@@ -679,6 +681,7 @@ func theRequestIsRefusedAsABadListing(ctx context.Context) error {
 // initializeMediaLibrary binds the steps of the media library feature.
 func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	registerSharedSteps(sc)
+	registerMediaListSteps(sc)
 	sc.Given(`^a running Gophenberg holding a seeded media library$`, aSeededMediaLibrary)
 	sc.Given(`^two administrators read the image "([^"]*)"$`, twoAdministratorsRead)
 	sc.Given(`^the admin lists open at (\d+) items and carry at most (\d+) a page$`, theAdminListsOpenAtAndCarryAtMost)
