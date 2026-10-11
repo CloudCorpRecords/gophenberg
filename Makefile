@@ -157,6 +157,7 @@ mutate: db-up
 	work="$$(mktemp -d)" && trap 'pkill -KILL -f "$$work/"; chmod -R u+w "$$work"; rm -rf "$$work"' EXIT && \
 		mkdir "$$work/src" "$$work/tmp" && \
 		git ls-files -z --cached --others --exclude-standard | tar --null -T - -cf - | tar -xf - -C "$$work/src" && \
+		if [ -f .env ]; then sed -n '/^GOPHENBERG_TEST_/p' .env > "$$work/src/.env"; fi && \
 		cp -R .git "$$work/src/.git" && cd "$$work/src" && ulimit -v $(MUTATE_VMEM) && \
 		TMPDIR="$$work/tmp" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.noprefix GIT_CONFIG_VALUE_0=false \
 		go tool gremlins unleash -o $(MUTATE_REPORT) $(MUTATE_FLAGS) $(MUTATE_PKG) && \
