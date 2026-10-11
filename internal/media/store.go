@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ErrConflict reports that the media item changed after the update was prepared.
@@ -57,15 +59,21 @@ func ParseOrder(raw string) (Order, error) {
 	}
 }
 
-// Filter narrows a media listing to the type, content type prefixes and search it carries, in the order it names.
+// Filter narrows a media listing by type, content type prefix, author, date and search, sorted as it names.
 type Filter struct {
-	Type    Type
-	Mimes   []string
-	Search  string
-	OrderBy OrderBy
-	Order   Order
-	Page    int
-	PerPage int
+	Type           Type
+	Mimes          []string
+	Authors        []uuid.UUID
+	ExcludeAuthors []uuid.UUID
+	Before         *time.Time
+	After          *time.Time
+	ModifiedBefore *time.Time
+	ModifiedAfter  *time.Time
+	Search         string
+	OrderBy        OrderBy
+	Order          Order
+	Page           int
+	PerPage        int
 }
 
 // Store persists the media library.
