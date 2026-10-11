@@ -17,6 +17,10 @@ through 0.8.0 shipped in step with Gophenberg under its `vX.Y.Z` tags.
 
 - The kit parses blocks with `@wordpress/block-serialization-default-parser` 5.56.0.
 
+### Fixed
+
+- The content route finds addresses holding accented or non-Latin letters.
+
 ## [0.15.0] - 2026-09-10
 
 ### Added
