@@ -3,13 +3,79 @@
 package testdb_test
 
 import (
+	"database/sql"
 	"encoding/hex"
+	"fmt"
+	"runtime"
+	"strings"
 	"testing"
-
-	"github.com/peterldowns/pgtestdb"
 
 	"github.com/gopherium/gophenberg/internal/testdb"
 )
+
+// where is the hint every refused setting gives about where to set it.
+const where = "in the environment or .env, see .env.example"
+
+// fatal is a test that records its fatal message and ends its goroutine on a fatal call.
+type fatal struct {
+	testing.TB
+	// message is the text of the fatal call that ended the goroutine.
+	message string
+}
+
+// Fatal records args and ends the calling goroutine.
+func (f *fatal) Fatal(args ...any) {
+	f.message = fmt.Sprint(args...)
+	runtime.Goexit()
+}
+
+// Fatalf records the message of format and args and ends the calling goroutine.
+func (f *fatal) Fatalf(format string, args ...any) {
+	f.message = fmt.Sprintf(format, args...)
+	runtime.Goexit()
+}
+
+// fatalOfNew returns the fatal message New stopped with, or nothing when it returned.
+func fatalOfNew(t *testing.T) string {
+	t.Helper()
+	recorder := &fatal{TB: t}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		testdb.New(recorder, testdb.Migrator())
+	}()
+	<-done
+	return recorder.message
+}
+
+func TestNewNamesAMissingAddressAndWhereToSetIt(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "")
+	t.Setenv("GOPHENBERG_TEST_DATABASE_MAX_AGE", "1h")
+
+	message := fatalOfNew(t)
+	if !strings.Contains(message, "GOPHENBERG_TEST_DATABASE_URL") || !strings.Contains(message, where) {
+		t.Errorf("New() stopped with %q, want a message naming GOPHENBERG_TEST_DATABASE_URL and %q", message, where)
+	}
+}
+
+func TestNewNamesABadMaxAgeAndWhereToSetIt(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "postgres://postgres@db.example.com/postgres")
+	t.Setenv("GOPHENBERG_TEST_DATABASE_MAX_AGE", "0s")
+
+	message := fatalOfNew(t)
+	if !strings.Contains(message, "GOPHENBERG_TEST_DATABASE_MAX_AGE") || !strings.Contains(message, where) {
+		t.Errorf("New() stopped with %q, want a message naming GOPHENBERG_TEST_DATABASE_MAX_AGE and %q", message, where)
+	}
+}
+
+func TestNewShowsTheRefusalOfAMalformedAddress(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "mysql://postgres@db.example.com/postgres")
+	t.Setenv("GOPHENBERG_TEST_DATABASE_MAX_AGE", "1h")
+
+	if message := fatalOfNew(t); !strings.HasPrefix(message, "dbkit: refused database address") {
+		t.Errorf("New() stopped with %q, want the dbkit refusal of the address", message)
+	}
+}
 
 func TestMigratorCreatesAuthAndCoreSchemas(t *testing.T) {
 	t.Parallel()
@@ -17,7 +83,11 @@ func TestMigratorCreatesAuthAndCoreSchemas(t *testing.T) {
 		t.Skip("skipping database test in short mode")
 	}
 
-	db := pgtestdb.New(t, testdb.Config(), testdb.Migrator())
+	db, err := sql.Open("pgx", testdb.New(t, testdb.Migrator()))
+	if err != nil {
+		t.Fatalf("opening database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	for _, schema := range []string{"auth", "core"} {
 		var found bool

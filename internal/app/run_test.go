@@ -25,7 +25,7 @@ const unreachableDatabaseURL = "postgres://postgres:gophenberg@localhost:9/postg
 // emptyDatabaseURL returns the URL of a fresh unmigrated test database.
 func emptyDatabaseURL(t *testing.T) string {
 	t.Helper()
-	return pgtestdb.Custom(t, testdb.Config(), pgtestdb.NoopMigrator{}).URL()
+	return testdb.New(t, pgtestdb.NoopMigrator{})
 }
 
 // noPlugins registers no plugins.

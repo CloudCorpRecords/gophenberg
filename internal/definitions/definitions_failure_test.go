@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/peterldowns/pgtestdb"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/definitions"
@@ -22,8 +21,7 @@ func declaringPool(t *testing.T) (*pgxpool.Pool, *definitions.Registrar) {
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	cfg := pgtestdb.Custom(t, testdb.Config(), testdb.Migrator())
-	pool, err := pgxpool.New(t.Context(), cfg.URL())
+	pool, err := pgxpool.New(t.Context(), testdb.New(t, testdb.Migrator()))
 	if err != nil {
 		t.Fatalf("connecting pool: %v", err)
 	}
