@@ -86,7 +86,7 @@ func (s *fakeMediaStore) ByIDs(_ context.Context, ids []int64) ([]media.Media, e
 	return listed, nil
 }
 
-// List returns every stored item newest first with their count, or fails as told.
+// List returns the filter's page of the stored items newest first with their count, or fails as told.
 func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Media, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -101,7 +101,9 @@ func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Media,
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID > items[j].ID })
-	return items, len(items), nil
+	total := len(items)
+	start := min((f.Page-1)*f.PerPage, total)
+	return items[start:min(start+f.PerPage, total)], total, nil
 }
 
 // Update stores the item's descriptions, or reports a missing item or a stale edit.
@@ -155,6 +157,14 @@ func (s *fakeMediaStore) count() int {
 // mediaServer returns a signed in handler over a real library and the given store.
 func mediaServer(t *testing.T, library *mediahost.Library, store media.Store) http.Handler {
 	t.Helper()
+	return pagedMediaServer(t, library, store, server.ListSettings{})
+}
+
+// pagedMediaServer returns a signed in handler over a real library and the store, paging as the settings name.
+func pagedMediaServer(
+	t *testing.T, library *mediahost.Library, store media.Store, lists server.ListSettings,
+) http.Handler {
+	t.Helper()
 	users := newFakeUserStore()
 	addAda(t, users)
 	return authedServerWithStores(t, server.Config{
@@ -163,6 +173,7 @@ func mediaServer(t *testing.T, library *mediahost.Library, store media.Store) ht
 		Types:      newFakeTypeStore(),
 		Media:      library,
 		MediaStore: store,
+		Lists:      lists,
 	})
 }
 
@@ -471,13 +482,65 @@ func TestListingMediaRefusesParametersItCannotMakeSenseOf(t *testing.T) {
 	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), newFakeMediaStore())
 
 	badQueries := []string{
-		"?type=audio", "?page=0", "?page=x", "?per_page=500", "?per_page=x", "?per_page=0",
+		"?type=audio", "?page=0", "?page=x", "?per_page=x", "?per_page=0",
 	}
 	for _, badQuery := range badQueries {
 		recorder := doRequest(t, handler, http.MethodGet, "/api/media"+badQuery, "")
 		if recorder.Code != http.StatusBadRequest {
 			t.Errorf("listing with %q status = %d, want %d", badQuery, recorder.Code, http.StatusBadRequest)
+			continue
 		}
+		if code := errorCode(t, recorder); code != "list_parameters_invalid" {
+			t.Errorf("listing with %q code = %q, want list_parameters_invalid", badQuery, code)
+		}
+	}
+}
+
+// heldMediaItems stores count bare images straight into the store.
+func heldMediaItems(t *testing.T, store *fakeMediaStore, count int) {
+	t.Helper()
+	for i := range count {
+		if _, err := store.Create(context.Background(), media.Media{
+			Type: media.TypeImage, Title: fmt.Sprintf("item %d", i), MimeType: "image/jpeg",
+		}); err != nil {
+			t.Fatalf("storing item %d: %v", i, err)
+		}
+	}
+}
+
+func TestListingMediaPagesAtTheConfiguredSizeAndCutsALargerPageToTheCap(t *testing.T) {
+	t.Parallel()
+
+	for name, asked := range map[string]struct {
+		query string
+		want  int
+	}{
+		"no page size":             {"", 10},
+		"a page size past the cap": {"?per_page=500", 50},
+		"exactly the cap":          {"?per_page=50", 50},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			store := newFakeMediaStore()
+			heldMediaItems(t, store, 60)
+			handler := pagedMediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store,
+				server.ListSettings{PageSizes: []int{10, 50}, PageSize: 10, PageCap: 50})
+
+			recorder := doRequest(t, handler, http.MethodGet, "/api/media"+asked.query, "")
+
+			used := answeredPageSize(t, recorder)
+			body := decodeBody[struct {
+				Items []mediaBody `json:"items"`
+				Total int         `json:"total"`
+			}](t, recorder)
+			if used != asked.want || store.lastFilter.PerPage != asked.want {
+				t.Errorf("answered %d and listed %d, want %d", used, store.lastFilter.PerPage, asked.want)
+			}
+			if len(body.Items) != asked.want || body.Total != 60 {
+				t.Errorf("listing = %d items of %d, want %d of 60", len(body.Items), body.Total, asked.want)
+			}
+		})
 	}
 }
 
@@ -847,7 +910,7 @@ func TestListingMediaByIdentityRefusesWhatItCannotRead(t *testing.T) {
 		"an identity that is no number":       "ids=1,x",
 		"an identity below one":               "ids=0",
 		"no identity at all":                  "ids=",
-		"more identities than a page carries": "ids=" + strings.Repeat("1,", 100) + "1",
+		"more identities than one call names": "ids=" + strings.Repeat("1,", 100) + "1",
 		"a search beside the identities":      "ids=1&search=harbor",
 		"a page beside the identities":        "ids=1&page=2",
 		"the identities asked for twice":      "ids=1&ids=2",

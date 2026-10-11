@@ -30,11 +30,8 @@ const mediaUploadField = "file"
 // mediaPrefix is the URL prefix uploads are served under.
 const mediaPrefix = "/media"
 
-// defaultMediaPerPage and maxMediaPerPage bound the media page size.
-const (
-	defaultMediaPerPage = 20
-	maxMediaPerPage     = 100
-)
+// maxMediaIDsPerCall is the most identities one request for named files may carry.
+const maxMediaIDsPerCall = 100
 
 // MediaLibrary validates uploads and owns the media directory.
 type MediaLibrary interface {
@@ -156,19 +153,30 @@ func (s *server) handleMediaUpload() http.HandlerFunc {
 	}
 }
 
-// mediaListResponse is a page of media items with the total matching the filter.
+// mediaListResponse is a page of media items with the total matching the filter and the page size the server used.
 type mediaListResponse struct {
+	Items   []mediaView `json:"items"`
+	Total   int         `json:"total"`
+	PerPage int         `json:"per_page"`
+}
+
+// mediaByIDsResponse is the media items a request named by identity with their count.
+type mediaByIDsResponse struct {
 	Items []mediaView `json:"items"`
 	Total int         `json:"total"`
 }
 
 // parseMediaFilter reads the list query parameters into a filter.
-func parseMediaFilter(query url.Values) (media.Filter, error) {
+func (s *server) parseMediaFilter(query url.Values) (media.Filter, error) {
+	page, perPage, err := s.listPage(query)
+	if err != nil {
+		return media.Filter{}, err
+	}
 	filter := media.Filter{
 		Mimes:   mimePrefixes(query.Get("mime")),
 		Search:  query.Get("search"),
-		Page:    1,
-		PerPage: defaultMediaPerPage,
+		Page:    page,
+		PerPage: perPage,
 	}
 	if raw := query.Get("type"); raw != "" {
 		kind, err := media.ParseType(raw)
@@ -176,9 +184,6 @@ func parseMediaFilter(query url.Values) (media.Filter, error) {
 			return media.Filter{}, err
 		}
 		filter.Type = kind
-	}
-	if err := applyMediaPaging(query, &filter); err != nil {
-		return media.Filter{}, err
 	}
 	return filter, nil
 }
@@ -194,38 +199,19 @@ func mimePrefixes(raw string) []string {
 	return prefixes
 }
 
-// applyMediaPaging reads the page and per_page query parameters into filter.
-func applyMediaPaging(query url.Values, filter *media.Filter) error {
-	if raw := query.Get("page"); raw != "" {
-		page, err := strconv.Atoi(raw)
-		if err != nil || page < 1 {
-			return fmt.Errorf("server: invalid page %q", raw)
-		}
-		filter.Page = page
-	}
-	if raw := query.Get("per_page"); raw != "" {
-		perPage, err := strconv.Atoi(raw)
-		if err != nil || perPage < 1 || perPage > maxMediaPerPage {
-			return fmt.Errorf("server: invalid per_page %q", raw)
-		}
-		filter.PerPage = perPage
-	}
-	return nil
-}
-
 // mediaID reads the id path parameter of a media route.
 func mediaID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 }
 
-// mediaIDs reads the ids query parameter into the identities it names, at most one page of them.
+// mediaIDs reads the ids query parameter into the identities it names, at most maxMediaIDsPerCall of them.
 func mediaIDs(query url.Values) ([]int64, error) {
 	if len(query) != 1 || len(query["ids"]) != 1 {
 		return nil, fmt.Errorf("server: ids stands alone among the list parameters, once")
 	}
 	raw := strings.Split(query.Get("ids"), ",")
-	if len(raw) > maxMediaPerPage {
-		return nil, fmt.Errorf("server: %d ids asked for, more than one page carries", len(raw))
+	if len(raw) > maxMediaIDsPerCall {
+		return nil, fmt.Errorf("server: %d ids asked for, more than one request may name", len(raw))
 	}
 	ids := make([]int64, 0, len(raw))
 	for _, held := range raw {
@@ -252,7 +238,7 @@ func (s *server) handleMediaList() http.HandlerFunc {
 			s.respondMediaByIDs(w, r)
 			return
 		}
-		filter, err := parseMediaFilter(r.URL.Query())
+		filter, err := s.parseMediaFilter(r.URL.Query())
 		if err != nil {
 			respondInvalidList(w)
 			return
@@ -266,7 +252,7 @@ func (s *server) handleMediaList() http.HandlerFunc {
 		for i, m := range rows {
 			items[i] = newMediaView(m)
 		}
-		authkit.Respond(w, http.StatusOK, mediaListResponse{Items: items, Total: total})
+		authkit.Respond(w, http.StatusOK, mediaListResponse{Items: items, Total: total, PerPage: filter.PerPage})
 	}
 }
 
@@ -292,7 +278,7 @@ func (s *server) respondMediaByIDs(w http.ResponseWriter, r *http.Request) {
 			items = append(items, newMediaView(m))
 		}
 	}
-	authkit.Respond(w, http.StatusOK, mediaListResponse{Items: items, Total: len(items)})
+	authkit.Respond(w, http.StatusOK, mediaByIDsResponse{Items: items, Total: len(items)})
 }
 
 // handleMediaGet returns the handler answering one media item.
