@@ -143,13 +143,11 @@ Feature: Managing the media library
     When the administrator opens the second page of two per page
     Then the library reports the total while listing the remainder
 
-  @wip
   Scenario: A page larger than the cap is cut to the cap
     Given the admin lists open at 10 items and carry at most 50 a page
     When the administrator lists the library 500 at a time
     Then the library was paged 50 at a time
 
-  @wip
   Scenario: A listing naming no page size opens at the configured one
     Given the admin lists open at 10 items and carry at most 50 a page
     When the administrator lists the library
@@ -188,12 +186,10 @@ Feature: Managing the media library
     Then the request is refused as a bad listing
 
     Examples:
-      | parameters          |
-      | the type "audio"    |
-      | the page "0"        |
-      | the page size "500" |
+      | parameters       |
+      | the type "audio" |
+      | the page "0"     |
 
-  @wip
   Scenario Outline: A page size the library cannot read is refused
     When the administrator lists the library with <parameters>
     Then the request is refused with the code "list_parameters_invalid"

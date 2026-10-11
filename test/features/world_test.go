@@ -123,6 +123,7 @@ type world struct {
 	publicPaths    map[string][]string
 	forms          map[string]*formPlugin
 	publicURL      string
+	lists          server.ListSettings
 	logs           *logBook
 	manager        *themehost.Manager
 	node           string
@@ -257,6 +258,15 @@ func (w *world) start(ctx context.Context) error {
 		return nil
 	}
 	w.registry = content.NewRegistry(w.contentTypes)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return fmt.Errorf("building the cookie jar: %w", err)
+	}
+	return w.serve(jar)
+}
+
+// serve starts a Gophenberg over the scenario's stores, its client keeping cookies in jar.
+func (w *world) serve(jar http.CookieJar) error {
 	cfg := server.Config{
 		Users:      w.users,
 		Content:    w.contentStore(),
@@ -272,6 +282,7 @@ func (w *world) start(ctx context.Context) error {
 		Readers:    w.readers,
 		Version:    "0.0.0-test",
 		Web:        fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>Admin</title>")}},
+		Lists:      w.lists,
 	}
 	cfg.Plugins, cfg.PluginPublicPaths = w.plugins, w.publicPaths
 	w.logs = &logBook{}
@@ -282,16 +293,21 @@ func (w *world) start(ctx context.Context) error {
 	}
 	cfg.PublicURL = public
 	w.site = httptest.NewTLSServer(server.NewServer(cfg))
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return fmt.Errorf("building the cookie jar: %w", err)
-	}
 	w.client = w.site.Client()
 	w.client.Jar = jar
 	if public != nil {
 		w.client.Transport = typedAt{listener: w.site.Listener.Addr().String(), host: public.Host, base: w.client.Transport}
 	}
 	return nil
+}
+
+// serveAgain replaces the running Gophenberg with one built from the scenario's current choices, keeping its cookies.
+func (w *world) serveAgain() error {
+	if err := w.running(); err != nil {
+		return err
+	}
+	w.site.Close()
+	return w.serve(w.client.Jar)
 }
 
 // typedAt sends a request meant for the test listener as if the browser had typed the public address.

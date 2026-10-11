@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/media"
+	"github.com/gopherium/gophenberg/internal/server"
 )
 
 // The descriptions the describing scenario saves.
@@ -502,6 +503,62 @@ func asksForMediaNeverStored(ctx context.Context) error {
 	return w.get(mediaPath + "/987654")
 }
 
+// theAdminListsOpenAtAndCarryAtMost serves the site again, its lists opening at size and carrying at most ceiling.
+func theAdminListsOpenAtAndCarryAtMost(ctx context.Context, size, ceiling int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if size >= ceiling {
+		return fmt.Errorf("lists opening at %d items cannot carry at most %d, want the cap above the size", size, ceiling)
+	}
+	w.lists = server.ListSettings{PageSizes: []int{size, ceiling}, PageSize: size, PageCap: ceiling}
+	return w.serveAgain()
+}
+
+// listsTheLibrary lists the library naming no parameter.
+func listsTheLibrary(ctx context.Context) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	return w.get(mediaPath)
+}
+
+// listsTheLibraryAtATime lists the library in pages of the size.
+func listsTheLibraryAtATime(ctx context.Context, size int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	return w.get(fmt.Sprintf("%s?per_page=%d", mediaPath, size))
+}
+
+// theLibraryWasPagedAtATime asserts the listing answered the page size it used and carried no more items than it.
+func theLibraryWasPagedAtATime(ctx context.Context, size int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if err := w.expect(http.StatusOK); err != nil {
+		return fmt.Errorf("listing the library: %w", err)
+	}
+	var listed struct {
+		Items   []listedMedia `json:"items"`
+		PerPage int           `json:"per_page"`
+	}
+	if err := w.answer.decode(&listed); err != nil {
+		return err
+	}
+	if listed.PerPage != size {
+		return fmt.Errorf("the library was paged %d at a time, want %d", listed.PerPage, size)
+	}
+	if len(listed.Items) > size {
+		return fmt.Errorf("the page carries %d items, want at most %d", len(listed.Items), size)
+	}
+	return nil
+}
+
 // listsTheLibraryWith lists the library with the named parameters.
 func listsTheLibraryWith(ctx context.Context, parameters string) error {
 	w, err := worldOf(ctx)
@@ -509,9 +566,10 @@ func listsTheLibraryWith(ctx context.Context, parameters string) error {
 		return err
 	}
 	queries := map[string]string{
-		`the type "audio"`:    "?type=audio",
-		`the page "0"`:        "?page=0",
-		`the page size "500"`: "?per_page=500",
+		`the type "audio"`:  "?type=audio",
+		`the page "0"`:      "?page=0",
+		`the page size "0"`: "?per_page=0",
+		`the page size "x"`: "?per_page=x",
 	}
 	query, known := queries[parameters]
 	if !known {
@@ -534,6 +592,7 @@ func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	registerSharedSteps(sc)
 	sc.Given(`^a running Gophenberg holding a seeded media library$`, aSeededMediaLibrary)
 	sc.Given(`^two administrators read the image "([^"]*)"$`, twoAdministratorsRead)
+	sc.Given(`^the admin lists open at (\d+) items and carry at most (\d+) a page$`, theAdminListsOpenAtAndCarryAtMost)
 	sc.When(`^the administrator uploads a new image named "([^"]*)"$`, uploadsANewImageNamed)
 	sc.When(`^the administrator searches the library for "([^"]*)"$`, searchesTheLibraryFor)
 	sc.When(`^the administrator filters the library to images$`, filtersTheLibraryToImages)
@@ -545,12 +604,15 @@ func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	sc.When(`^the administrator permanently deletes the image "([^"]*)"$`, permanentlyDeletesTheImage)
 	sc.When(`^the administrator deletes "([^"]*)" again$`, deletesAgain)
 	sc.When(`^the administrator asks for media that was never stored$`, asksForMediaNeverStored)
+	sc.When(`^the administrator lists the library$`, listsTheLibrary)
+	sc.When(`^the administrator lists the library (\d+) at a time$`, listsTheLibraryAtATime)
 	sc.When(`^the administrator lists the library with (.+)$`, listsTheLibraryWith)
 	sc.Then(`^the library lists "([^"]*)" first$`, theLibraryListsFirst)
 	sc.Then(`^the library lists only media matching "([^"]*)"$`, theLibraryListsOnlyMatching)
 	sc.Then(`^the library lists no plain files$`, theLibraryListsNoPlainFiles)
 	sc.Then(`^the library still lists every image$`, theLibraryStillListsEveryImage)
 	sc.Then(`^the library reports the total while listing the remainder$`, theLibraryReportsTheTotal)
+	sc.Then(`^the library was paged (\d+) at a time$`, theLibraryWasPagedAtATime)
 	sc.Then(`^reading "([^"]*)" back returns every saved description$`, readingBackReturnsTheDescriptions)
 	sc.Then(`^the request is accepted$`, theRequestIsAccepted)
 	sc.Then(`^the second save is refused as a conflict$`, theSecondSaveIsRefusedAsAConflict)
@@ -559,4 +621,5 @@ func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	sc.Then(`^the files of "([^"]*)" are gone from the media directory$`, theFilesAreGoneFromTheMediaDirectory)
 	sc.Then(`^the request reports the media does not exist$`, theRequestReportsTheMediaDoesNotExist)
 	sc.Then(`^the request is refused as a bad listing$`, theRequestIsRefusedAsABadListing)
+	sc.Then(`^the request is refused with the code "([^"]*)"$`, theRequestIsRefusedWithTheCode)
 }
