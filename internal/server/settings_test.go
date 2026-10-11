@@ -310,6 +310,7 @@ func TestSettingsReportAStoreThatWillNotAnswer(t *testing.T) {
 type servedLists struct {
 	PageSizes         []int  `json:"list_page_sizes"`
 	PageSize          int    `json:"list_page_size"`
+	PickerPageSize    int    `json:"picker_page_size"`
 	ToastMilliseconds int64  `json:"toast_milliseconds"`
 	ToastNameLength   int    `json:"toast_name_length"`
 	FormatLocale      string `json:"format_locale"`
@@ -348,6 +349,7 @@ func TestSettingsGetServesTheListDefaultsWhenTheEnvironmentNamedNone(t *testing.
 
 	want := servedLists{
 		PageSizes: server.DefaultListPageSizes(), PageSize: server.DefaultListPageSize,
+		PickerPageSize:    server.DefaultPickerPageSize,
 		ToastMilliseconds: server.DefaultToastDuration.Milliseconds(), ToastNameLength: server.DefaultToastNameLength,
 		FormatLocale: server.DefaultFormatLocale,
 	}
@@ -360,17 +362,30 @@ func TestSettingsGetServesTheListSettingsTheEnvironmentNamed(t *testing.T) {
 	t.Parallel()
 
 	handler := listedSettingsServer(t, server.ListSettings{
-		PageSizes: []int{5, 15}, PageSize: 15, PageCap: 40,
+		PageSizes: []int{5, 15}, PageSize: 15, PickerPageSize: 5, PageCap: 40,
 		ToastDuration: 1500 * time.Millisecond, ToastNameLength: 12, FormatLocale: "en-GB",
 	})
 
 	held := answeredLists(t, askLocale(handler, http.MethodGet, "/api/settings", ""))
 
 	want := servedLists{
-		PageSizes: []int{5, 15}, PageSize: 15, ToastMilliseconds: 1500, ToastNameLength: 12, FormatLocale: "en-GB",
+		PageSizes: []int{5, 15}, PageSize: 15, PickerPageSize: 5,
+		ToastMilliseconds: 1500, ToastNameLength: 12, FormatLocale: "en-GB",
 	}
 	if !reflect.DeepEqual(held, want) {
 		t.Errorf("served %+v, want %+v", held, want)
+	}
+}
+
+func TestSettingsGetOpensThePickerAtTheListPageSizeWhenTheSizesLeaveOutItsDefault(t *testing.T) {
+	t.Parallel()
+
+	handler := listedSettingsServer(t, server.ListSettings{PageSizes: []int{5, 15, 45}, PageSize: 15})
+
+	held := answeredLists(t, askLocale(handler, http.MethodGet, "/api/settings", ""))
+
+	if held.PickerPageSize != 15 {
+		t.Errorf("picker_page_size = %d, want the list page size 15", held.PickerPageSize)
 	}
 }
 
@@ -380,9 +395,9 @@ func TestSettingsPatchLeavesTheListSettingsAsTheEnvironmentNamedThem(t *testing.
 	handler := listedSettingsServer(t, server.ListSettings{PageSizes: []int{5, 15}, PageSize: 15})
 
 	held := answeredLists(t, askLocale(handler, http.MethodPatch, "/api/settings",
-		`{"list_page_sizes":[1,2],"list_page_size":2,"toast_milliseconds":1,"format_locale":"fr-FR"}`))
+		`{"list_page_sizes":[1,2],"list_page_size":2,"picker_page_size":5,"toast_milliseconds":1,"format_locale":"fr-FR"}`))
 
-	kept := slices.Equal(held.PageSizes, []int{5, 15}) && held.PageSize == 15
+	kept := slices.Equal(held.PageSizes, []int{5, 15}) && held.PageSize == 15 && held.PickerPageSize == 15
 	if !kept || held.FormatLocale != server.DefaultFormatLocale {
 		t.Errorf("served %+v, want the list settings the environment named, whatever a write asks", held)
 	}

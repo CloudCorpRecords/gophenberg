@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 const (
 	DefaultListPageSize    = 20
 	DefaultListPageCap     = 100
+	DefaultPickerPageSize  = 50
 	DefaultToastDuration   = 6 * time.Second
 	DefaultToastNameLength = 45
 	DefaultFormatLocale    = "es-ES"
@@ -30,12 +32,22 @@ func DefaultListPageSizes() []int {
 	return []int{10, 20, 50, 100}
 }
 
+// DefaultPickerPageSizeAmong returns DefaultPickerPageSize when the sizes offer it, else the opening size.
+func DefaultPickerPageSizeAmong(sizes []int, opening int) int {
+	if slices.Contains(sizes, DefaultPickerPageSize) {
+		return DefaultPickerPageSize
+	}
+	return opening
+}
+
 // ListSettings carries what the admin lists read once, as the environment named it.
 type ListSettings struct {
 	// PageSizes lists the page sizes a list offers, from the smallest up. Empty serves the defaults.
 	PageSizes []int
 	// PageSize is the page a list opens on and the size a request naming none is answered at.
 	PageSize int
+	// PickerPageSize is the page the media picker opens on. Zero serves its default among the page sizes.
+	PickerPageSize int
 	// PageCap is the most items one admin page carries, a larger request answered at the cap.
 	PageCap int
 	// ToastDuration is how long a confirmation toast stays on screen.
@@ -53,6 +65,7 @@ func listsOf(cfg Config) ListSettings {
 		held.PageSizes = DefaultListPageSizes()
 	}
 	held.PageSize = cmp.Or(held.PageSize, DefaultListPageSize)
+	held.PickerPageSize = cmp.Or(held.PickerPageSize, DefaultPickerPageSizeAmong(held.PageSizes, held.PageSize))
 	held.PageCap = cmp.Or(held.PageCap, DefaultListPageCap)
 	held.ToastDuration = cmp.Or(held.ToastDuration, DefaultToastDuration)
 	held.ToastNameLength = cmp.Or(held.ToastNameLength, DefaultToastNameLength)
@@ -67,6 +80,7 @@ type settingsResponse struct {
 	JPEGQuality       int    `json:"jpeg_quality"`
 	ListPageSizes     []int  `json:"list_page_sizes"`
 	ListPageSize      int    `json:"list_page_size"`
+	PickerPageSize    int    `json:"picker_page_size"`
 	ToastMilliseconds int64  `json:"toast_milliseconds"`
 	ToastNameLength   int    `json:"toast_name_length"`
 	FormatLocale      string `json:"format_locale"`
@@ -139,6 +153,7 @@ func (s *server) chosenSettings(ctx context.Context) (settingsResponse, error) {
 			held[mediahost.JPEGQualityKey], found[mediahost.JPEGQualityKey]),
 		ListPageSizes:     s.lists.PageSizes,
 		ListPageSize:      s.lists.PageSize,
+		PickerPageSize:    s.lists.PickerPageSize,
 		ToastMilliseconds: s.lists.ToastDuration.Milliseconds(),
 		ToastNameLength:   s.lists.ToastNameLength,
 		FormatLocale:      s.lists.FormatLocale,
