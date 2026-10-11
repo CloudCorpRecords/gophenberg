@@ -3,17 +3,14 @@
 package postgres
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/gopherium/framework/dbkit"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/content"
+	"github.com/gopherium/gophenberg/internal/content/typestore"
 	"github.com/gopherium/gophenberg/internal/postgres/db"
 )
 
@@ -40,11 +37,6 @@ const fieldKeyConstraint = "content_fields_scope_key_unique"
 // containerKeyConstraint names the index holding each key once inside a container.
 const containerKeyConstraint = "content_fields_container_key_unique"
 
-// keyConstraint reports whether the constraint holds a field key once at its level.
-func keyConstraint(name string) bool {
-	return name == fieldKeyConstraint || name == containerKeyConstraint
-}
-
 // groupKeyConstraint names the unique constraint over field group keys.
 const groupKeyConstraint = "field_groups_key_unique"
 
@@ -56,293 +48,41 @@ const fieldTargetConstraint = "content_fields_relates_to_fkey"
 
 // TypeStore persists the content type registry in the core schema.
 type TypeStore struct {
-	queries *db.Queries
-	pool    *pgxpool.Pool
+	*typestore.Store
 }
 
 // NewTypeStore returns a [TypeStore] backed by pool.
 func NewTypeStore(pool *pgxpool.Pool) *TypeStore {
-	return &TypeStore{queries: db.New(pool), pool: pool}
+	queries := db.New(pool)
+	return &TypeStore{Store: typestore.New(typestore.Backend{
+		Engine:    dbkit.Postgres,
+		Pool:      typeQueries{conn: pool, queries: queries},
+		InTx:      inTx(pool, queries),
+		Rules:     rulesBroken,
+		ReadError: readError,
+	})}
 }
 
-// List returns every registered type in registration order with its flattened fields attached.
-func (s *TypeStore) List(ctx context.Context) ([]content.Type, error) {
-	rows, err := s.queries.ListContentTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("postgres: list content types: %w", err)
-	}
-	groups, err := groupsWithFields(ctx, s.queries)
-	if err != nil {
-		return nil, err
-	}
-	types := make([]content.Type, len(rows))
-	for i, row := range rows {
-		types[i] = toType(row)
-		types[i].Fields = flattenedFields(groups, row.Key)
-	}
-	return types, nil
+// rulesBroken lists the stored rule each Postgres error code and constraint name stands for, in match order.
+var rulesBroken = []typestore.Rule{
+	{Code: restrictViolationCode, Broken: typestore.TypeHeldByContent},
+	{Name: slugConstraint, Broken: typestore.ContentPathUnique},
+	{Code: uniqueViolationCode, Name: groupKeyConstraint, Broken: typestore.GroupKeyUnique},
+	{Code: uniqueViolationCode, Name: fieldKeyConstraint, Broken: typestore.FieldKeyUnique},
+	{Code: uniqueViolationCode, Name: containerKeyConstraint, Broken: typestore.FieldKeyUnique},
+	{Code: uniqueViolationCode, Name: typeKeyConstraint, Broken: typestore.TypeKeyUnique},
+	{Code: uniqueViolationCode, Name: routeWordConstraint, Broken: typestore.RouteWordUnique},
+	{Code: foreignKeyViolationCode, Name: fieldTargetConstraint, Broken: typestore.FieldTargetExists},
+	{Code: foreignKeyViolationCode, Name: fieldGroupConstraint, Broken: typestore.FieldGroupExists},
 }
 
-// ByKey returns the type carrying the key with its flattened fields, or [content.ErrTypeNotFound].
-func (s *TypeStore) ByKey(ctx context.Context, key string) (content.Type, error) {
-	row, err := s.queries.GetContentType(ctx, key)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return content.Type{}, content.ErrTypeNotFound
-	}
-	if err != nil {
-		return content.Type{}, fmt.Errorf("postgres: get content type: %w", err)
-	}
-	groups, err := groupsWithFields(ctx, s.queries)
-	if err != nil {
-		return content.Type{}, err
-	}
-	t := toType(row)
-	t.Fields = flattenedFields(groups, key)
-	return t, nil
-}
-
-// Create stores a new content type, or reports the key or route word already in use.
-func (s *TypeStore) Create(ctx context.Context, t content.Type) (content.Type, error) {
-	row, err := s.queries.CreateContentType(ctx, db.CreateContentTypeParams{
-		Origin:        originColumn(t.Origin),
-		Key:           t.Key,
-		SingularLabel: t.SingularLabel,
-		PluralLabel:   t.PluralLabel,
-		Description:   t.Description,
-		RouteWord:     t.RouteWord,
-		Hierarchical:  t.Hierarchical,
-		Revisions:     t.Revisions,
-		RevisionCap:   int32(t.RevisionCap),
-		PageKind:      string(t.PageKind),
-		IsDefault:     t.Default,
-		Active:        t.Active,
-		CreatedAt:     t.CreatedAt,
-		UpdatedAt:     t.UpdatedAt,
-	})
-	if taken := takenBy(err); taken != nil {
-		return content.Type{}, taken
-	}
-	if err != nil {
-		return content.Type{}, fmt.Errorf("postgres: create content type: %w", err)
-	}
-	return toType(row), nil
-}
-
-// Update stores the type's editable fields and carries its content to the route
-// word, or reports [content.ErrTypeNotFound].
-func (s *TypeStore) Update(ctx context.Context, t content.Type) (content.Type, error) {
-	var updated content.Type
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		stored, err := s.writeType(ctx, tx, t)
-		updated = stored
-		return err
-	})
-	if err != nil {
-		return content.Type{}, updateTypeFailure(err)
-	}
-	return updated, nil
-}
-
-// Nested returns how many items of the type sit inside another, the ones in the trash included.
-func (s *TypeStore) Nested(ctx context.Context, key string) (int, error) {
-	held, err := s.queries.CountNestedContent(ctx, key)
-	if err != nil {
-		return 0, fmt.Errorf("postgres: count nested content: %w", err)
-	}
-	return int(held), nil
-}
-
-// updateParams returns the row the type writes over its stored one.
-func updateParams(t content.Type) db.UpdateContentTypeParams {
-	return db.UpdateContentTypeParams{
-		Key:           t.Key,
-		SingularLabel: t.SingularLabel,
-		PluralLabel:   t.PluralLabel,
-		Description:   t.Description,
-		RouteWord:     t.RouteWord,
-		Hierarchical:  t.Hierarchical,
-		Revisions:     t.Revisions,
-		RevisionCap:   int32(t.RevisionCap),
-		PageKind:      string(t.PageKind),
-		IsDefault:     t.Default,
-		Active:        t.Active,
-		UpdatedAt:     t.UpdatedAt,
-	}
-}
-
-// carryContent moves every address of the type from the route word it answered under.
-func carryContent(ctx context.Context, tx pgx.Tx, queries *db.Queries, t content.Type, was string) error {
-	if _, err := tx.Exec(ctx, deferAddressCheck); err != nil {
-		return err
-	}
-	return queries.RetypeContentPaths(ctx, db.RetypeContentPathsParams{
-		RouteWord: t.RouteWord,
-		Was:       was,
-		UpdatedAt: t.UpdatedAt,
-		Key:       t.Key,
-	})
-}
-
-// writeType stores the edited type inside tx, handing the root over when the edit asks for it.
-func (s *TypeStore) writeType(ctx context.Context, tx pgx.Tx, t content.Type) (content.Type, error) {
-	queries := s.queries.WithTx(tx)
-	was, err := queries.LockContentType(ctx, t.Key)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return content.Type{}, content.ErrTypeNotFound
-	}
-	if err != nil {
-		return content.Type{}, err
-	}
-	t, err = readied(ctx, tx, queries, t, was)
-	if err != nil {
-		return content.Type{}, err
-	}
-	row, err := queries.UpdateContentType(ctx, updateParams(t))
-	if err != nil {
-		return content.Type{}, err
-	}
-	if was.RouteWord == t.RouteWord {
-		return toType(row), nil
-	}
-	return toType(row), carryContent(ctx, tx, queries, t, was.RouteWord)
-}
-
-// readied returns the edit ready to write over the locked row, refusing what the site's content keeps.
-func readied(
-	ctx context.Context, tx pgx.Tx, queries *db.Queries, t content.Type, was db.CoreContentType,
-) (content.Type, error) {
-	if was.Hierarchical && !t.Hierarchical {
-		if err := flattenable(ctx, queries, t.Key); err != nil {
-			return content.Type{}, err
-		}
-	}
-	if t.Default && !was.IsDefault {
-		if err := handRootOver(ctx, tx, queries, t.UpdatedAt); err != nil {
-			return content.Type{}, err
-		}
-		t.RouteWord = ""
-	}
-	return t, nil
-}
-
-// flattenable returns the reason the locked type may not stop nesting, if there is one.
-func flattenable(ctx context.Context, queries *db.Queries, key string) error {
-	held, err := queries.CountNestedContent(ctx, key)
-	if err != nil {
-		return err
-	}
-	if held > 0 {
-		return content.NestingInUse(key, int(held))
-	}
-	return nil
-}
-
-// updateTypeFailure returns the error the type update carries, and wraps anything else.
-func updateTypeFailure(err error) error {
-	if errors.Is(err, content.ErrTypeNotFound) ||
-		errors.Is(err, content.ErrRouteWordReserved) ||
-		errors.Is(err, content.ErrInvalidRouteWord) ||
-		errors.Is(err, content.ErrNestingInUse) {
-		return err
-	}
-	if taken := takenBy(err); taken != nil {
-		return taken
-	}
-	if isSlugTaken(err) {
-		return content.ErrSlugTaken
-	}
-	return fmt.Errorf("postgres: update content type: %w", err)
-}
-
-// handRootOver moves the type holding the root under a word of its own so another may take it.
-func handRootOver(ctx context.Context, tx pgx.Tx, queries *db.Queries, at time.Time) error {
-	row, err := queries.LockDefaultContentType(ctx)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	demoted := toType(row)
-	demoted.RouteWord = content.Slugify(demoted.PluralLabel)
-	demoted.Default, demoted.UpdatedAt = false, at
-	if err := demoted.Validate(); err != nil {
-		return err
-	}
-	if _, err := queries.UpdateContentType(ctx, updateParams(demoted)); err != nil {
-		return err
-	}
-	return carryContent(ctx, tx, queries, demoted, row.RouteWord)
-}
-
-// Delete removes the type, or reports it missing or still in use.
-func (s *TypeStore) Delete(ctx context.Context, key string) error {
-	rows, err := s.queries.DeleteContentType(ctx, key)
-	if isTypeInUse(err) {
-		return content.ErrTypeInUse
-	}
-	if isTypeTargeted(err) {
-		return content.ErrTypeTargeted
-	}
-	if err != nil {
-		return fmt.Errorf("postgres: delete content type: %w", err)
-	}
-	if rows == 0 {
-		return content.ErrTypeNotFound
-	}
-	return nil
-}
-
-// takenBy returns the domain error for a unique violation over a key or a route word.
-func takenBy(err error) error {
+// readError returns the code and the constraint name a Postgres error carries, and whether err holds one.
+func readError(err error) (code, name string, found bool) {
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != uniqueViolationCode {
-		return nil
+	if !errors.As(err, &pgErr) {
+		return "", "", false
 	}
-	if pgErr.ConstraintName == routeWordConstraint {
-		return content.ErrRouteWordTaken
-	}
-	if pgErr.ConstraintName == typeKeyConstraint {
-		return content.ErrTypeTaken
-	}
-	return nil
-}
-
-// isTypeInUse reports whether err is content still referencing the type.
-func isTypeInUse(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == restrictViolationCode
-}
-
-// isTypeTargeted reports whether the error is a relation field still pointing at the type.
-func isTypeTargeted(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == fieldTargetConstraint
-}
-
-// fieldWriteFailure returns the error a field write carries, and wraps anything else.
-func fieldWriteFailure(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		if pgErr.Code == uniqueViolationCode && keyConstraint(pgErr.ConstraintName) {
-			return content.ErrFieldTaken
-		}
-		if pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == fieldTargetConstraint {
-			return content.ErrTargetUnknown
-		}
-		if pgErr.Code == foreignKeyViolationCode && pgErr.ConstraintName == fieldGroupConstraint {
-			return content.ErrGroupNotFound
-		}
-	}
-	return fmt.Errorf("postgres: create content field: %w", err)
-}
-
-// targetOf returns the relation target as the nullable column holds it.
-func targetOf(f content.Field) *string {
-	if f.RelatesTo == "" {
-		return nil
-	}
-	return &f.RelatesTo
+	return pgErr.Code, pgErr.ConstraintName, true
 }
 
 // originOf returns the origin a nullable column holds, empty for a definition the site made.
@@ -359,66 +99,4 @@ func originColumn(origin string) *string {
 		return nil
 	}
 	return &origin
-}
-
-// toField maps a stored row to a domain field definition with UTC timestamps.
-func toField(row db.CoreContentField) content.Field {
-	f := content.Field{
-		ID:        int(row.ID),
-		GroupID:   int(row.GroupID),
-		Key:       row.Key,
-		Label:     row.Label,
-		Kind:      content.FieldKind(row.Kind),
-		Many:      row.Many,
-		Required:  row.Required,
-		Origin:    originOf(row.Origin),
-		CreatedAt: row.CreatedAt.UTC(),
-		UpdatedAt: row.UpdatedAt.UTC(),
-	}
-	if row.RelatesTo != nil {
-		f.RelatesTo = *row.RelatesTo
-	}
-	if row.ParentFieldID.Valid {
-		f.ParentID = int(row.ParentFieldID.Int32)
-	}
-	f.Settings = settingsOf(row.Settings)
-	return f
-}
-
-// settingsJSON returns the settings as the jsonb column holds them, an empty object for none.
-func settingsJSON(settings map[string]any) []byte {
-	if len(settings) == 0 {
-		return []byte("{}")
-	}
-	raw, _ := json.Marshal(settings)
-	return raw
-}
-
-// settingsOf returns the stored settings as the domain reads them, nothing for an empty object.
-func settingsOf(raw []byte) map[string]any {
-	var settings map[string]any
-	if err := json.Unmarshal(raw, &settings); err != nil || len(settings) == 0 {
-		return nil
-	}
-	return settings
-}
-
-// toType maps a stored row to a domain content type with UTC timestamps.
-func toType(row db.CoreContentType) content.Type {
-	return content.Type{
-		Key:           row.Key,
-		SingularLabel: row.SingularLabel,
-		PluralLabel:   row.PluralLabel,
-		Description:   row.Description,
-		RouteWord:     row.RouteWord,
-		Hierarchical:  row.Hierarchical,
-		Revisions:     row.Revisions,
-		RevisionCap:   int(row.RevisionCap),
-		PageKind:      content.PageKind(row.PageKind),
-		Default:       row.IsDefault,
-		Active:        row.Active,
-		Origin:        originOf(row.Origin),
-		CreatedAt:     row.CreatedAt.UTC(),
-		UpdatedAt:     row.UpdatedAt.UTC(),
-	}
 }
