@@ -29,10 +29,7 @@ func rowsPointing(t *testing.T, pool *pgxpool.Pool) content.Field {
 	if err != nil {
 		t.Fatalf("NewField(team) error = %v, want nil", err)
 	}
-	stored, err := types.CreateField(t.Context(), rows)
-	if err != nil {
-		t.Fatalf("declaring the repeater: %v, want nil", err)
-	}
+	stored := declareOnType(t, types, "post", rows)
 	inside, err := content.NewSubField(content.Field{
 		Key: "filed", Label: "Filed", Kind: content.FieldKindRelation, RelatesTo: "category", Many: true,
 	}, content.FieldKindRepeater)

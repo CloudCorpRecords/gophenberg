@@ -39,9 +39,7 @@ func declareChoice(t *testing.T, pool *pgxpool.Pool, key string, multiple bool) 
 		},
 		content.SettingMultiple: multiple,
 	}
-	if _, err := postgres.NewTypeStore(pool).CreateField(t.Context(), declared); err != nil {
-		t.Fatalf("declaring the %q field: %v, want nil", key, err)
-	}
+	declareOnType(t, postgres.NewTypeStore(pool), content.TypePost, declared)
 }
 
 func TestMigrationsIndexTheFieldValuesForContainment(t *testing.T) {

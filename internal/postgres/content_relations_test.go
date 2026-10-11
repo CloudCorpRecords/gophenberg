@@ -42,9 +42,7 @@ func relatingStore(t *testing.T) (*postgres.ContentStore, uuid.UUID, *pgxpool.Po
 	if err != nil {
 		t.Fatalf("NewField() error = %v, want nil", err)
 	}
-	if _, err := types.CreateField(t.Context(), built); err != nil {
-		t.Fatalf("declaring the relation: %v, want nil", err)
-	}
+	declareOnType(t, types, "post", built)
 	return store, author, pool
 }
 
@@ -177,9 +175,7 @@ func TestContentStoreWritesRelationsWhileTheFieldIsDeleted(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewField() error = %v, want nil", err)
 			}
-			if _, err := types.CreateField(t.Context(), built); err != nil {
-				t.Fatalf("redeclaring the relation: %v, want nil", err)
-			}
+			declareOnType(t, types, "post", built)
 		}
 		post := mustCreate(t, store, fmt.Sprintf("Hello world %d", round), author)
 		post.Fields = content.Values{"categories": namedTargets([]uuid.UUID{news.ID})}

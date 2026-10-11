@@ -17,10 +17,7 @@ import (
 // declareField adds a field definition to the post type so its items may hold values under the key.
 func declareField(t *testing.T, pool *pgxpool.Pool, key string, kind content.FieldKind) {
 	t.Helper()
-	types := postgres.NewTypeStore(pool)
-	if _, err := types.CreateField(t.Context(), fieldOn(t, "post", key, kind, "")); err != nil {
-		t.Fatalf("declaring the %q field: %v, want nil", key, err)
-	}
+	declareOnType(t, postgres.NewTypeStore(pool), "post", fieldOn(t, "post", key, kind, ""))
 }
 
 func TestContentStoreWaitsForAFieldDeletionInFlight(t *testing.T) {

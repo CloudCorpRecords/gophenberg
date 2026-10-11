@@ -22,11 +22,7 @@ func declaredRelation(t *testing.T, types *postgres.TypeStore, key string) conte
 	if err != nil {
 		t.Fatalf("NewField(%q) error = %v, want nil", key, err)
 	}
-	stored, err := types.CreateField(t.Context(), built)
-	if err != nil {
-		t.Fatalf("declaring %q: %v, want nil", key, err)
-	}
-	return stored
+	return declareOnType(t, types, "post", built)
 }
 
 // pointing holds what a backlinks read is proven against.

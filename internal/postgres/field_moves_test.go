@@ -361,14 +361,11 @@ func TestMovingAFieldReportsWhatItCannotWrite(t *testing.T) {
 			store, author, pool := typedStore(t)
 			storeType(t, store, "car")
 			specs := declareSection(t, store, "specs")
-			maker, err := store.CreateField(t.Context(), fieldOn(t, "car", "maker", content.FieldKindRelation, "car"))
-			if err != nil {
-				t.Fatalf("CreateField(maker) error = %v, want nil", err)
-			}
+			maker := declareOnType(t, store, "car", fieldOn(t, "car", "maker", content.FieldKindRelation, "car"))
 			plantTyped(t, pool, author, "car", "one", `{"maker": []}`)
 			raiseOn(t, pool, table.table, table.operation)
 
-			_, err = store.MoveField(t.Context(), maker.ID, specs.GroupID, specs.ID, deepEnough, nil)
+			_, err := store.MoveField(t.Context(), maker.ID, specs.GroupID, specs.ID, deepEnough, nil)
 
 			if err == nil {
 				t.Errorf("MoveField() error = nil, want %s reported", name)

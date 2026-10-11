@@ -644,11 +644,12 @@ func TestDeleteGroupReportsAFieldItCannotCarry(t *testing.T) {
 	}
 }
 
-func TestCreateFieldReportsADefinitionItCannotStore(t *testing.T) {
+func TestCreateFieldInGroupReportsADefinitionItCannotStore(t *testing.T) {
 	t.Parallel()
 
 	_, _, pool := newContentStoreWithPool(t)
 	types := postgres.NewTypeStore(pool)
+	posts := fieldsGroupOf(t, types, content.TypePost)
 	raiseOn(t, pool, "core.content_fields", "INSERT")
 	built, err := content.NewField(content.Field{
 		TypeKey: content.TypePost, Key: "color", Label: "Colour", Kind: content.FieldKindText,
@@ -657,9 +658,9 @@ func TestCreateFieldReportsADefinitionItCannotStore(t *testing.T) {
 		t.Fatalf("NewField() error = %v, want nil", err)
 	}
 
-	_, err = types.CreateField(t.Context(), built)
+	_, err = types.CreateFieldInGroup(t.Context(), posts.ID, built, nil)
 
 	if err == nil || !strings.Contains(err.Error(), "sabotaged") {
-		t.Errorf("CreateField() error = %v, want the failing store reported", err)
+		t.Errorf("CreateFieldInGroup() error = %v, want the failing store reported", err)
 	}
 }

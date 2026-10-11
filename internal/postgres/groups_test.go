@@ -22,10 +22,12 @@ func typedStore(t *testing.T) (*postgres.TypeStore, uuid.UUID, *pgxpool.Pool) {
 	return postgres.NewTypeStore(pool), author, pool
 }
 
-// storeType, declareTypedField, locationOf and groupHolding are the shared fixtures under the names these tests use.
+// storeType, declareTypedField, declareOnType, fieldsGroupOf, locationOf and groupHolding are shared fixtures.
 var (
 	storeType         = contenttest.StoreType
 	declareTypedField = contenttest.DeclareTypedField
+	declareOnType     = contenttest.DeclareOnType
+	fieldsGroupOf     = contenttest.FieldsGroupOf
 	locationOf        = contenttest.LocationOf
 	groupHolding      = contenttest.GroupHolding
 )

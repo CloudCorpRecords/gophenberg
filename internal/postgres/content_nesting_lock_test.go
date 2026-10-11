@@ -302,10 +302,7 @@ func TestClearingAFieldWaitsForNoChildBeingFiledUnderTheItem(t *testing.T) {
 	t.Parallel()
 
 	items, types, author, pool := nestingStoresWithPool(t)
-	field, err := types.CreateField(t.Context(), fieldOn(t, "page", "subtitle", content.FieldKindText, ""))
-	if err != nil {
-		t.Fatalf("CreateField() error = %v, want nil", err)
-	}
+	field := declareTypedField(t, types, "page", "subtitle")
 	built, err := content.New(pageType(), nil, "Part", author)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
