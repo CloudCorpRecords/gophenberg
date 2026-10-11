@@ -556,47 +556,6 @@ func (q *Queries) ListContentFields(ctx context.Context) ([]CoreContentField, er
 	return items, nil
 }
 
-const listContentFieldsOfGroup = `-- name: ListContentFieldsOfGroup :many
-SELECT id, key, label, kind, relates_to, many, required, created_at, updated_at, position, group_id, settings, parent_field_id, depth, origin
-FROM core.content_fields WHERE group_id = $1 ORDER BY position, id
-`
-
-func (q *Queries) ListContentFieldsOfGroup(ctx context.Context, groupID int32) ([]CoreContentField, error) {
-	rows, err := q.db.Query(ctx, listContentFieldsOfGroup, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CoreContentField
-	for rows.Next() {
-		var i CoreContentField
-		if err := rows.Scan(
-			&i.ID,
-			&i.Key,
-			&i.Label,
-			&i.Kind,
-			&i.RelatesTo,
-			&i.Many,
-			&i.Required,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Position,
-			&i.GroupID,
-			&i.Settings,
-			&i.ParentFieldID,
-			&i.Depth,
-			&i.Origin,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listContentTypes = `-- name: ListContentTypes :many
 SELECT t.key, t.singular_label, t.plural_label, t.route_word, t.hierarchical, t.revisions,
     t.revision_cap, t.page_kind, t.is_default, t.active, t.created_at, t.updated_at, t.origin, t.description
