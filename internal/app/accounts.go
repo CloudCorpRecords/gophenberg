@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gopherium/framework/goncierge"
@@ -32,8 +33,12 @@ func accountConfig(registry *goncierge.Registry) accounts.Config {
 // declaredRoles returns the hook answering the roles the core and the call's plugins declared into registry.
 func declaredRoles(registry *goncierge.Registry) func(context.Context, gonsole.Call) (accounts.Roles, error) {
 	return func(ctx context.Context, call gonsole.Call) (accounts.Roles, error) {
-		if _, err := call.Plugins(ctx); err != nil {
+		loaded, err := call.Plugins(ctx)
+		if err != nil {
 			return accounts.Roles{}, err
+		}
+		if loaded.Failed != nil {
+			return accounts.Roles{}, fmt.Errorf("register plugins: %w", loaded.Failed)
 		}
 		return accountRoles(registry), nil
 	}
