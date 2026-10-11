@@ -21,6 +21,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/google/uuid"
+	"github.com/gopherium/framework/goncierge"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/definitions"
@@ -138,6 +139,7 @@ type world struct {
 	pending        *activation
 	rememberedETag string
 	file           *definitions.Import
+	roles          *goncierge.Registry
 }
 
 // newMemoryStores returns one scenario's content, type and account stores, wired to each other.
@@ -284,7 +286,7 @@ func (w *world) serve(jar http.CookieJar) error {
 		Web:        fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>Admin</title>")}},
 		Lists:      w.lists,
 	}
-	cfg.Plugins, cfg.PluginPublicPaths = w.plugins, w.publicPaths
+	cfg.Plugins, cfg.PluginPublicPaths, cfg.Roles = w.plugins, w.publicPaths, w.roles
 	w.logs = &logBook{}
 	cfg.Logger = slog.New(slog.NewTextHandler(w.logs, nil))
 	public, err := server.ParsePublicURL(w.publicURL)
@@ -369,6 +371,18 @@ func (w *world) restart(ctx context.Context) error {
 	}
 	w.manager.Close()
 	return w.boot(ctx)
+}
+
+// rebuild serves a fresh site over the scenario's state, reading what was declared since the last start.
+func (w *world) rebuild(ctx context.Context) error {
+	if w.site != nil {
+		w.site.Close()
+		w.site = nil
+	}
+	if w.manager != nil {
+		w.manager.Close()
+	}
+	return w.start(ctx)
 }
 
 // gate returns the path a theme waits for before it starts serving.

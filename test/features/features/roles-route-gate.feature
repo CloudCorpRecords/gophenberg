@@ -1,7 +1,8 @@
 Feature: A role decides which routes an account reaches
   A site owner hands out accounts that write without handing over the
-  keys to the site. The administration routes answer only an admin,
-  while the content routes stay open to every role that can sign in.
+  keys to the site. Each administration area answers only a role
+  carrying its capability, while the content routes stay open to every
+  role that can sign in.
 
   Background:
     Given a running Gophenberg with an empty managed themes directory
@@ -19,12 +20,12 @@ Feature: A role decides which routes an account reaches
   Scenario: An author is refused the themes
     Given a signed in author
     When the account asks for the theme list
-    Then the request is refused with the code "role_insufficient"
+    Then the request is refused with the code "capability_missing"
 
   Scenario: An editor is refused the themes
     Given a signed in editor
     When the account asks for the theme list
-    Then the request is refused with the code "role_insufficient"
+    Then the request is refused with the code "capability_missing"
 
   Scenario: An administrator reaches the account list
     Given a signed in administrator
@@ -52,21 +53,18 @@ Feature: A role decides which routes an account reaches
     Then the request is answered
     And the answer is kept out of shared caches
 
-  @wip
   Scenario: A plugin role carrying the themes capability reaches the themes
     Given the plugin "studio" declaring the role "designer" with the capability "manage_themes"
     And a signed in "designer"
     When the account asks for the theme list
     Then the request is answered
 
-  @wip
   Scenario: A plugin role carrying the themes capability is refused the account list
     Given the plugin "studio" declaring the role "designer" with the capability "manage_themes"
     And a signed in "designer"
     When the account asks for the user list
     Then the request is refused with the code "role_insufficient"
 
-  @wip
   Scenario: The administrator's session names what it may do and give
     Given the plugin "events" declaring the role "moderator" with the capability "events.manage"
     And a signed in administrator
@@ -74,14 +72,12 @@ Feature: A role decides which routes an account reaches
     Then the session carries the capability "events.manage"
     And the session may give the role "moderator"
 
-  @wip
   Scenario: An administrator cannot give a role nobody declares
     Given the account "author@example.com" holding the role "author"
     And a signed in administrator
     When the account gives "author@example.com" the role "archivist"
     Then the request is refused with the code "role_unknown"
 
-  @wip
   Scenario: A role carrying only the account capability cannot make an administrator
     Given the plugin "teams" declaring the role "team_lead" with the capability "manage_users"
     And the account "author@example.com" holding the role "author"
@@ -89,7 +85,6 @@ Feature: A role decides which routes an account reaches
     When the account gives "author@example.com" the role "admin"
     Then the request is refused with the code "role_beyond_reach"
 
-  @wip
   Scenario: A role carrying only the account capability cannot disable an administrator
     Given the plugin "teams" declaring the role "team_lead" with the capability "manage_users"
     And the account "owner@example.com" holding the role "admin"
