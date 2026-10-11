@@ -53,6 +53,8 @@ WHERE (@media_type::text = '' OR m.media_type = @media_type)
         @search::text = ''
         OR m.title ILIKE '%' || @search || '%'
         OR m.file ILIKE '%' || @search || '%'
+        OR m.caption ILIKE '%' || @search || '%'
+        OR m.description ILIKE '%' || @search || '%'
     )
 ORDER BY
     CASE WHEN @order_by::text = 'title' AND @order_dir::text = 'asc' THEN m.title END ASC,
@@ -89,6 +91,8 @@ WHERE (@media_type::text = '' OR m.media_type = @media_type)
         @search::text = ''
         OR m.title ILIKE '%' || @search || '%'
         OR m.file ILIKE '%' || @search || '%'
+        OR m.caption ILIKE '%' || @search || '%'
+        OR m.description ILIKE '%' || @search || '%'
     );
 
 -- name: UpdateMedia :one

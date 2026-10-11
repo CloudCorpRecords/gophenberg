@@ -34,6 +34,8 @@ WHERE ($1::text = '' OR m.media_type = $1)
         $9::text = ''
         OR m.title ILIKE '%' || $9 || '%'
         OR m.file ILIKE '%' || $9 || '%'
+        OR m.caption ILIKE '%' || $9 || '%'
+        OR m.description ILIKE '%' || $9 || '%'
     )
 `
 
@@ -220,6 +222,8 @@ WHERE ($1::text = '' OR m.media_type = $1)
         $9::text = ''
         OR m.title ILIKE '%' || $9 || '%'
         OR m.file ILIKE '%' || $9 || '%'
+        OR m.caption ILIKE '%' || $9 || '%'
+        OR m.description ILIKE '%' || $9 || '%'
     )
 ORDER BY
     CASE WHEN $10::text = 'title' AND $11::text = 'asc' THEN m.title END ASC,

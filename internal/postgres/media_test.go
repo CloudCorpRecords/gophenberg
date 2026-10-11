@@ -469,6 +469,27 @@ func TestMediaStoreListSearchesTitleAndFile(t *testing.T) {
 	}
 }
 
+func TestMediaStoreListSearchesCaptionAndDescription(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	captioned := mustImage(t, "2026/08/cliff.jpg", "cliff", author)
+	captioned.Caption = "A lighthouse above the bay"
+	mustCreateMedia(t, store, captioned)
+	described := mustImage(t, "2026/08/manual.jpg", "manual", author)
+	described.Description = "Keeping the lighthouse lamp lit"
+	mustCreateMedia(t, store, described)
+	altered := mustImage(t, "2026/08/harbor.jpg", "harbor", author)
+	altered.AltText = "A lighthouse at dusk"
+	mustCreateMedia(t, store, altered)
+
+	got := narrowedTitles(t, store, media.Filter{Search: "lighthouse"})
+
+	if want := []string{"manual", "cliff"}; !slices.Equal(got, want) {
+		t.Errorf("List(lighthouse) = %q, want the caption and description matches %q", got, want)
+	}
+}
+
 func TestMediaStoreListTreatsPatternCharactersAsText(t *testing.T) {
 	t.Parallel()
 
