@@ -25,7 +25,7 @@ type Store interface {
 	Create(ctx context.Context, m Media) (Media, error)
 	ByID(ctx context.Context, id int64) (Media, error)
 	ByIDs(ctx context.Context, ids []int64) ([]Media, error)
-	List(ctx context.Context, f Filter) ([]Media, int, error)
+	List(ctx context.Context, f Filter) ([]Listed, int, error)
 	Update(ctx context.Context, m Media, expectedUpdatedAt time.Time) (Media, error)
 	Delete(ctx context.Context, id int64) (Media, error)
 }
