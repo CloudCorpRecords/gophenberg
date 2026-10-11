@@ -223,6 +223,83 @@ func TestMediaStoreListSortsAsTheFilterNames(t *testing.T) {
 	}
 }
 
+// narrowedTitles returns the titles of the rows the filter lists, failing when the total differs from the rows.
+func narrowedTitles(t *testing.T, store *postgres.MediaStore, f media.Filter) []string {
+	t.Helper()
+	f.Page, f.PerPage = 1, 10
+	items, total, err := store.List(t.Context(), f)
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if total != len(items) {
+		t.Errorf("List() total = %d, want the %d rows it lists", total, len(items))
+	}
+	titles := make([]string, len(items))
+	for i, item := range items {
+		titles[i] = item.Title
+	}
+	return titles
+}
+
+func TestMediaStoreListNarrowsByAuthor(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newMediaStoreWithPool(t)
+	second := addAuthor(t, pool, "Second Author")
+	mustCreateMedia(t, store, mustImage(t, "2026/08/harbor.jpg", "harbor", author))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/pier.jpg", "pier", second))
+
+	tests := []struct {
+		name   string
+		filter media.Filter
+		want   []string
+	}{
+		{"one author", media.Filter{Authors: []uuid.UUID{second}}, []string{"pier"}},
+		{"both authors", media.Filter{Authors: []uuid.UUID{author, second}}, []string{"pier", "harbor"}},
+		{"one author left out", media.Filter{ExcludeAuthors: []uuid.UUID{second}}, []string{"harbor"}},
+		{"none named", media.Filter{}, []string{"pier", "harbor"}},
+	}
+	for _, tt := range tests {
+		if got := narrowedTitles(t, store, tt.filter); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: List() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestMediaStoreListNarrowsByTheDatesAddedAndModified(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	day := func(month time.Month, date int) *time.Time {
+		at := time.Date(2026, month, date, 0, 0, 0, 0, time.UTC)
+		return &at
+	}
+	mustCreateMediaAt(t, store, "harbor", author, *day(time.July, 10), *day(time.July, 10))
+	mustCreateMediaAt(t, store, "cliff", author, *day(time.March, 10), *day(time.September, 10))
+	mustCreateMediaAt(t, store, "manual", author, *day(time.May, 10), *day(time.May, 10))
+
+	tests := []struct {
+		name   string
+		filter media.Filter
+		want   []string
+	}{
+		{"added before", media.Filter{Before: day(time.June, 1)}, []string{"manual", "cliff"}},
+		{"added after", media.Filter{After: day(time.June, 1)}, []string{"harbor"}},
+		{"added between", media.Filter{After: day(time.April, 1), Before: day(time.June, 1)}, []string{"manual"}},
+		{"added before its own day", media.Filter{Before: day(time.May, 10)}, []string{"cliff"}},
+		{"added after its own day", media.Filter{After: day(time.May, 10)}, []string{"harbor"}},
+		{"modified before", media.Filter{ModifiedBefore: day(time.June, 1)}, []string{"manual"}},
+		{"modified after", media.Filter{ModifiedAfter: day(time.June, 1)}, []string{"harbor", "cliff"}},
+		{"modified before its own day", media.Filter{ModifiedBefore: day(time.July, 10)}, []string{"manual"}},
+		{"modified after its own day", media.Filter{ModifiedAfter: day(time.July, 10)}, []string{"cliff"}},
+	}
+	for _, tt := range tests {
+		if got := narrowedTitles(t, store, tt.filter); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: List() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestMediaStoreListBreaksATieNewestUploadFirst(t *testing.T) {
 	t.Parallel()
 

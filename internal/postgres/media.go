@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -94,24 +95,25 @@ func (s *MediaStore) Saved(ctx context.Context, files []string) (map[string]bool
 
 // List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
 func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Listed, int, error) {
-	search := escapeLike(f.Search)
-	mimes := escapedPrefixes(f.Mimes)
-	total, err := s.queries.CountMedia(ctx, db.CountMediaParams{
-		MediaType: string(f.Type),
-		Mimes:     mimes,
-		Search:    search,
-	})
+	narrowed := mediaNarrowing(f)
+	total, err := s.queries.CountMedia(ctx, narrowed)
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: count media: %w", err)
 	}
 	rows, err := s.queries.ListMedia(ctx, db.ListMediaParams{
-		MediaType: string(f.Type),
-		Mimes:     mimes,
-		Search:    search,
-		OrderBy:   string(f.OrderBy),
-		OrderDir:  string(f.Order),
-		RowLimit:  int32(f.PerPage),
-		RowOffset: pageOffset(f.Page, f.PerPage),
+		MediaType:       narrowed.MediaType,
+		Mimes:           narrowed.Mimes,
+		Authors:         narrowed.Authors,
+		ExcludedAuthors: narrowed.ExcludedAuthors,
+		Before:          narrowed.Before,
+		After:           narrowed.After,
+		ModifiedBefore:  narrowed.ModifiedBefore,
+		ModifiedAfter:   narrowed.ModifiedAfter,
+		Search:          narrowed.Search,
+		OrderBy:         string(f.OrderBy),
+		OrderDir:        string(f.Order),
+		RowLimit:        int32(f.PerPage),
+		RowOffset:       pageOffset(f.Page, f.PerPage),
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: list media: %w", err)
@@ -156,6 +158,21 @@ func (s *MediaStore) Delete(ctx context.Context, id int64) (media.Media, error) 
 		return media.Media{}, fmt.Errorf("postgres: delete media: %w", err)
 	}
 	return toMedia(row), nil
+}
+
+// mediaNarrowing returns the arguments the shared media list and count queries narrow the filter by.
+func mediaNarrowing(f media.Filter) db.CountMediaParams {
+	return db.CountMediaParams{
+		MediaType:       string(f.Type),
+		Mimes:           escapedPrefixes(f.Mimes),
+		Authors:         append([]uuid.UUID{}, f.Authors...),
+		ExcludedAuthors: append([]uuid.UUID{}, f.ExcludeAuthors...),
+		Before:          f.Before,
+		After:           f.After,
+		ModifiedBefore:  f.ModifiedBefore,
+		ModifiedAfter:   f.ModifiedAfter,
+		Search:          escapeLike(f.Search),
+	}
 }
 
 // escapedPrefixes returns the prefixes with the pattern characters of LIKE escaped.

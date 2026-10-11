@@ -43,6 +43,12 @@ WHERE (@media_type::text = '' OR m.media_type = @media_type)
             WHERE m.mime_type LIKE prefix || '%'
         )
     )
+    AND (cardinality(@authors::uuid[]) = 0 OR m.author_id = ANY(@authors::uuid[]))
+    AND m.author_id <> ALL(@excluded_authors::uuid[])
+    AND (sqlc.narg(before)::timestamptz IS NULL OR m.created_at < sqlc.narg(before)::timestamptz)
+    AND (sqlc.narg(after)::timestamptz IS NULL OR m.created_at > sqlc.narg(after)::timestamptz)
+    AND (sqlc.narg(modified_before)::timestamptz IS NULL OR m.updated_at < sqlc.narg(modified_before)::timestamptz)
+    AND (sqlc.narg(modified_after)::timestamptz IS NULL OR m.updated_at > sqlc.narg(modified_after)::timestamptz)
     AND (
         @search::text = ''
         OR m.title ILIKE '%' || @search || '%'
@@ -73,6 +79,12 @@ WHERE (@media_type::text = '' OR m.media_type = @media_type)
             WHERE m.mime_type LIKE prefix || '%'
         )
     )
+    AND (cardinality(@authors::uuid[]) = 0 OR m.author_id = ANY(@authors::uuid[]))
+    AND m.author_id <> ALL(@excluded_authors::uuid[])
+    AND (sqlc.narg(before)::timestamptz IS NULL OR m.created_at < sqlc.narg(before)::timestamptz)
+    AND (sqlc.narg(after)::timestamptz IS NULL OR m.created_at > sqlc.narg(after)::timestamptz)
+    AND (sqlc.narg(modified_before)::timestamptz IS NULL OR m.updated_at < sqlc.narg(modified_before)::timestamptz)
+    AND (sqlc.narg(modified_after)::timestamptz IS NULL OR m.updated_at > sqlc.narg(modified_after)::timestamptz)
     AND (
         @search::text = ''
         OR m.title ILIKE '%' || @search || '%'

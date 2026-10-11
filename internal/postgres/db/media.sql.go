@@ -24,21 +24,43 @@ WHERE ($1::text = '' OR m.media_type = $1)
             WHERE m.mime_type LIKE prefix || '%'
         )
     )
+    AND (cardinality($3::uuid[]) = 0 OR m.author_id = ANY($3::uuid[]))
+    AND m.author_id <> ALL($4::uuid[])
+    AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)
+    AND ($6::timestamptz IS NULL OR m.created_at > $6::timestamptz)
+    AND ($7::timestamptz IS NULL OR m.updated_at < $7::timestamptz)
+    AND ($8::timestamptz IS NULL OR m.updated_at > $8::timestamptz)
     AND (
-        $3::text = ''
-        OR m.title ILIKE '%' || $3 || '%'
-        OR m.file ILIKE '%' || $3 || '%'
+        $9::text = ''
+        OR m.title ILIKE '%' || $9 || '%'
+        OR m.file ILIKE '%' || $9 || '%'
     )
 `
 
 type CountMediaParams struct {
-	MediaType string
-	Mimes     []string
-	Search    string
+	MediaType       string
+	Mimes           []string
+	Authors         []uuid.UUID
+	ExcludedAuthors []uuid.UUID
+	Before          *time.Time
+	After           *time.Time
+	ModifiedBefore  *time.Time
+	ModifiedAfter   *time.Time
+	Search          string
 }
 
 func (q *Queries) CountMedia(ctx context.Context, arg CountMediaParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countMedia, arg.MediaType, arg.Mimes, arg.Search)
+	row := q.db.QueryRow(ctx, countMedia,
+		arg.MediaType,
+		arg.Mimes,
+		arg.Authors,
+		arg.ExcludedAuthors,
+		arg.Before,
+		arg.After,
+		arg.ModifiedBefore,
+		arg.ModifiedAfter,
+		arg.Search,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -188,34 +210,46 @@ WHERE ($1::text = '' OR m.media_type = $1)
             WHERE m.mime_type LIKE prefix || '%'
         )
     )
+    AND (cardinality($3::uuid[]) = 0 OR m.author_id = ANY($3::uuid[]))
+    AND m.author_id <> ALL($4::uuid[])
+    AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)
+    AND ($6::timestamptz IS NULL OR m.created_at > $6::timestamptz)
+    AND ($7::timestamptz IS NULL OR m.updated_at < $7::timestamptz)
+    AND ($8::timestamptz IS NULL OR m.updated_at > $8::timestamptz)
     AND (
-        $3::text = ''
-        OR m.title ILIKE '%' || $3 || '%'
-        OR m.file ILIKE '%' || $3 || '%'
+        $9::text = ''
+        OR m.title ILIKE '%' || $9 || '%'
+        OR m.file ILIKE '%' || $9 || '%'
     )
 ORDER BY
-    CASE WHEN $4::text = 'title' AND $5::text = 'asc' THEN m.title END ASC,
-    CASE WHEN $4::text = 'title' AND $5::text <> 'asc' THEN m.title END DESC,
-    CASE WHEN $4::text = 'author' AND $5::text = 'asc' THEN u.name END ASC,
-    CASE WHEN $4::text = 'author' AND $5::text <> 'asc' THEN u.name END DESC,
-    CASE WHEN $4::text = 'modified' AND $5::text = 'asc' THEN m.updated_at END ASC,
-    CASE WHEN $4::text = 'modified' AND $5::text <> 'asc' THEN m.updated_at END DESC,
-    CASE WHEN $4::text NOT IN ('title', 'author', 'modified') AND $5::text = 'asc'
+    CASE WHEN $10::text = 'title' AND $11::text = 'asc' THEN m.title END ASC,
+    CASE WHEN $10::text = 'title' AND $11::text <> 'asc' THEN m.title END DESC,
+    CASE WHEN $10::text = 'author' AND $11::text = 'asc' THEN u.name END ASC,
+    CASE WHEN $10::text = 'author' AND $11::text <> 'asc' THEN u.name END DESC,
+    CASE WHEN $10::text = 'modified' AND $11::text = 'asc' THEN m.updated_at END ASC,
+    CASE WHEN $10::text = 'modified' AND $11::text <> 'asc' THEN m.updated_at END DESC,
+    CASE WHEN $10::text NOT IN ('title', 'author', 'modified') AND $11::text = 'asc'
         THEN m.created_at END ASC,
-    CASE WHEN $4::text NOT IN ('title', 'author', 'modified') AND $5::text <> 'asc'
+    CASE WHEN $10::text NOT IN ('title', 'author', 'modified') AND $11::text <> 'asc'
         THEN m.created_at END DESC,
     m.id DESC
-LIMIT $7 OFFSET $6
+LIMIT $13 OFFSET $12
 `
 
 type ListMediaParams struct {
-	MediaType string
-	Mimes     []string
-	Search    string
-	OrderBy   string
-	OrderDir  string
-	RowOffset int32
-	RowLimit  int32
+	MediaType       string
+	Mimes           []string
+	Authors         []uuid.UUID
+	ExcludedAuthors []uuid.UUID
+	Before          *time.Time
+	After           *time.Time
+	ModifiedBefore  *time.Time
+	ModifiedAfter   *time.Time
+	Search          string
+	OrderBy         string
+	OrderDir        string
+	RowOffset       int32
+	RowLimit        int32
 }
 
 type ListMediaRow struct {
@@ -241,6 +275,12 @@ func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]ListMed
 	rows, err := q.db.Query(ctx, listMedia,
 		arg.MediaType,
 		arg.Mimes,
+		arg.Authors,
+		arg.ExcludedAuthors,
+		arg.Before,
+		arg.After,
+		arg.ModifiedBefore,
+		arg.ModifiedAfter,
 		arg.Search,
 		arg.OrderBy,
 		arg.OrderDir,
