@@ -97,9 +97,10 @@ from its input, keeping it out of your shell history. Type it and
 press Enter, or pipe it in, for example from a file only you can
 read by adding `< password.txt` at the end of the command. The
 `-role` flag says what the account may do, and takes `admin`,
-`editor` or `author`. Give the first account `admin`, the role that
-can reach everything, because only an admin can manage the other
-accounts.
+`editor`, `author` or a role a plugin declares. Give the first
+account `admin`, the role that can reach everything. Only a role
+carrying `manage_users` can manage the other accounts, and `admin`
+always carries it.
 
 The image runs `serve` when it is given no command, which is what
 `docker compose up` does. Any other command runs the way the one
