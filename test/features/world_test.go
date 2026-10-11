@@ -176,7 +176,7 @@ func provisionWorld(ctx context.Context, _ *godog.Scenario) (context.Context, er
 		users:        accounts,
 		contentItems: items,
 		contentTypes: types,
-		mediaStore:   newMemoryMedia(),
+		mediaStore:   newMemoryMedia(accounts),
 		mediaFiles: mediahost.New(mediahost.Config{
 			Dir: uploads, MaxSize: mediaTestCap, Settings: settings,
 		}),

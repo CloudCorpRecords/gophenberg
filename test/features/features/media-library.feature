@@ -64,7 +64,6 @@ Feature: Managing the media library
       | asc   | "cliff", "manual" and "harbor" |
       | desc  | "manual", "harbor" and "cliff" |
 
-  @wip
   Scenario: Each listed item names its author
     Given the image "pier.jpg" was uploaded by another author
     When the administrator lists the library
