@@ -7,12 +7,16 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"maps"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/gopherium/gouncer"
 
 	"github.com/gopherium/gophenberg/internal/media"
 )
@@ -267,15 +271,141 @@ func TestStoreDemoUploadReportsAPictureItCannotPaint(t *testing.T) {
 	}
 }
 
+// emailUserStore answers each demo account under its own identity.
+type emailUserStore struct {
+	gouncer.Store
+	ids map[string]uuid.UUID
+}
+
+// UserByEmail returns the account stored under the email.
+func (s emailUserStore) UserByEmail(_ context.Context, email string) (gouncer.User, error) {
+	return gouncer.User{ID: s.ids[email]}, nil
+}
+
+// demoPictures returns the demo uploads that are pictures, leaving the documents out.
+func demoPictures() []demoUpload {
+	return slices.DeleteFunc(demoMedia(), demoUpload.document)
+}
+
+func TestDemoMediaHoldsElevenPicturesAndOneDocument(t *testing.T) {
+	t.Parallel()
+
+	documents := len(demoMedia()) - len(demoPictures())
+
+	if len(demoPictures()) != 11 || documents != 1 {
+		t.Errorf("the demo media holds %d pictures and %d documents, want 11 and 1", len(demoPictures()), documents)
+	}
+}
+
+func TestDemoMediaSpreadsOverEighteenMonthsByThreeAuthors(t *testing.T) {
+	t.Parallel()
+
+	authors := make(map[string]bool)
+	days := make(map[int]bool)
+	oldest := 0
+	for _, scripted := range demoMedia() {
+		authors[scripted.author] = true
+		days[scripted.daysAgo] = true
+		oldest = max(oldest, scripted.daysAgo)
+	}
+
+	if want := map[string]bool{AdminEmail: true, EditorEmail: true, AuthorEmail: true}; !maps.Equal(authors, want) {
+		t.Errorf("the demo media is uploaded by %v, want the three demo accounts", authors)
+	}
+	if len(days) != len(demoMedia()) {
+		t.Errorf("the demo media arrives on %d days, want each upload on its own day", len(days))
+	}
+	if oldest < 480 || oldest > 548 {
+		t.Errorf("the oldest upload arrived %d days ago, want about eighteen months", oldest)
+	}
+}
+
+func TestDemoMediaEditsOneUploadAfterItArrived(t *testing.T) {
+	t.Parallel()
+
+	edited := 0
+	for _, scripted := range demoMedia() {
+		if scripted.editedAfter == 0 {
+			continue
+		}
+		edited++
+		if scripted.editedAfter > scripted.daysAgo {
+			t.Errorf("%q is edited %d days after an upload %d days ago, want the edit in the past",
+				scripted.title, scripted.editedAfter, scripted.daysAgo)
+		}
+	}
+
+	if edited != 1 {
+		t.Errorf("the demo media holds %d uploads edited later, want 1", edited)
+	}
+}
+
+func TestMediaFilesEachUploadUnderItsAuthorOnItsDays(t *testing.T) {
+	t.Parallel()
+
+	ids := map[string]uuid.UUID{AdminEmail: uuid.New(), EditorEmail: uuid.New(), AuthorEmail: uuid.New()}
+	store := &countingMediaStore{}
+	seeded := time.Now().UTC()
+
+	if err := Media(t.Context(), &recordingLibrary{}, store, emailUserStore{ids: ids}); err != nil {
+		t.Fatalf("Media() error = %v, want nil", err)
+	}
+
+	scripts := demoMedia()
+	if len(store.stored) != len(scripts) {
+		t.Fatalf("stored %d items, want %d", len(store.stored), len(scripts))
+	}
+	for i, stored := range store.stored {
+		scripted := scripts[i]
+		if stored.AuthorID != ids[scripted.author] {
+			t.Errorf("%q is filed under %v, want the account of %s", scripted.title, stored.AuthorID, scripted.author)
+		}
+		if added := seeded.AddDate(0, 0, -scripted.daysAgo); stored.CreatedAt.Sub(added).Abs() > time.Minute {
+			t.Errorf("%q was added at %v, want %d days before the seeding", scripted.title, stored.CreatedAt, scripted.daysAgo)
+		}
+		if edit := stored.UpdatedAt.Sub(stored.CreatedAt); edit != time.Duration(scripted.editedAfter)*24*time.Hour {
+			t.Errorf("%q was modified %v after its upload, want %d days", scripted.title, edit, scripted.editedAfter)
+		}
+	}
+}
+
+func TestDemoMediaCarriesAReadableDocument(t *testing.T) {
+	t.Parallel()
+
+	for _, scripted := range demoMedia() {
+		if !scripted.document() {
+			continue
+		}
+		data, err := scripted.data()
+		if err != nil {
+			t.Fatalf("building %q: %v", scripted.file, err)
+		}
+		if sniffed := http.DetectContentType(data); sniffed != "application/pdf" {
+			t.Errorf("%q sniffs as %s, want application/pdf", scripted.file, sniffed)
+		}
+		if !bytes.Contains(data, []byte("("+scripted.title+")")) {
+			t.Errorf("%q does not print its title on its page", scripted.file)
+		}
+		start := bytes.LastIndex(data, []byte("startxref\n"))
+		var offset int
+		if _, err := fmt.Sscanf(string(data[start+len("startxref\n"):]), "%d", &offset); err != nil {
+			t.Fatalf("%q names no cross reference offset: %v", scripted.file, err)
+		}
+		if !bytes.HasPrefix(data[offset:], []byte("xref")) {
+			t.Errorf("%q points its cross reference table at %d, want the xref keyword there", scripted.file, offset)
+		}
+	}
+}
+
 func TestDemoMediaVariesItsShapes(t *testing.T) {
 	t.Parallel()
 
 	shapes := make(map[string]bool)
-	for _, scripted := range demoMedia() {
+	for _, scripted := range demoPictures() {
 		shapes[fmt.Sprintf("%dx%d", scripted.width, scripted.height)] = true
 	}
 
-	if len(shapes) != len(demoMedia()) {
+	if len(shapes) != len(demoPictures()) {
 		t.Errorf("the demo pictures hold %d shapes, want one each", len(shapes))
 	}
 }
@@ -283,7 +413,7 @@ func TestDemoMediaVariesItsShapes(t *testing.T) {
 func TestDemoMediaCarriesReadableImages(t *testing.T) {
 	t.Parallel()
 
-	for _, scripted := range demoMedia() {
+	for _, scripted := range demoPictures() {
 		data, err := scripted.build()
 		if err != nil {
 			t.Fatalf("building %q: %v", scripted.file, err)
