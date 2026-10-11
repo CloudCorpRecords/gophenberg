@@ -420,7 +420,7 @@ func (s *server) patchMedia(
 	if err != nil {
 		return media.Media{}, err
 	}
-	if err := s.refuseUnlessAuthor(r, stored.AuthorID); err != nil {
+	if err := refuseUnlessAuthor(r, stored.AuthorID); err != nil {
 		return media.Media{}, err
 	}
 	if !version.Equal(stored.UpdatedAt) {
@@ -448,7 +448,7 @@ func (s *server) handleMediaDelete() http.HandlerFunc {
 			respondDomainError(w, err)
 			return
 		}
-		if err := s.refuseUnlessAuthor(r, item.AuthorID); err != nil {
+		if err := refuseUnlessAuthor(r, item.AuthorID); err != nil {
 			respondDomainError(w, err)
 			return
 		}
