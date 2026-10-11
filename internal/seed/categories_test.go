@@ -97,8 +97,10 @@ func (*categoryTypeStore) ReorderSubFields(_ context.Context, _ int, _ []string)
 	return nil
 }
 
-// CreateField records the declaration, or reports the scripted failure.
-func (s *categoryTypeStore) CreateField(_ context.Context, f content.Field) (content.Field, error) {
+// CreateFieldInGroup records the declaration, or reports the scripted failure.
+func (s *categoryTypeStore) CreateFieldInGroup(
+	_ context.Context, _ int, f content.Field, _ content.Recheck,
+) (content.Field, error) {
 	if s.createFieldErr != nil {
 		return content.Field{}, s.createFieldErr
 	}
@@ -108,9 +110,11 @@ func (s *categoryTypeStore) CreateField(_ context.Context, f content.Field) (con
 	return f, nil
 }
 
-// ListGroups returns one group holding every field the seeding declared through the store.
+// ListGroups returns the post type's own group holding every field the seeding declared through the store.
 func (s *categoryTypeStore) ListGroups(context.Context) ([]content.Group, error) {
-	return []content.Group{{ID: 1, Key: "post-fields", Title: "Post fields", Fields: s.created}}, nil
+	held := postFieldsGroup(true, content.TypePost)
+	held.Fields = s.created
+	return []content.Group{held}, nil
 }
 
 // filingStore is a content store recording what the category seeding stored and filed.

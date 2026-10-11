@@ -46,10 +46,8 @@ func Backlinks(ctx context.Context, types *content.Registry) error {
 	if err != nil {
 		return err
 	}
-	if _, err := types.CreateField(ctx, PostsFiledField(source)); err != nil {
-		return fmt.Errorf("seed posts filed field: %w", err)
-	}
-	return nil
+	_, err = declareOnType(ctx, types, CategoryTypeKey, PostsFiledField(source))
+	return err
 }
 
 // groupFilingCategories returns the key of the group holding the relation posts name their categories in.

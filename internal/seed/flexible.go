@@ -63,12 +63,12 @@ func Flexible(ctx context.Context, types *content.Registry) error {
 			return nil
 		}
 	}
-	features, err := types.CreateField(ctx, FeaturesField())
+	declared, err := declareOnType(ctx, types, content.TypePost, FeaturesField())
 	if err != nil {
-		return fmt.Errorf("seed features field: %w", err)
+		return err
 	}
 	for _, layout := range FeatureLayouts() {
-		if err := declareLayout(ctx, types, features.ID, layout); err != nil {
+		if err := declareLayout(ctx, types, declared[0].ID, layout); err != nil {
 			return err
 		}
 	}

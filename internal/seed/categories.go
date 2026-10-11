@@ -127,10 +127,8 @@ func declareCategoriesField(ctx context.Context, types *content.Registry) error 
 			return nil
 		}
 	}
-	if _, err := types.CreateField(ctx, CategoriesField()); err != nil {
-		return fmt.Errorf("seed categories field: %w", err)
-	}
-	return nil
+	_, err = declareOnType(ctx, types, content.TypePost, CategoriesField())
+	return err
 }
 
 // storeDemoCategory stores one scripted category and files its post under it.
