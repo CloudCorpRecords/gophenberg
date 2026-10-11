@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/peterldowns/pgtestdb"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
@@ -277,8 +276,8 @@ func TestTypeUpdateReportsADefaultItCannotLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	cfg := pgtestdb.Custom(t, testdb.Config(), testdb.Migrator())
-	pcfg, err := pgxpool.ParseConfig(cfg.URL())
+	databaseURL := testdb.New(t, testdb.Migrator())
+	pcfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatalf("parsing the pool config: %v", err)
 	}
@@ -294,7 +293,7 @@ func TestTypeUpdateReportsADefaultItCannotLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v, want nil", err)
 	}
-	rival, err := pgxpool.New(t.Context(), cfg.URL())
+	rival, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatalf("connecting the rival: %v", err)
 	}
@@ -531,8 +530,8 @@ func lockTimedTypes(t *testing.T) (*postgres.TypeStore, string) {
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	cfg := pgtestdb.Custom(t, testdb.Config(), testdb.Migrator())
-	pcfg, err := pgxpool.ParseConfig(cfg.URL())
+	databaseURL := testdb.New(t, testdb.Migrator())
+	pcfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatalf("parsing the pool config: %v", err)
 	}
@@ -542,7 +541,7 @@ func lockTimedTypes(t *testing.T) (*postgres.TypeStore, string) {
 		t.Fatalf("connecting the pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return postgres.NewTypeStore(pool), cfg.URL()
+	return postgres.NewTypeStore(pool), databaseURL
 }
 
 // holdInRival runs the statement in a rival transaction left open until the test ends.

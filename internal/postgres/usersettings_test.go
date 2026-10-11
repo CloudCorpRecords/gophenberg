@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/peterldowns/pgtestdb"
 
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/testdb"
@@ -19,8 +18,7 @@ func newUserSettingStore(t *testing.T) (*postgres.UserSettingStore, *pgxpool.Poo
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	cfg := pgtestdb.Custom(t, testdb.Config(), testdb.Migrator())
-	pool, err := pgxpool.New(t.Context(), cfg.URL())
+	pool, err := pgxpool.New(t.Context(), testdb.New(t, testdb.Migrator()))
 	if err != nil {
 		t.Fatalf("connecting pool: %v", err)
 	}

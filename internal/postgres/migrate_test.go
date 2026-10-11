@@ -39,19 +39,19 @@ func TestMigrateCreatesCoreSchema(t *testing.T) {
 		t.Skip("skipping database test in short mode")
 	}
 
-	cfg := pgtestdb.Custom(t, testdb.Config(), pgtestdb.NoopMigrator{})
-	if err := authkitpg.Migrate(t.Context(), cfg.URL()); err != nil {
+	databaseURL := testdb.New(t, pgtestdb.NoopMigrator{})
+	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
 
-	if err := postgres.Migrate(t.Context(), cfg.URL()); err != nil {
+	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), cfg.URL()); err != nil {
+	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("second Migrate() error = %v, want idempotent nil", err)
 	}
 
-	db, err := sql.Open("pgx", cfg.URL())
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatalf("opening database: %v", err)
 	}
@@ -67,14 +67,14 @@ func TestMigrateRollsBackAndReapplies(t *testing.T) {
 		t.Skip("skipping database test in short mode")
 	}
 
-	cfg := pgtestdb.Custom(t, testdb.Config(), pgtestdb.NoopMigrator{})
-	if err := authkitpg.Migrate(t.Context(), cfg.URL()); err != nil {
+	databaseURL := testdb.New(t, pgtestdb.NoopMigrator{})
+	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), cfg.URL()); err != nil {
+	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
-	db, err := sql.Open("pgx", cfg.URL())
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatalf("opening database: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestMigrateRollsBackAndReapplies(t *testing.T) {
 	if !schemaExists(t, db, "auth") {
 		t.Error("auth schema missing after core rollback, want it untouched")
 	}
-	if err := postgres.Migrate(t.Context(), cfg.URL()); err != nil {
+	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("Migrate() after rollback error = %v, want a clean reapply", err)
 	}
 	if !schemaExists(t, db, "core") {
@@ -112,11 +112,11 @@ func accountsMigrated(t *testing.T) string {
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	cfg := pgtestdb.Custom(t, testdb.Config(), pgtestdb.NoopMigrator{})
-	if err := authkitpg.Migrate(t.Context(), cfg.URL()); err != nil {
+	databaseURL := testdb.New(t, pgtestdb.NoopMigrator{})
+	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
-	return cfg.URL()
+	return databaseURL
 }
 
 func TestMigrateWaitsForTheMigrationLock(t *testing.T) {
