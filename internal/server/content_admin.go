@@ -147,16 +147,25 @@ func applyContentStatuses(query url.Values, filter *content.Filter) error {
 
 // applyContentAuthors reads the author and author_exclude query parameters, comma lists of account ids, into filter.
 func applyContentAuthors(query url.Values, filter *content.Filter) error {
-	authors, err := accountIDs(query.Get("author"))
-	if err != nil {
-		return err
-	}
-	excluded, err := accountIDs(query.Get("author_exclude"))
+	authors, excluded, err := listAuthors(query)
 	if err != nil {
 		return err
 	}
 	filter.Authors, filter.ExcludeAuthors = authors, excluded
 	return nil
+}
+
+// listAuthors reads the author and author_exclude query parameters, comma lists of account ids.
+func listAuthors(query url.Values) (authors, excluded []uuid.UUID, err error) {
+	authors, err = accountIDs(query.Get("author"))
+	if err != nil {
+		return nil, nil, err
+	}
+	excluded, err = accountIDs(query.Get("author_exclude"))
+	if err != nil {
+		return nil, nil, err
+	}
+	return authors, excluded, nil
 }
 
 // accountIDs returns the account ids a comma list names, none for an empty list.
@@ -178,10 +187,18 @@ func accountIDs(raw string) ([]uuid.UUID, error) {
 
 // applyContentDates reads the before and after query parameters, RFC 3339 instants, into filter.
 func applyContentDates(query url.Values, filter *content.Filter) error {
-	for _, bound := range []struct {
-		name string
-		into **time.Time
-	}{{"before", &filter.Before}, {"after", &filter.After}} {
+	return applyInstants(query, instantBound{"before", &filter.Before}, instantBound{"after", &filter.After})
+}
+
+// instantBound names a query parameter and the filter field its instant is read into.
+type instantBound struct {
+	name string
+	into **time.Time
+}
+
+// applyInstants reads each bound's query parameter, an RFC 3339 instant, into its field in UTC.
+func applyInstants(query url.Values, bounds ...instantBound) error {
+	for _, bound := range bounds {
 		raw := query.Get(bound.name)
 		if raw == "" {
 			continue
