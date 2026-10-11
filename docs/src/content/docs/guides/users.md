@@ -60,10 +60,10 @@ switch one account off and back on. Each one names your own account
 with `-as`, and that account must be enabled and hold a role carrying
 `manage_users`, or the command refuses before changing anything.
 Each one only says what it would change until you add `-yes`.
-`account:role` and
-`account:disable` refuse to act on your own account, so the site
-always keeps an enabled admin. Ask another admin to change your role
-or disable your account.
+`account:role` and `account:disable` refuse to act on your own
+account, and the last enabled account whose role carries
+`manage_users` always stays. Ask another account holding
+`manage_users` to change your role or disable your account.
 With the Docker setup from [Install](/self-hosting/install/), this
 makes an author an editor:
 
