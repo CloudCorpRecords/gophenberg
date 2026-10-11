@@ -236,6 +236,7 @@ ORDER BY
         THEN m.created_at END ASC,
     CASE WHEN $10::text NOT IN ('title', 'author', 'modified') AND $11::text <> 'asc'
         THEN m.created_at END DESC,
+    m.created_at DESC,
     m.id DESC
 LIMIT $13 OFFSET $12
 `

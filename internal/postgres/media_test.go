@@ -211,8 +211,8 @@ func TestMediaStoreListSortsAsTheFilterNames(t *testing.T) {
 		{media.OrderByModified, media.OrderDesc, []string{"cliff", "harbor", "manual"}},
 		{media.OrderByTitle, media.OrderAsc, []string{"cliff", "harbor", "manual"}},
 		{media.OrderByTitle, media.OrderDesc, []string{"manual", "harbor", "cliff"}},
-		{media.OrderByAuthor, media.OrderAsc, []string{"cliff", "manual", "harbor"}},
-		{media.OrderByAuthor, media.OrderDesc, []string{"manual", "harbor", "cliff"}},
+		{media.OrderByAuthor, media.OrderAsc, []string{"cliff", "harbor", "manual"}},
+		{media.OrderByAuthor, media.OrderDesc, []string{"harbor", "manual", "cliff"}},
 	}
 	for _, tt := range tests {
 		got := listedTitles(t, store, media.Filter{OrderBy: tt.orderBy, Order: tt.order})
@@ -296,6 +296,27 @@ func TestMediaStoreListNarrowsByTheDatesAddedAndModified(t *testing.T) {
 	for _, tt := range tests {
 		if got := narrowedTitles(t, store, tt.filter); !slices.Equal(got, tt.want) {
 			t.Errorf("%s: List() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestMediaStoreListBreaksATieByTheUploadDateBeforeTheInsertOrder(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, store, "harbor", author, day(time.July), day(time.July))
+	mustCreateMediaAt(t, store, "cliff", author, day(time.March), day(time.March))
+	mustCreateMediaAt(t, store, "manual", author, day(time.May), day(time.May))
+
+	for order, want := range map[media.Order][]string{
+		media.OrderAsc:  {"harbor", "manual", "cliff"},
+		media.OrderDesc: {"harbor", "manual", "cliff"},
+	} {
+		got := listedTitles(t, store, media.Filter{OrderBy: media.OrderByAuthor, Order: order})
+
+		if !slices.Equal(got, want) {
+			t.Errorf("List(author %q) = %q, want the newest upload first %q", order, got, want)
 		}
 	}
 }

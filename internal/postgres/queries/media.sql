@@ -67,6 +67,7 @@ ORDER BY
         THEN m.created_at END ASC,
     CASE WHEN @order_by::text NOT IN ('title', 'author', 'modified') AND @order_dir::text <> 'asc'
         THEN m.created_at END DESC,
+    m.created_at DESC,
     m.id DESC
 LIMIT @row_limit OFFSET @row_offset;
 
