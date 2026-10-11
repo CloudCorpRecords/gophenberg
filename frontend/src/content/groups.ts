@@ -171,6 +171,15 @@ function toGroup(row: z.infer<typeof groupSchema>): FieldGroup {
 export class StaleWriteError extends Error {}
 
 /**
+ * Reports whether a turned away write left edits the operator still has to mend.
+ * @param state - What the write reported.
+ * @returns Whether the dialog reopens on those edits.
+ */
+export function holdsEdits(state: { isError: boolean; error: unknown }): boolean {
+	return state.isError && !(state.error instanceof StaleWriteError)
+}
+
+/**
  * Throws the reason a group write was refused, or the status it failed with.
  * @param response - The answer the server gave.
  */
