@@ -181,6 +181,8 @@ func (s *server) parseMediaFilter(query url.Values) (media.Filter, error) {
 	filter := media.Filter{
 		Mimes:   mimePrefixes(query.Get("mime")),
 		Search:  query.Get("search"),
+		OrderBy: media.OrderByDate,
+		Order:   media.OrderDesc,
 		Page:    page,
 		PerPage: perPage,
 	}
@@ -191,7 +193,29 @@ func (s *server) parseMediaFilter(query url.Values) (media.Filter, error) {
 		}
 		filter.Type = kind
 	}
+	if err := applyMediaOrdering(query, &filter); err != nil {
+		return media.Filter{}, err
+	}
 	return filter, nil
+}
+
+// applyMediaOrdering reads the orderby and order query parameters into filter.
+func applyMediaOrdering(query url.Values, filter *media.Filter) error {
+	if raw, ok := query["orderby"]; ok {
+		orderBy, err := media.ParseOrderBy(raw[0])
+		if err != nil {
+			return err
+		}
+		filter.OrderBy = orderBy
+	}
+	if raw, ok := query["order"]; ok {
+		order, err := media.ParseOrder(raw[0])
+		if err != nil {
+			return err
+		}
+		filter.Order = order
+	}
+	return nil
 }
 
 // mimePrefixes splits the mime query parameter into content type prefixes.

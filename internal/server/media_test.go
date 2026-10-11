@@ -513,6 +513,40 @@ func TestListingMediaNarrowsByContentType(t *testing.T) {
 	}
 }
 
+func TestListingMediaSortsAsTheQueryNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		query   string
+		orderBy media.OrderBy
+		order   media.Order
+	}{
+		{"", media.OrderByDate, media.OrderDesc},
+		{"?order=asc", media.OrderByDate, media.OrderAsc},
+		{"?orderby=title", media.OrderByTitle, media.OrderDesc},
+		{"?orderby=title&order=asc", media.OrderByTitle, media.OrderAsc},
+		{"?orderby=modified&order=asc", media.OrderByModified, media.OrderAsc},
+		{"?orderby=author&order=desc", media.OrderByAuthor, media.OrderDesc},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
+			store := newFakeMediaStore()
+			handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+
+			recorder := doRequest(t, handler, http.MethodGet, "/api/media"+tt.query, "")
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if store.lastFilter.OrderBy != tt.orderBy || store.lastFilter.Order != tt.order {
+				t.Errorf("the store was asked for %q %q, want %q %q",
+					store.lastFilter.OrderBy, store.lastFilter.Order, tt.orderBy, tt.order)
+			}
+		})
+	}
+}
+
 func TestListingMediaRefusesParametersItCannotMakeSenseOf(t *testing.T) {
 	t.Parallel()
 
@@ -520,6 +554,7 @@ func TestListingMediaRefusesParametersItCannotMakeSenseOf(t *testing.T) {
 
 	badQueries := []string{
 		"?type=audio", "?page=0", "?page=x", "?per_page=x", "?per_page=0",
+		"?orderby=slug", "?orderby=", "?order=sideways", "?order=",
 	}
 	for _, badQuery := range badQueries {
 		recorder := doRequest(t, handler, http.MethodGet, "/api/media"+badQuery, "")
