@@ -123,7 +123,6 @@ type TypeStore interface {
 	DeleteFieldInGroup(ctx context.Context, groupID int, key string, recheck Recheck) error
 	ReorderFieldsInGroup(ctx context.Context, groupID int, keys []string) error
 	MoveField(ctx context.Context, id, toGroup, toParent, limit int, recheck Recheck) (Field, error)
-	CreateField(ctx context.Context, f Field) (Field, error)
 	AdoptType(ctx context.Context, key string) error
 	AdoptGroup(ctx context.Context, key string) error
 }

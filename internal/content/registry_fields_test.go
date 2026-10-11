@@ -11,29 +11,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 )
 
-// CreateField stores a field on its type.
-func (s *fakeTypeStore) CreateField(_ context.Context, f content.Field) (content.Field, error) {
-	if s.createFieldErr != nil {
-		return content.Field{}, s.createFieldErr
-	}
-	for i, stored := range s.types {
-		if stored.Key != f.TypeKey {
-			continue
-		}
-		f.ID = s.nextFieldID()
-		s.types[i].Fields = append(s.types[i].Fields, f)
-		return f, nil
-	}
-	return content.Field{}, content.ErrTypeNotFound
-}
-
-// nextFieldID hands out a fresh definition identity.
-func (s *fakeTypeStore) nextFieldID() int {
-	s.fieldIDs++
-	return s.fieldIDs
-}
-
-// groupedStore is a fake exposing groups beside the per type surface.
+// groupedStore is a fake exposing the groups the test hands it.
 type groupedStore struct {
 	*fakeTypeStore
 	groups []content.Group

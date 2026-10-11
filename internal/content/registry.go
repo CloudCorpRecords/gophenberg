@@ -315,37 +315,6 @@ func targeting(fields []Field, key string) (Field, bool) {
 	return Field{}, false
 }
 
-// CreateField declares the field on its type, or reports why the registry refuses it.
-func (r *Registry) CreateField(ctx context.Context, f Field) (Field, error) {
-	if err := f.Validate(); err != nil {
-		return Field{}, err
-	}
-	if err := f.standsAlone(); err != nil {
-		return Field{}, err
-	}
-	t, err := r.ByKey(ctx, f.TypeKey)
-	if err != nil {
-		return Field{}, err
-	}
-	if f.Kind == FieldKindRelation {
-		if _, err := r.ByKey(ctx, f.RelatesTo); err != nil {
-			return Field{}, ErrTargetUnknown
-		}
-	}
-	if _, err := fieldOf(t, f.Key); err == nil {
-		return Field{}, ErrFieldTaken
-	}
-	if err := Stands(t.Fields, f); err != nil {
-		return Field{}, err
-	}
-	created, err := r.store.CreateField(ctx, f)
-	if err != nil {
-		return Field{}, err
-	}
-	r.invalidate()
-	return created, nil
-}
-
 // orderCovers reports whether keys name every declared field exactly once.
 func orderCovers(fields []Field, keys []string) error {
 	seen := make(map[string]bool, len(keys))
@@ -364,11 +333,6 @@ func orderCovers(fields []Field, keys []string) error {
 			"content: the order leaves declared fields out", nil)
 	}
 	return nil
-}
-
-// fieldOf returns the declared field carrying the key, or [ErrFieldNotFound].
-func fieldOf(t Type, key string) (Field, error) {
-	return fieldAmong(t.Fields, key)
 }
 
 // fieldAmong returns the field carrying the key, or [ErrFieldNotFound].
