@@ -3,6 +3,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/role"
+	"github.com/gopherium/gophenberg/sdk"
 )
 
 // accountsSite returns the settings of a migrated database holding an admin, an editor and an author.
@@ -139,5 +141,22 @@ func TestAccountRolesCountEveryRoleCarryingManageUsersAsPrivileged(t *testing.T)
 	privileged := gouncer.Roles{role.Admin, "team_lead"}
 	if !slices.Equal(held.Privileged, privileged) || !slices.Contains(held.Known, "team_lead") {
 		t.Errorf("accountRoles() = %+v, want team_lead known and privileged beside admin", held)
+	}
+}
+
+func TestAnAccountChangeStopsOnAPluginThatFailedToRegister(t *testing.T) {
+	t.Parallel()
+
+	getenv := accountsSite(t)
+	failing := func(sdk.Deps) ([]sdk.Plugin, error) { return nil, errors.New("plugin teams: a setting is missing") }
+
+	got := testkit.Run(t, Program(getenv, failing), "",
+		"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com")
+
+	if got.Code != gonsole.ExitFailed || !strings.Contains(got.Stderr, "plugin teams: a setting is missing") {
+		t.Errorf("account:role with a failed plugin = %d with stderr %q, want 1 and the failure named", got.Code, got.Stderr)
+	}
+	if held := authorRole(t, getenv); held != "author" {
+		t.Errorf("author@example.com holds %q, want its role unchanged", held)
 	}
 }
