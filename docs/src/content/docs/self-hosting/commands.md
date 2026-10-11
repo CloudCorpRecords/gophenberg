@@ -260,7 +260,9 @@ step, then stores the demo content, the accounts
 `admin@example.com`, `editor@example.com` and `author@example.com`,
 and each plugin's demo data. It prints `created` or `kept` beside each
 account, and the accounts it created sign in with `password1234`.
-Never seed a production database.
+A later run stops with an error naming the group when the demo's
+Post fields or Category fields group is turned off or no longer
+reaches its type. Never seed a production database.
 
 ### serve
 
