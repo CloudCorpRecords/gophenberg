@@ -82,15 +82,15 @@ func (s *countingMediaStore) ByIDs(context.Context, []int64) ([]media.Media, err
 }
 
 // List returns what the store holds matching the search, one page at a time.
-func (s *countingMediaStore) List(_ context.Context, f media.Filter) ([]media.Media, int, error) {
+func (s *countingMediaStore) List(_ context.Context, f media.Filter) ([]media.Listed, int, error) {
 	if s.listErr != nil {
 		return nil, 0, s.listErr
 	}
-	matched := make([]media.Media, 0, len(s.stored))
+	matched := make([]media.Listed, 0, len(s.stored))
 	for i := len(s.stored) - 1; i >= 0; i-- {
 		item := s.stored[i]
 		if f.Search == "" || strings.Contains(strings.ToLower(item.Title), strings.ToLower(f.Search)) {
-			matched = append(matched, item)
+			matched = append(matched, media.Listed{Media: item})
 		}
 	}
 	start := min((f.Page-1)*f.PerPage, len(matched))
