@@ -681,7 +681,7 @@ func (s *TypeStore) DeleteSubField(ctx context.Context, id int, recheck content.
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		return deleteSubFieldRows(ctx, s.queries.WithTx(tx), id, recheck)
 	})
-	if errors.Is(err, content.ErrFieldNotFound) || errors.Is(err, content.ErrGroupNotFound) || fromCheck(err) {
+	if errors.Is(err, content.ErrFieldNotFound) || fromCheck(err) {
 		return err
 	}
 	if err != nil {
@@ -1073,8 +1073,7 @@ func (s *TypeStore) settledFieldWrite(
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, content.ErrFieldNotFound) || errors.Is(err, content.ErrGroupNotFound) ||
-		errors.Is(err, content.ErrFieldTaken) || fromCheck(err) {
+	if errors.Is(err, content.ErrGroupNotFound) || errors.Is(err, content.ErrFieldTaken) || fromCheck(err) {
 		return err
 	}
 	return fieldWriteFailure(err)
