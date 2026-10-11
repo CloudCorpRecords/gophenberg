@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { conditionsOf, multipleOf, needsValue, operatorsFor } from './conditions'
-import { setFieldSettingsInGroup } from './groups'
+import { holdsEdits, setFieldSettingsInGroup } from './groups'
 import { chosenOf } from './select'
 import { pairsOf } from './types'
 import type { ConditionRule } from './conditions'
@@ -263,11 +263,11 @@ export function FieldConditions(props: {
 	})
 
 	/**
-	 * Opens the dialog on the stored rules, or closes it on the edits.
+	 * Opens the dialog on the stored rules unless a turned away draft is held, or closes it on the edits.
 	 * @param next - Whether the dialog is opening.
 	 */
 	function change(next: boolean) {
-		if (next) {
+		if (next && !holdsEdits(save)) {
 			setDraft(conditionsOf(props.field))
 			setOpened(props.field)
 		}

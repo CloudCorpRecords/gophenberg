@@ -89,6 +89,9 @@ function recordingSettings(): { sent: unknown } {
 beforeEach(() => {
 	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE] })))
 	server.use(http.get('/api/groups', () => HttpResponse.json({ items: [DETAILS] })))
+	server.use(
+		http.get('/api/definitions/drift', () => HttpResponse.json({ orphans: [], collisions: [], nesting_kept: [] })),
+	)
 })
 
 test('offers the siblings a rule may read, leaving the field itself out', async () => {
@@ -181,6 +184,148 @@ test('says why the rules were turned away', async () => {
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
 
 	expect(await screen.findByRole('alert')).toHaveTextContent(/sale-note/)
+})
+
+/**
+ * Reopens the conditions of Sale note while the fields dialog stays open.
+ * @returns The conditions dialog.
+ */
+async function reopenConditions() {
+	await userEvent.click(screen.getByRole('button', { name: 'Rules showing Sale note' }))
+	return screen.findByRole('dialog', { name: 'Rules showing Sale note' })
+}
+
+test('keeps a refused rules draft for another save after a 422 response', async () => {
+	const sent: unknown[] = []
+	server.use(
+		http.patch('/api/groups/3/fields/:key', async ({ request }) => {
+			sent.push(await request.json())
+			return HttpResponse.json({ error: 'refused', code: 'rule_cycle' }, { status: 422 })
+		}),
+	)
+	renderAt('/field-groups')
+	const dialog = await openConditions('Sale note')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add rule set' }))
+	await userEvent.click(within(dialog).getByRole('combobox', { name: 'Value' }))
+	await userEvent.click(await screen.findByRole('option', { name: 'No' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rules showing Sale note' })).not.toBeInTheDocument())
+
+	const reopened = await reopenConditions()
+	expect(within(reopened).getByRole('combobox', { name: 'Value' })).toHaveTextContent('No')
+	await userEvent.click(within(reopened).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(sent).toHaveLength(2))
+	expect(sent[1]).toEqual(sent[0])
+	expect(sent[1]).toEqual({
+		settings: { conditions: [[{ source: 'on-sale', operator: '==', value: 'false' }]] },
+		updated_at: '2026-08-01T10:00:00Z',
+	})
+})
+
+test('starts the rules over on the field read afresh after a stale write', async () => {
+	const sent: unknown[] = []
+	let held = { ...SALE_NOTE, settings: {} }
+	server.use(
+		http.get('/api/groups', () => HttpResponse.json({ items: [{ ...DETAILS, fields: [ON_SALE, held, PHOTO] }] })),
+		http.patch('/api/groups/3/fields/:key', async ({ request }) => {
+			const body = (await request.json()) as { settings: Record<string, unknown>; updated_at: string }
+			sent.push(body)
+			if (body.updated_at !== held.updated_at) {
+				return HttpResponse.json(
+					{ error: 'content: conflicting update', code: 'content_stale_update' },
+					{ status: 409 },
+				)
+			}
+			held = { ...held, settings: body.settings, updated_at: '2026-08-03T09:00:00Z' }
+			return HttpResponse.json(held)
+		}),
+	)
+	renderAt('/field-groups')
+	const dialog = await openConditions('Sale note')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add rule set' }))
+	const other = { conditions: [[{ source: 'on-sale', operator: '!=', value: 'true' }]] }
+	held = { ...held, settings: other, updated_at: '2026-08-02T09:00:00Z' }
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rules showing Sale note' })).not.toBeInTheDocument())
+
+	const reopened = await reopenConditions()
+	expect(within(reopened).getByRole('combobox', { name: 'Condition' })).toHaveTextContent('is not')
+	await userEvent.click(within(reopened).getByRole('button', { name: 'Save rules' }))
+
+	await waitFor(() => expect(sent).toHaveLength(2))
+	expect(sent[1]).toEqual({ settings: other, updated_at: '2026-08-02T09:00:00Z' })
+	await waitFor(() => expect(held.updated_at).toBe('2026-08-03T09:00:00Z'))
+})
+
+test('keeps a refused rules draft after cancel', async () => {
+	server.use(
+		http.patch('/api/groups/3/fields/:key', () =>
+			HttpResponse.json({ error: 'refused', code: 'rule_cycle', meta: { field: 'sale-note' } }, { status: 422 }),
+		),
+	)
+	renderAt('/field-groups')
+	const dialog = await openConditions('Sale note')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add rule set' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rules showing Sale note' })).not.toBeInTheDocument())
+
+	const reopened = await reopenConditions()
+	expect(within(reopened).getByRole('combobox', { name: 'Source' })).toHaveTextContent('On sale')
+	await userEvent.click(within(reopened).getByRole('button', { name: 'Cancel' }))
+	const cancelled = await reopenConditions()
+	expect(within(cancelled).getByRole('combobox', { name: 'Source' })).toHaveTextContent('On sale')
+})
+
+test('starts from stored rules after a successful retry', async () => {
+	let attempts = 0
+	server.use(
+		http.patch('/api/groups/3/fields/:key', () => {
+			attempts++
+			return attempts === 1
+				? HttpResponse.json({ error: 'refused' }, { status: 500 })
+				: HttpResponse.json(SALE_NOTE)
+		}),
+	)
+	renderAt('/field-groups')
+	const dialog = await openConditions('Sale note')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add rule set' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rules showing Sale note' })).not.toBeInTheDocument())
+	const reopened = await reopenConditions()
+	await userEvent.click(within(reopened).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rules showing Sale note' })).not.toBeInTheDocument())
+	const saved = await reopenConditions()
+	expect(within(saved).getByText('Without a rule this field always shows.')).toBeInTheDocument()
+})
+
+test('keeps the save busy on a reopen while the rules are still saving, sending one write', async () => {
+	const sent: unknown[] = []
+	let release = () => {}
+	const released = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	server.use(
+		http.patch('/api/groups/3/fields/:key', async ({ request }) => {
+			sent.push(await request.json())
+			await released
+			return HttpResponse.json(SALE_NOTE)
+		}),
+	)
+	renderAt('/field-groups')
+	const dialog = await openConditions('Sale note')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add rule set' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save rules' }))
+	await waitFor(() => expect(sent).toHaveLength(1))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+	const reopened = await reopenConditions()
+	const saving = within(reopened).getByRole('button', { name: 'Save rules' })
+	expect(saving).toHaveAttribute('aria-disabled', 'true')
+	await userEvent.click(saving)
+	release()
+
+	expect(await screen.findByText('Sale note shows by its rules now.')).toBeInTheDocument()
+	expect(sent).toHaveLength(1)
 })
 
 test('carries a rule onto another source, starting its condition afresh', async () => {

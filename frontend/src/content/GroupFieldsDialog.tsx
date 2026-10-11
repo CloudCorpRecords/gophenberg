@@ -26,6 +26,7 @@ import {
 	deleteSubField,
 	groupErrorMessage,
 	groupsQueryKey,
+	holdsEdits,
 	moveField,
 	renameFieldInGroup,
 	reorderFieldsInGroup,
@@ -53,15 +54,6 @@ import { typesQueryKey } from './nav'
 import type { FieldGroup } from './groups'
 import type { Choice } from './select'
 import type { ContentField, ContentType } from './types'
-
-/**
- * Reports whether a turned away write left edits the operator still has to mend.
- * @param state - What the write reported.
- * @returns Whether the dialog reopens on those edits.
- */
-function holdsEdits(state: { isError: boolean; error: unknown }): boolean {
-	return state.isError && !(state.error instanceof StaleWriteError)
-}
 
 /** What a field control reports back once its write settles. */
 interface Reporter {
