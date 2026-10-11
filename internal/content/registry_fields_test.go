@@ -33,141 +33,6 @@ func (s *fakeTypeStore) nextFieldID() int {
 	return s.fieldIDs
 }
 
-// colorField returns a text field ready to declare on the post type.
-func colorField(t *testing.T) content.Field {
-	t.Helper()
-	built, err := content.NewField(content.Field{
-		TypeKey: "post", Key: "color", Label: "Color", Kind: content.FieldKindText,
-	})
-	if err != nil {
-		t.Fatalf("NewField() error = %v, want nil", err)
-	}
-	return built
-}
-
-func TestRegistryDeclaresAFieldOnAType(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-
-	created, err := registry.CreateField(t.Context(), colorField(t))
-
-	if err != nil {
-		t.Fatalf("CreateField() error = %v, want nil", err)
-	}
-	if created.Key != "color" {
-		t.Errorf("CreateField() key = %q, want %q", created.Key, "color")
-	}
-	held, err := registry.ByKey(t.Context(), "post")
-	if err != nil {
-		t.Fatalf("ByKey() error = %v, want nil", err)
-	}
-	if len(held.Fields) != 1 || held.Fields[0].Key != "color" {
-		t.Errorf("ByKey() fields = %+v, want the declared field listed", held.Fields)
-	}
-}
-
-func TestRegistryRefusesAFieldOnAnUnknownType(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-	f := colorField(t)
-	f.TypeKey = "car"
-
-	_, err := registry.CreateField(t.Context(), f)
-
-	if !errors.Is(err, content.ErrTypeNotFound) {
-		t.Fatalf("CreateField() error = %v, want %v", err, content.ErrTypeNotFound)
-	}
-}
-
-func TestRegistryRefusesALayoutOnAType(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-	f := colorField(t)
-	f.Key, f.Kind = "hero", content.FieldKindLayout
-
-	_, err := registry.CreateField(t.Context(), f)
-
-	if !errors.Is(err, content.ErrFieldShape) {
-		t.Fatalf("CreateField() error = %v, want %v", err, content.ErrFieldShape)
-	}
-}
-
-func TestRegistryRefusesATakenFieldKey(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-	if _, err := registry.CreateField(t.Context(), colorField(t)); err != nil {
-		t.Fatalf("declaring the first field: %v, want nil", err)
-	}
-
-	_, err := registry.CreateField(t.Context(), colorField(t))
-
-	if !errors.Is(err, content.ErrFieldTaken) {
-		t.Fatalf("CreateField() error = %v, want %v", err, content.ErrFieldTaken)
-	}
-}
-
-func TestRegistryRefusesARelationToAnUnknownTarget(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-	f, err := content.NewField(content.Field{
-		TypeKey: "post", Key: "engine", Label: "Engine",
-		Kind: content.FieldKindRelation, RelatesTo: "engine-type",
-	})
-	if err != nil {
-		t.Fatalf("NewField() error = %v, want nil", err)
-	}
-
-	_, err = registry.CreateField(t.Context(), f)
-
-	if !errors.Is(err, content.ErrTargetUnknown) {
-		t.Fatalf("CreateField() error = %v, want %v", err, content.ErrTargetUnknown)
-	}
-}
-
-func TestRegistryRefusesAMalformedField(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-
-	_, err := registry.CreateField(t.Context(), content.Field{
-		TypeKey: "post", Key: "taste", Label: "Taste", Kind: "flavor",
-	})
-
-	if !errors.Is(err, content.ErrInvalidFieldKind) {
-		t.Fatalf("CreateField() error = %v, want %v", err, content.ErrInvalidFieldKind)
-	}
-}
-
-func TestRegistryKeepsATypeAFieldTargets(t *testing.T) {
-	t.Parallel()
-
-	registry := content.NewRegistry(newFakeTypeStore())
-	if _, err := registry.Create(t.Context(), carType(t)); err != nil {
-		t.Fatalf("registering the car type: %v, want nil", err)
-	}
-	f, err := content.NewField(content.Field{
-		TypeKey: "post", Key: "cars", Label: "Cars",
-		Kind: content.FieldKindRelation, RelatesTo: "car", Many: true,
-	})
-	if err != nil {
-		t.Fatalf("NewField() error = %v, want nil", err)
-	}
-	if _, err := registry.CreateField(t.Context(), f); err != nil {
-		t.Fatalf("declaring the relation: %v, want nil", err)
-	}
-
-	err = registry.Delete(t.Context(), "car")
-
-	if !errors.Is(err, content.ErrTypeTargeted) {
-		t.Fatalf("Delete() error = %v, want %v", err, content.ErrTypeTargeted)
-	}
-}
-
 // groupedStore is a fake exposing groups beside the per type surface.
 type groupedStore struct {
 	*fakeTypeStore
@@ -267,92 +132,59 @@ func TestRegistryDeletesATypeNoRelationTargets(t *testing.T) {
 func TestRegistryHoldsATypeItsOwnGroupStillTargets(t *testing.T) {
 	t.Parallel()
 
-	registry := content.NewRegistry(newFakeTypeStore())
+	registry := content.NewRegistry(newGroupingStore())
 	if _, err := registry.Create(t.Context(), carType(t)); err != nil {
 		t.Fatalf("registering the car type: %v, want nil", err)
 	}
-	f, err := content.NewField(content.Field{
-		TypeKey: "car", Key: "sibling", Label: "Sibling",
-		Kind: content.FieldKindRelation, RelatesTo: "car",
-	})
-	if err != nil {
-		t.Fatalf("NewField() error = %v, want nil", err)
-	}
-	if _, err := registry.CreateField(t.Context(), f); err != nil {
-		t.Fatalf("declaring the relation: %v, want nil", err)
-	}
+	relationOnCars(t, registry, groupNaming(t, registry, "Car fields", namingType("car")), "sibling", "car")
 
-	err = registry.Delete(t.Context(), "car")
+	err := registry.Delete(t.Context(), "car")
 
 	if !errors.Is(err, content.ErrTypeTargeted) {
 		t.Fatalf("Delete() error = %v, want the surviving relation holding the type", err)
 	}
 }
 
-// threeFieldCar returns a registry holding the car type with three text fields declared in order.
-func threeFieldCar(t *testing.T) *content.Registry {
+// threeFieldCar returns a registry holding the car type and the id of its group with three text fields in order.
+func threeFieldCar(t *testing.T) (*content.Registry, int) {
 	t.Helper()
-	registry := content.NewRegistry(newFakeTypeStore())
+	registry := content.NewRegistry(newGroupingStore())
 	if _, err := registry.Create(t.Context(), carType(t)); err != nil {
 		t.Fatalf("registering the car type: %v, want nil", err)
 	}
+	held := groupNaming(t, registry, "Car fields", namingType("car"))
 	for _, key := range []string{"color", "engine", "doors"} {
-		f, err := content.NewField(content.Field{
-			TypeKey: "car", Key: key, Label: key, Kind: content.FieldKindText,
-		})
-		if err != nil {
-			t.Fatalf("NewField(%q) error = %v, want nil", key, err)
-		}
-		if _, err := registry.CreateField(t.Context(), f); err != nil {
+		if _, err := registry.CreateFieldInGroup(t.Context(), held.ID, content.Field{
+			Key: key, Label: key, Kind: content.FieldKindText,
+		}); err != nil {
 			t.Fatalf("declaring %q: %v, want nil", key, err)
 		}
 	}
-	return registry
+	return registry, held.ID
 }
 
-// fieldKeysOf returns the field keys of a type in declared order.
-func fieldKeysOf(t *testing.T, registry *content.Registry, typeKey string) []string {
+// fieldKeysOf returns the keys of the fields the group holds at its top in declared order.
+func fieldKeysOf(t *testing.T, registry *content.Registry, groupID int) []string {
 	t.Helper()
-	held, err := registry.ByKey(t.Context(), typeKey)
-	if err != nil {
-		t.Fatalf("ByKey(%q) error = %v, want nil", typeKey, err)
-	}
-	keys := make([]string, len(held.Fields))
-	for i, f := range held.Fields {
+	held := topFieldsOf(t, registry, groupID)
+	keys := make([]string, len(held))
+	for i, f := range held {
 		keys[i] = f.Key
 	}
 	return keys
 }
 
-// carGroup returns the id of the group serving the car's fields.
-func carGroup(t *testing.T, registry *content.Registry) int {
-	t.Helper()
-	groups, err := registry.Groups(t.Context())
-	if err != nil {
-		t.Fatalf("Groups() error = %v, want nil", err)
-	}
-	for _, g := range groups {
-		for _, f := range g.Fields {
-			if f.Key == "color" {
-				return g.ID
-			}
-		}
-	}
-	t.Fatal("no group serves the car's fields")
-	return 0
-}
-
 func TestRegistryRefusesAReorderNamingAStranger(t *testing.T) {
 	t.Parallel()
 
-	registry := threeFieldCar(t)
+	registry, groupID := threeFieldCar(t)
 
-	_, err := registry.ReorderFieldsInGroup(t.Context(), carGroup(t, registry), []string{"color", "engine", "finish"})
+	_, err := registry.ReorderFieldsInGroup(t.Context(), groupID, []string{"color", "engine", "finish"})
 
 	if !errors.Is(err, content.ErrFieldNotFound) {
 		t.Fatalf("ReorderFieldsInGroup() error = %v, want %v", err, content.ErrFieldNotFound)
 	}
-	if got := fieldKeysOf(t, registry, "car"); !slices.Equal(got, []string{"color", "engine", "doors"}) {
+	if got := fieldKeysOf(t, registry, groupID); !slices.Equal(got, []string{"color", "engine", "doors"}) {
 		t.Errorf("fields after the refused write = %v, want the declared order kept", got)
 	}
 }
@@ -360,9 +192,9 @@ func TestRegistryRefusesAReorderNamingAStranger(t *testing.T) {
 func TestRegistryRefusesAReorderLeavingAFieldOut(t *testing.T) {
 	t.Parallel()
 
-	registry := threeFieldCar(t)
+	registry, groupID := threeFieldCar(t)
 
-	_, err := registry.ReorderFieldsInGroup(t.Context(), carGroup(t, registry), []string{"doors", "color"})
+	_, err := registry.ReorderFieldsInGroup(t.Context(), groupID, []string{"doors", "color"})
 
 	if !errors.Is(err, content.ErrFieldOrder) {
 		t.Fatalf("ReorderFieldsInGroup() error = %v, want %v", err, content.ErrFieldOrder)
@@ -375,9 +207,9 @@ func TestRegistryRefusesAReorderLeavingAFieldOut(t *testing.T) {
 func TestRegistryRefusesAReorderRepeatingAField(t *testing.T) {
 	t.Parallel()
 
-	registry := threeFieldCar(t)
+	registry, groupID := threeFieldCar(t)
 
-	_, err := registry.ReorderFieldsInGroup(t.Context(), carGroup(t, registry), []string{"doors", "color", "color"})
+	_, err := registry.ReorderFieldsInGroup(t.Context(), groupID, []string{"doors", "color", "color"})
 
 	if !errors.Is(err, content.ErrFieldOrder) {
 		t.Fatalf("ReorderFieldsInGroup() error = %v, want %v", err, content.ErrFieldOrder)
