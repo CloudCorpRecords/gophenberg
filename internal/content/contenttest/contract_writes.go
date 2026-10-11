@@ -10,10 +10,34 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 )
 
-// contractWriteCases are the cases over the columns an edit writes and the ones it keeps as stored.
+// contractWriteCases are the cases over the columns a create or an edit writes and the ones it keeps as stored.
 var contractWriteCases = []Case{
 	{"UpdateFieldInGroupKeepsWhatTheEditLeavesAlone", updateFieldInGroupKeepsWhatTheEditLeavesAlone},
 	{"UpdateKeepsWhatATypeEditLeavesAlone", updateKeepsWhatATypeEditLeavesAlone},
+	{"CreateKeepsNoneOfTheFieldsATypeCarries", createKeepsNoneOfTheFieldsATypeCarries},
+}
+
+// createKeepsNoneOfTheFieldsATypeCarries stores the columns of a new type and none of the fields it carries.
+func createKeepsNoneOfTheFieldsATypeCarries(t *testing.T, s Stores) {
+	cars := CarType(t)
+	cars.Fields = []content.Field{FieldOn(t, "car", "colour", content.FieldKindText, "")}
+
+	created, err := s.Types.Create(t.Context(), cars)
+
+	if err != nil || len(created.Fields) != 0 {
+		t.Fatalf("Create(car) = %+v, %v, want the car handed back serving no field", created.Fields, err)
+	}
+	held, err := s.Types.ByKey(t.Context(), "car")
+	if err != nil || len(held.Fields) != 0 {
+		t.Errorf("ByKey() = %+v, %v, want the car serving no field", held.Fields, err)
+	}
+	held.UpdatedAt = time.Now().UTC()
+	if edited, err := s.Types.Update(t.Context(), held); err != nil || len(edited.Fields) != 0 {
+		t.Errorf("Update(car) = %+v, %v, want the edit handed back serving no field", edited.Fields, err)
+	}
+	if listed := listedGroupIDs(t, s.Types); len(listed) != 0 {
+		t.Errorf("ListGroups() lists %v, want no group for the fields the car carried", listed)
+	}
 }
 
 // updateFieldInGroupKeepsWhatTheEditLeavesAlone writes only the label, required flag, settings and stamp of an edit.
@@ -58,8 +82,8 @@ func updateKeepsWhatATypeEditLeavesAlone(t *testing.T, s Stores) {
 	}
 	read.SingularLabel, read.Origin, read.UpdatedAt = "Vehicle", "", time.Now().UTC()
 
-	if _, err := s.Types.Update(t.Context(), read); err != nil {
-		t.Fatalf("Update() error = %v, want nil", err)
+	if updated, err := s.Types.Update(t.Context(), read); err != nil || len(updated.Fields) != 0 {
+		t.Fatalf("Update() = %+v, %v, want the edit handed back without the fields it carried", updated.Fields, err)
 	}
 
 	if listed := listedGroupIDs(t, s.Types); !slices.Equal(listed, []int{colour.GroupID}) {
