@@ -5,6 +5,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"errors"
 
 	"github.com/gopherium/framework/goncierge"
 
@@ -28,7 +29,7 @@ func compose(ctx context.Context, cfg composeConfig, plugins func(sdk.Deps) ([]s
 	built.registered, built.failed = plugins(pluginDeps(cfg, built))
 	if err := built.ready(lane); err != nil {
 		built.close()
-		return site{}, err
+		return site{}, errors.Join(built.failed, err)
 	}
 	return built, nil
 }
