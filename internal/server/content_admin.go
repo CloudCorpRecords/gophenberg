@@ -104,16 +104,20 @@ func (s *server) authorNames(ctx context.Context) (map[uuid.UUID]string, error) 
 
 // parseAdminContentFilter reads the list query parameters into a filter over the given type.
 func (s *server) parseAdminContentFilter(query url.Values, contentType content.Type) (content.Filter, error) {
+	page, perPage, err := s.listPage(query)
+	if err != nil {
+		return content.Filter{}, err
+	}
 	filter := content.Filter{
 		Type:    contentType.Key,
 		Search:  query.Get("search"),
 		OrderBy: content.OrderByDate,
 		Order:   content.OrderDesc,
-		Page:    1,
-		PerPage: s.lists.PageSize,
+		Page:    page,
+		PerPage: perPage,
 	}
 	for _, apply := range []func(url.Values, *content.Filter) error{
-		applyContentOrdering, applyContentStatuses, applyContentAuthors, applyContentDates, s.applyContentPaging,
+		applyContentOrdering, applyContentStatuses, applyContentAuthors, applyContentDates,
 	} {
 		if err := apply(query, &filter); err != nil {
 			return content.Filter{}, err
@@ -218,23 +222,23 @@ func applyContentOrdering(query url.Values, filter *content.Filter) error {
 	return nil
 }
 
-// applyContentPaging reads the page and per_page query parameters into filter, a page past the cap cut to it.
-func (s *server) applyContentPaging(query url.Values, filter *content.Filter) error {
+// listPage reads the page and per_page parameters, by default the first page at the list page size, cut to the cap.
+func (s *server) listPage(query url.Values) (page, perPage int, err error) {
+	page, perPage = 1, s.lists.PageSize
 	if raw := query.Get("page"); raw != "" {
-		page, err := strconv.Atoi(raw)
+		page, err = strconv.Atoi(raw)
 		if err != nil || page < 1 {
-			return fmt.Errorf("server: invalid page %q", raw)
+			return 0, 0, fmt.Errorf("server: invalid page %q", raw)
 		}
-		filter.Page = page
 	}
 	if raw := query.Get("per_page"); raw != "" {
-		perPage, err := strconv.Atoi(raw)
+		perPage, err = strconv.Atoi(raw)
 		if err != nil || perPage < 1 {
-			return fmt.Errorf("server: invalid per_page %q", raw)
+			return 0, 0, fmt.Errorf("server: invalid per_page %q", raw)
 		}
-		filter.PerPage = min(perPage, s.lists.PageCap)
+		perPage = min(perPage, s.lists.PageCap)
 	}
-	return nil
+	return page, perPage, nil
 }
 
 // handleContentList returns an http.HandlerFunc listing content as a page with its total.
