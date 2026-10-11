@@ -58,7 +58,6 @@ func (stubTypeStore) Delete(context.Context, string) error { return content.ErrT
 // Nested counts no nested items in a seeding run.
 func (stubTypeStore) Nested(context.Context, string) (int, error) { return 0, nil }
 
-// ReorderFields refuses to reorder fields in a seeding run.
 // ListGroups returns no field groups.
 func (stubTypeStore) ListGroups(context.Context) ([]content.Group, error) {
 	return nil, nil
@@ -135,11 +134,6 @@ func (stubTypeStore) DeleteFieldInGroup(context.Context, int, string, content.Re
 
 // ReorderFieldsInGroup stores no order.
 func (stubTypeStore) ReorderFieldsInGroup(context.Context, int, []string) error { return nil }
-
-// CreateField refuses to declare a field in a seeding run.
-func (stubTypeStore) CreateField(context.Context, content.Field) (content.Field, error) {
-	return content.Field{}, content.ErrTypeNotFound
-}
 
 func TestPostsReportsStoreFailures(t *testing.T) {
 	t.Parallel()

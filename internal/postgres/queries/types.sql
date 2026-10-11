@@ -134,11 +134,6 @@ DELETE FROM core.content_relations AS r
 USING core.content AS c
 WHERE r.from_id = c.id AND c.type = ANY(@types::text []) AND r.field_id = ANY(@fields::integer []);
 
--- name: GroupByLocation :one
-SELECT id, title, location, position, active, created_at, updated_at, origin, key
-FROM core.field_groups WHERE location = @location
-ORDER BY position, id LIMIT 1;
-
 -- name: LockFieldGroups :exec
 SELECT pg_advisory_xact_lock(hashtext('core.field_groups'));
 

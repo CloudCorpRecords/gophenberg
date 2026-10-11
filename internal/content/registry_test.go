@@ -18,7 +18,6 @@ var errStoreDown = errors.New("the registry is unreachable")
 type fakeTypeStore struct {
 	types     []content.Type
 	nested    map[string]int
-	fieldIDs  int
 	listCalls int
 	listErr   error
 	createErr error
@@ -44,18 +43,9 @@ func (s *fakeTypeStore) List(context.Context) ([]content.Type, error) {
 	return stored, nil
 }
 
-// ListGroups returns one group per stored type holding the fields it declares.
+// ListGroups returns no field groups, or the scripted failure.
 func (s *fakeTypeStore) ListGroups(context.Context) ([]content.Group, error) {
-	if s.listErr != nil {
-		return nil, s.listErr
-	}
-	groups := make([]content.Group, 0, len(s.types))
-	for i, t := range s.types {
-		groups = append(groups, content.Group{
-			ID: i + 1, Title: t.SingularLabel + " fields", Active: true, Fields: t.Fields,
-		})
-	}
-	return groups, nil
+	return nil, s.listErr
 }
 
 // CreateGroup stores no group.

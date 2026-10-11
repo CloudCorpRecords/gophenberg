@@ -9,18 +9,6 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 )
 
-// textField returns a stored text field on the post type.
-func textField(t *testing.T, key string) content.Field {
-	t.Helper()
-	f, err := content.NewField(content.Field{
-		TypeKey: content.TypePost, Key: key, Label: "A Field", Kind: content.FieldKindText,
-	})
-	if err != nil {
-		t.Fatalf("NewField() error = %v, want nil", err)
-	}
-	return f
-}
-
 func TestActiveAnswersATypeThatServes(t *testing.T) {
 	t.Parallel()
 
@@ -33,20 +21,6 @@ func TestActiveAnswersATypeThatServes(t *testing.T) {
 	}
 	if held.Key != content.TypePost {
 		t.Errorf("Active() = %q, want %q", held.Key, content.TypePost)
-	}
-}
-
-func TestCreateFieldReportsAStoreFailure(t *testing.T) {
-	t.Parallel()
-
-	store := newFakeTypeStore()
-	store.createFieldErr = errStoreDown
-	registry := content.NewRegistry(store)
-
-	_, err := registry.CreateField(t.Context(), textField(t, "subtitle"))
-
-	if !errors.Is(err, errStoreDown) {
-		t.Errorf("CreateField() error = %v, want %v", err, errStoreDown)
 	}
 }
 

@@ -19,10 +19,7 @@ func specsDoorsOnPost(t *testing.T, store *postgres.TypeStore) content.Field {
 	t.Helper()
 	section := sectionOn(t, "specs")
 	section.TypeKey = "post"
-	stored, err := store.CreateField(t.Context(), section)
-	if err != nil {
-		t.Fatalf("CreateField(section specs) error = %v, want nil", err)
-	}
+	stored := declareOnType(t, store, "post", section)
 	doors, err := store.CreateSubField(
 		t.Context(), stored.ID, fieldOn(t, "", "doors", content.FieldKindText, ""), deepEnough)
 	if err != nil {

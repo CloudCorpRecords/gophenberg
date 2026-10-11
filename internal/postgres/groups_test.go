@@ -22,23 +22,16 @@ func typedStore(t *testing.T) (*postgres.TypeStore, uuid.UUID, *pgxpool.Pool) {
 	return postgres.NewTypeStore(pool), author, pool
 }
 
-// storeType, declareTypedField, locationOf and groupHolding are the shared fixtures under the names these tests use.
+// fieldOn, storeType, declareTypedField, declareOnType, fieldsGroupOf, locationOf and groupHolding are shared fixtures.
 var (
+	fieldOn           = contenttest.FieldOn
 	storeType         = contenttest.StoreType
 	declareTypedField = contenttest.DeclareTypedField
+	declareOnType     = contenttest.DeclareOnType
+	fieldsGroupOf     = contenttest.FieldsGroupOf
 	locationOf        = contenttest.LocationOf
 	groupHolding      = contenttest.GroupHolding
 )
-
-// createCarField stores a text field on the car type through the per type CreateField.
-func createCarField(t *testing.T, store *postgres.TypeStore, key string) content.Field {
-	t.Helper()
-	stored, err := store.CreateField(t.Context(), fieldOn(t, "car", key, content.FieldKindText, ""))
-	if err != nil {
-		t.Fatalf("CreateField(%s on car) error = %v, want nil", key, err)
-	}
-	return stored
-}
 
 // plantTyped stores a content row of the type and one revision, both carrying raw field values.
 func plantTyped(t *testing.T, pool *pgxpool.Pool, author uuid.UUID, typeKey, slug, values string) {
@@ -60,60 +53,6 @@ func plantTyped(t *testing.T, pool *pgxpool.Pool, author uuid.UUID, typeKey, slu
 		uuid.Must(uuid.NewV7()), id, author, values,
 	); err != nil {
 		t.Fatalf("planting the %s revision: %v, want nil", typeKey, err)
-	}
-}
-
-func TestCreateFieldRaisesADefaultGroupOnDemand(t *testing.T) {
-	t.Parallel()
-
-	store, _, _ := typedStore(t)
-	storeType(t, store, "car")
-
-	declared := createCarField(t, store, "subtitle")
-
-	groups, err := store.ListGroups(t.Context())
-	if err != nil {
-		t.Fatalf("ListGroups() error = %v, want nil", err)
-	}
-	if len(groups) != 1 {
-		t.Fatalf("ListGroups() holds %d groups, want the one raised on demand", len(groups))
-	}
-	raised := groups[0]
-	if raised.Title != "One car fields" {
-		t.Errorf("Title = %q, want the singular label plus fields", raised.Title)
-	}
-	if len(raised.Location) != 1 || len(raised.Location[0]) != 1 || raised.Location[0][0] != locationOf("car")[0][0] {
-		t.Errorf("Location = %v, want one rule naming the type", raised.Location)
-	}
-	if !raised.Active {
-		t.Error("Active = false, want a raised group active")
-	}
-	if len(raised.Fields) != 1 || raised.Fields[0].Key != "subtitle" {
-		t.Errorf("Fields = %v, want the declared field inside", raised.Fields)
-	}
-	if declared.GroupID != raised.ID {
-		t.Errorf("GroupID = %d, want the raised group %d", declared.GroupID, raised.ID)
-	}
-}
-
-func TestCreateFieldJoinsTheGroupAlreadyNamingTheType(t *testing.T) {
-	t.Parallel()
-
-	store, _, _ := typedStore(t)
-	storeType(t, store, "car")
-	createCarField(t, store, "subtitle")
-
-	createCarField(t, store, "mileage")
-
-	groups, err := store.ListGroups(t.Context())
-	if err != nil {
-		t.Fatalf("ListGroups() error = %v, want nil", err)
-	}
-	if len(groups) != 1 {
-		t.Fatalf("ListGroups() holds %d groups, want both fields joining one group", len(groups))
-	}
-	if len(groups[0].Fields) != 2 || groups[0].Fields[1].Key != "mileage" {
-		t.Errorf("Fields = %v, want mileage second by position", groups[0].Fields)
 	}
 }
 

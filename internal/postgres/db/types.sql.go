@@ -515,29 +515,6 @@ func (q *Queries) GetContentType(ctx context.Context, key string) (CoreContentTy
 	return i, err
 }
 
-const groupByLocation = `-- name: GroupByLocation :one
-SELECT id, title, location, position, active, created_at, updated_at, origin, key
-FROM core.field_groups WHERE location = $1
-ORDER BY position, id LIMIT 1
-`
-
-func (q *Queries) GroupByLocation(ctx context.Context, location []byte) (CoreFieldGroup, error) {
-	row := q.db.QueryRow(ctx, groupByLocation, location)
-	var i CoreFieldGroup
-	err := row.Scan(
-		&i.ID,
-		&i.Title,
-		&i.Location,
-		&i.Position,
-		&i.Active,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Origin,
-		&i.Key,
-	)
-	return i, err
-}
-
 const listContentFields = `-- name: ListContentFields :many
 SELECT id, key, label, kind, relates_to, many, required, created_at, updated_at, position, group_id, settings, parent_field_id, depth, origin
 FROM core.content_fields ORDER BY group_id, position, id

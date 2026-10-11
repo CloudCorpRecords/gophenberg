@@ -59,10 +59,6 @@ func Conditions(ctx context.Context, types *content.Registry) error {
 			return nil
 		}
 	}
-	for _, wanted := range []content.Field{OnSaleField(), SaleNoteField()} {
-		if _, err := types.CreateField(ctx, wanted); err != nil {
-			return fmt.Errorf("seed %s field: %w", wanted.Key, err)
-		}
-	}
-	return nil
+	_, err = declareOnType(ctx, types, content.TypePost, OnSaleField(), SaleNoteField())
+	return err
 }

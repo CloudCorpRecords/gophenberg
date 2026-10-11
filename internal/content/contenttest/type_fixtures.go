@@ -77,17 +77,20 @@ func FieldsGroupOf(t *testing.T, types content.TypeStore, typeKey string) conten
 	return created
 }
 
+// DeclareOnType stores the field inside the group keyed after the type and returns it.
+func DeclareOnType(t *testing.T, types content.TypeStore, typeKey string, f content.Field) content.Field {
+	t.Helper()
+	stored, err := types.CreateFieldInGroup(t.Context(), FieldsGroupOf(t, types, typeKey).ID, f, nil)
+	if err != nil {
+		t.Fatalf("CreateFieldInGroup(%s on %s) error = %v, want nil", f.Key, typeKey, err)
+	}
+	return stored
+}
+
 // DeclareTypedField stores a text field on the type inside the group keyed after the type.
 func DeclareTypedField(t *testing.T, types content.TypeStore, typeKey, key string) content.Field {
 	t.Helper()
-	group := FieldsGroupOf(t, types, typeKey)
-	stored, err := types.CreateFieldInGroup(
-		t.Context(), group.ID, FieldOn(t, typeKey, key, content.FieldKindText, ""), nil,
-	)
-	if err != nil {
-		t.Fatalf("CreateFieldInGroup(%s on %s) error = %v, want nil", key, typeKey, err)
-	}
-	return stored
+	return DeclareOnType(t, types, typeKey, FieldOn(t, typeKey, key, content.FieldKindText, ""))
 }
 
 // GroupHolding returns the id of the stored group declaring the key.

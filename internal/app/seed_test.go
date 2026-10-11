@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
 
 	"github.com/gopherium/gophenberg/internal/content"
+	"github.com/gopherium/gophenberg/internal/content/contenttest"
 	"github.com/gopherium/gophenberg/internal/media"
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/role"
@@ -957,3 +959,69 @@ func groupHolding(groups []content.Group, key string) (content.Group, bool) {
 	}
 	return content.Group{}, false
 }
+
+func TestSeedDeclaresTheDemoFieldsInOneGroupPerType(t *testing.T) {
+	t.Parallel()
+
+	databaseURL := emptyDatabaseURL(t)
+
+	if err := seedMigrated(t.Context(), testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL}),
+		io.Discard); err != nil {
+		t.Fatalf("seedMigrated() error = %v, want nil", err)
+	}
+
+	got := seededGroupShapes(t, databaseURL)
+	want := []seededGroupShape{{
+		Key: "post-fields", Title: "Post fields", Location: locatedOn(content.TypePost), Position: 1, Active: true,
+		Fields: []string{
+			seed.FeaturedFieldKey, seed.CategoriesFieldKey, seed.TeamFieldKey, seed.FeaturesFieldKey,
+			seed.OnSaleFieldKey, seed.SaleNoteFieldKey,
+		},
+	}, {
+		Key: "category-fields", Title: "Category fields", Location: locatedOn(seed.CategoryTypeKey), Position: 2,
+		Active: true, Fields: []string{seed.PostsFiledFieldKey},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("stored groups = %+v, want %+v", got, want)
+	}
+}
+
+// seededGroupShape is what the seeding stored of one field group, apart from its identity and dates.
+type seededGroupShape struct {
+	Key      string
+	Title    string
+	Location content.Rules
+	Position int
+	Active   bool
+	Origin   string
+	Fields   []string
+}
+
+// seededGroupShapes returns what the seeding stored of every field group, in position order.
+func seededGroupShapes(t *testing.T, databaseURL string) []seededGroupShape {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatalf("connecting pool: %v", err)
+	}
+	defer pool.Close()
+	groups, err := postgres.NewTypeStore(pool).ListGroups(t.Context())
+	if err != nil {
+		t.Fatalf("ListGroups() error = %v, want nil", err)
+	}
+	shapes := make([]seededGroupShape, len(groups))
+	for i, g := range groups {
+		keys := make([]string, len(g.Fields))
+		for j, f := range g.Fields {
+			keys[j] = f.Key
+		}
+		shapes[i] = seededGroupShape{
+			Key: g.Key, Title: g.Title, Location: g.Location, Position: g.Position,
+			Active: g.Active, Origin: g.Origin, Fields: keys,
+		}
+	}
+	return shapes
+}
+
+// locatedOn is the shared fixture under the name these tests use.
+var locatedOn = contenttest.LocationOf

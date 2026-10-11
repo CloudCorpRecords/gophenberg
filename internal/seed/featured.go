@@ -41,10 +41,8 @@ func Featured(ctx context.Context, types *content.Registry) error {
 			return keptSwitch(held)
 		}
 	}
-	if _, err := types.CreateField(ctx, FeaturedField()); err != nil {
-		return fmt.Errorf("seed %s field: %w", FeaturedFieldKey, err)
-	}
-	return nil
+	_, err = declareOnType(ctx, types, content.TypePost, FeaturedField())
+	return err
 }
 
 // keptSwitch accepts a field the post type already holds under the switch key when it is a switch.

@@ -3,29 +3,11 @@
 package server_test
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/gopherium/gophenberg/internal/content"
 )
-
-// CreateField stores a field on its type.
-func (s *fakeTypeStore) CreateField(_ context.Context, f content.Field) (content.Field, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, stored := range s.types {
-		if stored.Key != f.TypeKey {
-			continue
-		}
-		f.ID = len(stored.Fields) + 1
-		s.types[i].Fields = append(s.types[i].Fields, f)
-		return f, nil
-	}
-	return content.Field{}, content.ErrTypeNotFound
-}
 
 // fieldBody is the field definition shape the admin API answers.
 type fieldBody struct {

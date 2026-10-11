@@ -156,67 +156,6 @@ func matchingGroupIDs(ctx context.Context, queries *db.Queries, typeKey string) 
 	return ids, nil
 }
 
-// literalLocationOf returns the one rule location naming the type.
-func literalLocationOf(typeKey string) content.Rules {
-	return content.Rules{{{
-		Source: content.ScreenContentType, Operator: content.OperatorIs, Value: typeKey,
-	}}}
-}
-
-// groupForType returns the type's literal group, else its first active matching group.
-func groupForType(ctx context.Context, queries *db.Queries, typeKey string) (content.Group, bool, error) {
-	row, err := queries.GroupByLocation(ctx, locationJSON(literalLocationOf(typeKey)))
-	if err == nil {
-		group, mapErr := toGroup(row)
-		return group, mapErr == nil, mapErr
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return content.Group{}, false, fmt.Errorf("postgres: find the type's group: %w", err)
-	}
-	groups, err := groupsWithFields(ctx, queries)
-	if err != nil {
-		return content.Group{}, false, err
-	}
-	for _, g := range groups {
-		if g.Active && g.Location.Match(screenOf(typeKey), locationParams) {
-			return g, true, nil
-		}
-	}
-	return content.Group{}, false, nil
-}
-
-// groupForWrite returns the group a per type field write targets, raising the default when none matches.
-func groupForWrite(ctx context.Context, queries *db.Queries, typeKey string) (content.Group, error) {
-	found, ok, err := groupForType(ctx, queries, typeKey)
-	if err != nil {
-		return content.Group{}, err
-	}
-	if ok && found.Origin != "" {
-		return content.Group{}, content.OwnedBy(found.Origin)
-	}
-	if ok {
-		return found, nil
-	}
-	named, err := queries.GetContentType(ctx, typeKey)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return content.Group{}, content.ErrTypeNotFound
-	}
-	if err != nil {
-		return content.Group{}, fmt.Errorf("postgres: get content type: %w", err)
-	}
-	now := time.Now().UTC()
-	row, err := queries.CreateFieldGroup(ctx, db.CreateFieldGroupParams{
-		Key:       typeKey + "-fields",
-		Title:     named.SingularLabel + " fields",
-		Location:  locationJSON(literalLocationOf(typeKey)),
-		CreatedAt: now, UpdatedAt: now,
-	})
-	if err != nil {
-		return content.Group{}, fmt.Errorf("postgres: raise the type's group: %w", err)
-	}
-	return toGroup(row)
-}
-
 // ListGroups returns every field group in position order with its fields attached.
 func (s *TypeStore) ListGroups(ctx context.Context) ([]content.Group, error) {
 	return groupsWithFields(ctx, s.queries)

@@ -48,14 +48,16 @@ func (s *holdingTypeStore) ByKey(ctx context.Context, key string) (content.Type,
 	return content.Type{}, content.ErrTypeNotFound
 }
 
-// ListGroups returns one group holding every declared field, with the fields declared inside each.
+// ListGroups returns the post type's own group holding every declared field, with the fields declared inside each.
 func (s *holdingTypeStore) ListGroups(context.Context) ([]content.Group, error) {
 	fields := make([]content.Field, len(s.declared))
 	copy(fields, s.declared)
 	for i := range fields {
 		fields[i].Fields = s.standingUnder(fields[i].ID)
 	}
-	return []content.Group{{ID: 1, Key: "post-fields", Title: "Post fields", Fields: fields}}, nil
+	held := postFieldsGroup(true, content.TypePost)
+	held.Fields = fields
+	return []content.Group{held}, nil
 }
 
 // standingUnder returns the declarations standing under the parent, however deep they run.
@@ -71,8 +73,10 @@ func (s *holdingTypeStore) standingUnder(parentID int) []content.Field {
 	return inside
 }
 
-// CreateField records the declaration and hands it back.
-func (s *holdingTypeStore) CreateField(_ context.Context, f content.Field) (content.Field, error) {
+// CreateFieldInGroup records the declaration and hands it back.
+func (s *holdingTypeStore) CreateFieldInGroup(
+	_ context.Context, _ int, f content.Field, _ content.Recheck,
+) (content.Field, error) {
 	f.ID = s.nextID()
 	s.declared = append(s.declared, f)
 	return f, nil

@@ -47,12 +47,12 @@ func Containers(ctx context.Context, types *content.Registry) error {
 			return nil
 		}
 	}
-	team, err := types.CreateField(ctx, TeamField())
+	declared, err := declareOnType(ctx, types, content.TypePost, TeamField())
 	if err != nil {
-		return fmt.Errorf("seed team field: %w", err)
+		return err
 	}
 	for _, row := range TeamRowFields() {
-		if _, err := types.CreateSubField(ctx, team.ID, row); err != nil {
+		if _, err := types.CreateSubField(ctx, declared[0].ID, row); err != nil {
 			return fmt.Errorf("seed team row field %s: %w", row.Key, err)
 		}
 	}

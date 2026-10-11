@@ -70,8 +70,10 @@ func (s *filingTypeStore) ListGroups(context.Context) ([]content.Group, error) {
 	}}, nil
 }
 
-// CreateField records the declaration and hands it back.
-func (s *filingTypeStore) CreateField(_ context.Context, f content.Field) (content.Field, error) {
+// CreateFieldInGroup records the declaration and hands it back, or reports the scripted failure.
+func (s *filingTypeStore) CreateFieldInGroup(
+	_ context.Context, _ int, f content.Field, _ content.Recheck,
+) (content.Field, error) {
 	if s.createErr != nil {
 		return content.Field{}, s.createErr
 	}
