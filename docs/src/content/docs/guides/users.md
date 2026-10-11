@@ -11,7 +11,9 @@ that.
 
 ## Roles
 
-There are three roles.
+Gophenberg comes with three roles, and a plugin may declare more.
+A role carries capabilities, such as `manage_users` or
+`manage_themes`, and each one opens a part of the site.
 
 An **admin** runs the site. It manages accounts, installs and
 switches themes, reshapes the content model, writes the
@@ -55,9 +57,10 @@ Changing a password is not something the admin offers.
 **Managing accounts from a shell** works too. `account:role` sets
 one account's role, and `account:disable` and `account:enable`
 switch one account off and back on. Each one names your own account
-with `-as`, and that account must be an enabled admin, or the
-command refuses before changing anything. Each one only says what it
-would change until you add `-yes`. `account:role` and
+with `-as`, and that account must be enabled and hold a role carrying
+`manage_users`, or the command refuses before changing anything.
+Each one only says what it would change until you add `-yes`.
+`account:role` and
 `account:disable` refuse to act on your own account, so the site
 always keeps an enabled admin. Ask another admin to change your role
 or disable your account.
