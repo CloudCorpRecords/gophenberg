@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gopherium/gouncer"
+	"github.com/gopherium/gouncer/authkit"
 )
 
 // memoryStore holds one scenario's accounts and sessions in memory.
@@ -155,6 +156,50 @@ func (m *memoryStore) SetUserRole(
 		return err
 	}
 	return m.updateLocked(id, func(user *gouncer.User) { user.Role = role })
+}
+
+// SetUserRoleFrom writes the role of an account still holding held, refusing to leave no enabled account privileged.
+func (m *memoryStore) SetUserRoleFrom(
+	_ context.Context, id uuid.UUID, held, role string, privileged gouncer.Roles,
+) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.refuseMovedLocked(id, held); err != nil {
+		return err
+	}
+	if err := m.refuseUncoveredLocked(id, privileged, !privileged.Holds(role)); err != nil {
+		return err
+	}
+	return m.updateLocked(id, func(user *gouncer.User) { user.Role = role })
+}
+
+// SetUserDisabledFrom disables an account still holding held, refusing to leave no enabled account privileged.
+func (m *memoryStore) SetUserDisabledFrom(
+	_ context.Context, id uuid.UUID, held string, disabled bool, privileged gouncer.Roles,
+) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.refuseMovedLocked(id, held); err != nil {
+		return err
+	}
+	if err := m.refuseUncoveredLocked(id, privileged, disabled); err != nil {
+		return err
+	}
+	return m.updateLocked(id, func(user *gouncer.User) { user.Disabled = disabled })
+}
+
+// refuseMovedLocked refuses an account no longer holding held, the caller holding the lock.
+func (m *memoryStore) refuseMovedLocked(id uuid.UUID, held string) error {
+	for _, user := range m.users {
+		if user.ID != id {
+			continue
+		}
+		if user.Role != held {
+			return authkit.ErrRoleChanged
+		}
+		return nil
+	}
+	return gouncer.ErrUserNotFound
 }
 
 // updateLocked changes one stored account, the caller holding the lock.
