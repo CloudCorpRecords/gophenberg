@@ -5,6 +5,7 @@ package postgres_test
 import (
 	"testing"
 
+	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
 )
 
@@ -45,6 +46,33 @@ func TestMigrationKeysExistingGroupsFromTheirTitles(t *testing.T) {
 		}
 		if group.Origin != "" {
 			t.Errorf("groups[%d].Origin = %q, want none for a group that predates plugins", i, group.Origin)
+		}
+	}
+}
+
+func TestSiteDefinitionsStoreNoOriginInEachTable(t *testing.T) {
+	t.Parallel()
+
+	store, _, pool := typedStore(t)
+	storeType(t, store, "car")
+	specs := declareSection(t, store, "specs")
+	trim := declaredInside(t, store, specs, "trim", content.FieldKindText)
+
+	for _, row := range []struct {
+		name, query string
+		key         any
+	}{
+		{"the type", `SELECT origin IS NULL FROM core.content_types WHERE key = $1`, "car"},
+		{"the group", `SELECT origin IS NULL FROM core.field_groups WHERE id = $1`, specs.GroupID},
+		{"the field", `SELECT origin IS NULL FROM core.content_fields WHERE id = $1`, specs.ID},
+		{"the sub field", `SELECT origin IS NULL FROM core.content_fields WHERE id = $1`, trim.ID},
+	} {
+		var none bool
+		if err := pool.QueryRow(t.Context(), row.query, row.key).Scan(&none); err != nil {
+			t.Fatalf("reading the origin of %s: %v, want nil", row.name, err)
+		}
+		if !none {
+			t.Errorf("origin IS NULL on %s = false, want true for a definition the site made", row.name)
 		}
 	}
 }
