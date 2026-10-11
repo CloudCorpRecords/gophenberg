@@ -327,9 +327,10 @@ under these rules:
   under `plugins/`. A plugin that grants another plugin's capability
   must come after it, so name it after its parent, such as
   `notes-tags` after `notes`. The id `core` is reserved.
-- **A declaration that breaks a rule stops** `serve`, the account
-  commands and every plugin command, and the error names your
-  plugin:
+- **A declaration that breaks a rule stops** `serve`, `check`,
+  `migrate`, `seed -yes`, every plugin command and every account
+  command except `account:list` and `account:records`, and the error
+  names your plugin:
   `plugin notes: goncierge: new capability outside the source's prefix "notes.": "manage_archive"`.
 
 Ask for a capability, never a role name: `session.Can("notes.manage")`
