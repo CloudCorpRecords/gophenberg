@@ -78,7 +78,7 @@ func (s *memoryMedia) List(_ context.Context, f media.Filter) ([]media.Listed, i
 		}
 	}
 	slices.SortFunc(matched, func(a, b media.Listed) int {
-		return cmp.Or(mediaListOrder(f, a, b), cmp.Compare(b.ID, a.ID))
+		return cmp.Or(mediaListOrder(f, a, b), b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID))
 	})
 	return page(matched, f), len(matched), nil
 }

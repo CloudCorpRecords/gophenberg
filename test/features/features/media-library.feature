@@ -49,6 +49,13 @@ Feature: Managing the media library
       | asc   | "manual", "harbor" and "cliff" |
       | desc  | "cliff", "manual" and "harbor" |
 
+  Scenario: Items by the same author list the newest upload first
+    Given "cliff" was added and last modified on "2026-03-10"
+    And "manual" was added and last modified on "2026-05-10"
+    And "harbor" was added and last modified on "2026-07-10"
+    When the administrator lists the library sorted by "author" "asc"
+    Then the library lists "harbor", "manual" and "cliff" in that order
+
   Scenario Outline: Sorting the library by the name of the author
     Given "cliff" was uploaded by an author whose name sorts first
     When the administrator lists the library sorted by "author" "<order>"
