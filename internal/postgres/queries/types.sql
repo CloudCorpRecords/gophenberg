@@ -159,10 +159,6 @@ SET group_id = rooted.group_id
 FROM rooted
 WHERE carried.id = rooted.id AND carried.group_id = @group_id AND rooted.group_id <> @group_id;
 
--- name: ListContentFieldsOfGroup :many
-SELECT id, key, label, kind, relates_to, many, required, created_at, updated_at, position, group_id, settings, parent_field_id, depth, origin
-FROM core.content_fields WHERE group_id = @group_id ORDER BY position, id;
-
 -- name: CreateContentField :one
 INSERT INTO core.content_fields (
     group_id, key, label, kind, relates_to, many, required, position, created_at, updated_at, settings, origin
