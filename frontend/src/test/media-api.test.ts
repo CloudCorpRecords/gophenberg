@@ -50,7 +50,7 @@ test('lists media with the query it was given', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).search
-			return HttpResponse.json({ items: [HARBOR], total: 1 })
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: 10 })
 		}),
 	)
 
@@ -68,13 +68,41 @@ test('asks for the first page without naming it', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).search
-			return HttpResponse.json({ items: [], total: 0 })
+			return HttpResponse.json({ items: [], total: 0, per_page: 30 })
+		}),
+	)
+
+	await listMedia({ perPage: 30 })
+
+	expect(asked).toBe('?per_page=30')
+})
+
+test('leaves the page size to the server when the caller names none', async () => {
+	let asked: string | null = null
+	server.use(
+		http.get('/api/media', ({ request }) => {
+			asked = new URL(request.url).search
+			return HttpResponse.json({ items: [], total: 0, per_page: 10 })
 		}),
 	)
 
 	await listMedia({})
 
-	expect(asked).toBe('?per_page=20')
+	expect(asked).toBe('')
+})
+
+test('reads the page size the server used, which may fall short of the one asked for', async () => {
+	server.use(http.get('/api/media', () => HttpResponse.json({ items: [HARBOR], total: 25, per_page: 10 })))
+
+	const page = await listMedia({ perPage: 30 })
+
+	expect(page).toMatchObject({ total: 25, perPage: 10 })
+})
+
+test('refuses a listing that names no page size', async () => {
+	server.use(http.get('/api/media', () => HttpResponse.json({ items: [HARBOR], total: 1 })))
+
+	await expect(listMedia({})).rejects.toThrow()
 })
 
 test('asks for the files a gallery holds by identity in one call', async () => {
@@ -137,13 +165,13 @@ test('asks for the first page without naming it', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).search
-			return HttpResponse.json({ items: [], total: 0 })
+			return HttpResponse.json({ items: [], total: 0, per_page: 30 })
 		}),
 	)
 
-	await listMedia({ page: 1 })
+	await listMedia({ page: 1, perPage: 30 })
 
-	expect(asked).toBe('?per_page=20')
+	expect(asked).toBe('?per_page=30')
 })
 
 test('fills in what a sparse media row leaves out', async () => {
@@ -152,6 +180,7 @@ test('fills in what a sparse media row leaves out', async () => {
 			HttpResponse.json({
 				items: [{ id: 8, type: 'file', file: 'manual.pdf', mime_type: 'application/pdf' }],
 				total: 1,
+				per_page: 10,
 			}),
 		),
 	)

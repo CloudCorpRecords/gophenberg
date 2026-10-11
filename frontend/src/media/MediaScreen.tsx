@@ -3,23 +3,22 @@
 import { Stack, Text } from '@gophenberg/frontend-sdk'
 import { DataViews } from '@gophenberg/frontend-sdk/dataviews'
 import type { View } from '@gophenberg/frontend-sdk/dataviews'
-import { ErrorNotice, Page } from '@gopherium/godmin'
+import { ErrorNotice, Page, paginationOf } from '@gopherium/godmin'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { __, _x } from '@wordpress/i18n'
 import { useState } from 'react'
 import type { DragEvent } from 'react'
 
+import { useListSettings } from '../settings/useListSettings'
 import './media.css'
 import { useMediaActions, useRefreshMedia } from './actions'
 import { listMedia, mediaQueryKey, uploadMedia } from './api'
 import type { MediaItem, MediaPage } from './api'
 import { mediaFields } from './fields'
 
-const PER_PAGE = 20
-
 const PREVIEW_SIZE = 230
 
-const EMPTY_PAGE: MediaPage = { items: [], total: 0 }
+const EMPTY_PAGE: MediaPage = { items: [], total: 0, perPage: 0 }
 
 const INITIAL_VIEW: View = {
 	type: 'grid',
@@ -28,7 +27,6 @@ const INITIAL_VIEW: View = {
 	mediaField: 'thumbnail',
 	search: '',
 	page: 1,
-	perPage: PER_PAGE,
 	layout: { previewSize: PREVIEW_SIZE },
 }
 
@@ -65,15 +63,17 @@ export function chosenFile(files: FileList | null): File | null {
  * @returns The library screen element.
  */
 export function MediaScreen() {
-	const [view, setView] = useState<View>(INITIAL_VIEW)
+	const settings = useListSettings().data
+	const [held, setHeld] = useState<View>(INITIAL_VIEW)
+	const view = { ...held, perPage: held.perPage ?? settings?.list_page_size }
 	const [selection, setSelection] = useState<string[]>([])
 	const [notice, setNotice] = useState('')
 	const actions = useMediaActions()
 	const refresh = useRefreshMedia()
 	const kind = filteredKind(view)
 	const media = useQuery({
-		queryKey: [...mediaQueryKey, kind, view.search, view.page],
-		queryFn: () => listMedia({ type: kind, search: view.search, page: view.page }),
+		queryKey: [...mediaQueryKey, kind, view.search, view.page, view.perPage],
+		queryFn: () => listMedia({ type: kind, search: view.search, page: view.page, perPage: view.perPage }),
 	})
 	const upload = useMutation({
 		mutationFn: (chosen: File) => uploadMedia(chosen),
@@ -122,17 +122,14 @@ export function MediaScreen() {
 							fields={mediaFields}
 							actions={actions}
 							view={view}
-							onChangeView={setView}
+							onChangeView={setHeld}
 							selection={selection}
 							onChangeSelection={setSelection}
 							isLoading={media.isPending}
 							getItemId={(item: MediaItem) => String(item.id)}
 							searchLabel={__('Search media', 'gophenberg')}
-							config={{ perPageSizes: [PER_PAGE] }}
-							paginationInfo={{
-								totalItems: page.total,
-								totalPages: Math.max(1, Math.ceil(page.total / PER_PAGE)),
-							}}
+							config={{ perPageSizes: [] }}
+							paginationInfo={paginationOf({ total: page.total, limit: page.perPage })}
 							defaultLayouts={{
 								grid: { fields: ['dimensions', 'filesize'] },
 								table: {

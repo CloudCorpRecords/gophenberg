@@ -7,6 +7,7 @@ import { beforeAll, beforeEach, expect, test } from 'vitest'
 import { createAppRouter } from '../router'
 import { renderAt } from './render'
 import { storedPost } from './postFixture'
+import { siteSettings } from './siteSettings'
 
 const FRAMED = [
 	'/',
@@ -37,7 +38,7 @@ beforeEach(() => {
 		http.get('/api/content/counts', () => HttpResponse.json({})),
 		http.get('/api/users', () => HttpResponse.json([])),
 		http.get('/api/themes', () => HttpResponse.json({ themes: [] })),
-		http.get('/api/media', () => HttpResponse.json({ items: [], total: 0 })),
+		http.get('/api/media', () => HttpResponse.json({ items: [], total: 0, per_page: siteSettings.list_page_size })),
 		http.get(`/api/content/${storedPost.id}`, () => HttpResponse.json(storedPost)),
 		http.get(`/api/content/${storedPost.id}/autosave`, () =>
 			HttpResponse.json({}, { status: 404 }),

@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, expect, onTestFinished, test } from 'vitest'
 import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 import { storedPost } from './postFixture'
+import { siteSettings } from './siteSettings'
 
 const EDITOR_PATH = `/content/post/${storedPost.id}/edit`
 
@@ -235,6 +236,7 @@ test('holds the media a media field was pointed at', async () => {
 					},
 				],
 				total: 1,
+				per_page: siteSettings.picker_page_size,
 			}),
 		),
 		http.patch(`/api/content/${storedPost.id}`, async ({ request }) => {
@@ -409,7 +411,7 @@ function galleryOf(held: number[]) {
 			asked.push(query.toString())
 			const ids = query.get('ids')
 			if (ids === null) {
-				return HttpResponse.json({ items: LIBRARY, total: LIBRARY.length })
+				return HttpResponse.json({ items: LIBRARY, total: LIBRARY.length, per_page: siteSettings.picker_page_size })
 			}
 			const named = LIBRARY.filter((item) => ids.split(',').includes(String(item.id)))
 			return HttpResponse.json({ items: named, total: named.length })
