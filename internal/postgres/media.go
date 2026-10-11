@@ -92,7 +92,7 @@ func (s *MediaStore) Saved(ctx context.Context, files []string) (map[string]bool
 	return saved, nil
 }
 
-// List returns the media items matching the filter, newest first, beside their authors' names, with their total.
+// List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
 func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Listed, int, error) {
 	search := escapeLike(f.Search)
 	mimes := escapedPrefixes(f.Mimes)
@@ -108,6 +108,8 @@ func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Listed, 
 		MediaType: string(f.Type),
 		Mimes:     mimes,
 		Search:    search,
+		OrderBy:   string(f.OrderBy),
+		OrderDir:  string(f.Order),
 		RowLimit:  int32(f.PerPage),
 		RowOffset: pageOffset(f.Page, f.PerPage),
 	})

@@ -193,14 +193,27 @@ WHERE ($1::text = '' OR m.media_type = $1)
         OR m.title ILIKE '%' || $3 || '%'
         OR m.file ILIKE '%' || $3 || '%'
     )
-ORDER BY m.created_at DESC, m.id DESC
-LIMIT $5 OFFSET $4
+ORDER BY
+    CASE WHEN $4::text = 'title' AND $5::text = 'asc' THEN m.title END ASC,
+    CASE WHEN $4::text = 'title' AND $5::text <> 'asc' THEN m.title END DESC,
+    CASE WHEN $4::text = 'author' AND $5::text = 'asc' THEN u.name END ASC,
+    CASE WHEN $4::text = 'author' AND $5::text <> 'asc' THEN u.name END DESC,
+    CASE WHEN $4::text = 'modified' AND $5::text = 'asc' THEN m.updated_at END ASC,
+    CASE WHEN $4::text = 'modified' AND $5::text <> 'asc' THEN m.updated_at END DESC,
+    CASE WHEN $4::text NOT IN ('title', 'author', 'modified') AND $5::text = 'asc'
+        THEN m.created_at END ASC,
+    CASE WHEN $4::text NOT IN ('title', 'author', 'modified') AND $5::text <> 'asc'
+        THEN m.created_at END DESC,
+    m.id DESC
+LIMIT $7 OFFSET $6
 `
 
 type ListMediaParams struct {
 	MediaType string
 	Mimes     []string
 	Search    string
+	OrderBy   string
+	OrderDir  string
 	RowOffset int32
 	RowLimit  int32
 }
@@ -229,6 +242,8 @@ func (q *Queries) ListMedia(ctx context.Context, arg ListMediaParams) ([]ListMed
 		arg.MediaType,
 		arg.Mimes,
 		arg.Search,
+		arg.OrderBy,
+		arg.OrderDir,
 		arg.RowOffset,
 		arg.RowLimit,
 	)

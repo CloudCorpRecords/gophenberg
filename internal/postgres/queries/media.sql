@@ -48,7 +48,18 @@ WHERE (@media_type::text = '' OR m.media_type = @media_type)
         OR m.title ILIKE '%' || @search || '%'
         OR m.file ILIKE '%' || @search || '%'
     )
-ORDER BY m.created_at DESC, m.id DESC
+ORDER BY
+    CASE WHEN @order_by::text = 'title' AND @order_dir::text = 'asc' THEN m.title END ASC,
+    CASE WHEN @order_by::text = 'title' AND @order_dir::text <> 'asc' THEN m.title END DESC,
+    CASE WHEN @order_by::text = 'author' AND @order_dir::text = 'asc' THEN u.name END ASC,
+    CASE WHEN @order_by::text = 'author' AND @order_dir::text <> 'asc' THEN u.name END DESC,
+    CASE WHEN @order_by::text = 'modified' AND @order_dir::text = 'asc' THEN m.updated_at END ASC,
+    CASE WHEN @order_by::text = 'modified' AND @order_dir::text <> 'asc' THEN m.updated_at END DESC,
+    CASE WHEN @order_by::text NOT IN ('title', 'author', 'modified') AND @order_dir::text = 'asc'
+        THEN m.created_at END ASC,
+    CASE WHEN @order_by::text NOT IN ('title', 'author', 'modified') AND @order_dir::text <> 'asc'
+        THEN m.created_at END DESC,
+    m.id DESC
 LIMIT @row_limit OFFSET @row_offset;
 
 -- name: CountMedia :one
