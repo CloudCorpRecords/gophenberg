@@ -69,7 +69,7 @@ func (s undeletableMediaStore) ByIDs(context.Context, []int64) ([]media.Media, e
 }
 
 // List answers nothing stored.
-func (s undeletableMediaStore) List(context.Context, media.Filter) ([]media.Media, int, error) {
+func (s undeletableMediaStore) List(context.Context, media.Filter) ([]media.Listed, int, error) {
 	return nil, 0, nil
 }
 

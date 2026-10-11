@@ -246,23 +246,36 @@ func TestSeedStoresTheDemoMediaWhenADirectoryIsConfigured(t *testing.T) {
 		t.Fatalf("connecting pool: %v", err)
 	}
 	defer pool.Close()
-	items, total, err := postgres.NewMediaStore(pool).List(t.Context(), media.Filter{Page: 1, PerPage: 10})
+	items, total, err := postgres.NewMediaStore(pool).List(t.Context(), media.Filter{Page: 1, PerPage: 20})
 	if err != nil {
 		t.Fatalf("List() error = %v, want nil", err)
 	}
-	if total != 3 {
-		t.Fatalf("stored media = %d, want the three demo pictures", total)
+	if total != 12 {
+		t.Fatalf("stored media = %d, want the eleven demo pictures and the document", total)
 	}
+	documents := 0
+	authors := make(map[string]bool)
 	for _, item := range items {
+		authors[item.AuthorName] = true
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(item.File))); err != nil {
+			t.Errorf("the file of %q is missing: %v", item.Title, err)
+		}
+		if item.Type != media.TypeImage {
+			documents++
+			continue
+		}
 		if item.AltText == "" {
 			t.Errorf("%q carries no alt text, want every demo picture described", item.Title)
 		}
 		if len(item.Sizes) == 0 {
 			t.Errorf("%q carries no renditions, want them derived by the pipeline", item.Title)
 		}
-		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(item.File))); err != nil {
-			t.Errorf("the file of %q is missing: %v", item.Title, err)
-		}
+	}
+	if documents != 1 {
+		t.Errorf("stored %d documents, want the one demo document", documents)
+	}
+	if len(authors) != 3 {
+		t.Errorf("the demo media names %d authors, want the three demo accounts", len(authors))
 	}
 }
 

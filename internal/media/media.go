@@ -76,6 +76,12 @@ type Media struct {
 	UpdatedAt   time.Time
 }
 
+// Listed is a media item as a listing carries it, beside its author's name.
+type Listed struct {
+	Media
+	AuthorName string
+}
+
 // New returns a [Media] item over a stored file, typed after its content type.
 func New(file, title, mimeType string, authorID uuid.UUID) (Media, error) {
 	if strings.TrimSpace(file) == "" {

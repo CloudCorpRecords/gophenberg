@@ -44,21 +44,22 @@ test('offers a category for every kind the inserter tab shows', () => {
 	}
 })
 
-test('asks the library for the kind and page the inserter wants', async () => {
+test('asks the library for the kind, page and page size the inserter wants', async () => {
 	let asked = ''
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = request.url
-			return HttpResponse.json({ items: [HARBOR], total: 1 })
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: 30 })
 		}),
 	)
 
-	const found = await MEDIA_CATEGORIES[0].fetch({ per_page: 20, page: 2, search: 'harbor' })
+	const found = await MEDIA_CATEGORIES[0].fetch({ per_page: 30, page: 2, search: 'harbor' })
 
 	const params = new URL(asked).searchParams
 	expect(params.get('mime')).toBe('image/')
 	expect(params.get('search')).toBe('harbor')
 	expect(params.get('page')).toBe('2')
+	expect(params.get('per_page')).toBe('30')
 	expect(found).toHaveLength(1)
 })
 
@@ -67,7 +68,7 @@ test('asks the first page when the inserter names none', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = request.url
-			return HttpResponse.json({ items: [], total: 0 })
+			return HttpResponse.json({ items: [], total: 0, per_page: 10 })
 		}),
 	)
 
@@ -76,6 +77,7 @@ test('asks the first page when the inserter names none', async () => {
 	const params = new URL(asked).searchParams
 	expect(params.get('mime')).toBe('video/')
 	expect(params.get('search')).toBeNull()
+	expect(params.get('per_page')).toBeNull()
 })
 
 test('shapes a stored item the way the inserter reads it', () => {

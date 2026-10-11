@@ -38,6 +38,7 @@ so it takes the default.
 | `GOPHENBERG_LIST_PAGE_SIZES` | No | `10,20,50,100` | The page sizes an admin list offers in its Items per page menu, from 2 to 6 of them, see [the admin lists](#the-admin-lists) |
 | `GOPHENBERG_LIST_PAGE_SIZE` | No | `20` | The page size an admin list opens at, one of the sizes above |
 | `GOPHENBERG_LIST_PAGE_CAP` | No | `100` | The most items one admin list page carries. A request for more gets this many |
+| `GOPHENBERG_PICKER_PAGE_SIZE` | No | `50` | The page size the media picker opens at, one of the sizes above. Unset and with no `50` among them, the size a list opens at |
 | `GOPHENBERG_TOAST_DURATION` | No | `6s` | How long a confirmation message stays on screen, in whole milliseconds from `1ms` to `2147483647ms` |
 | `GOPHENBERG_TOAST_NAME_LENGTH` | No | `45` | How many characters of an item's name a confirmation message shows before it cuts the name short |
 | `GOPHENBERG_FORMAT_LOCALE` | No | `es-ES` | The locale the admin writes dates, times and numbers in, whatever language its screens are in |
@@ -82,14 +83,17 @@ even that person's own browser.
 
 ## The admin lists
 
-The server reads six settings when it starts. It serves five of them
+The server reads seven settings when it starts. It serves six of them
 to the admin and keeps the page cap to itself, and no screen can
 change them. They shape every list the same way:
 
 - **The page sizes.** The Items per page menu offers the sizes in
   `GOPHENBERG_LIST_PAGE_SIZES`, and a list opens at
   `GOPHENBERG_LIST_PAGE_SIZE`. The menu only shows for 2 to 6 sizes,
-  so the server refuses any other count rather than hide it.
+  so the server refuses any other count rather than hide it. The
+  media picker opens at `GOPHENBERG_PICKER_PAGE_SIZE`, 50 as
+  WordPress's media dialog does, or the size a list opens at when
+  the sizes leave out 50.
 - **The page cap.** No list page carries more than
   `GOPHENBERG_LIST_PAGE_CAP` items, whatever a request asks for. The
   largest page size has to fit under it.
@@ -243,6 +247,7 @@ The server refuses to start, and says why, when:
   sizes, lists a size twice or out of order, or names a size above
   `GOPHENBERG_LIST_PAGE_CAP`.
 - `GOPHENBERG_LIST_PAGE_SIZE` is not one of those sizes.
+- `GOPHENBERG_PICKER_PAGE_SIZE` is not one of those sizes.
 - `GOPHENBERG_LIST_PAGE_CAP` is not a whole number from 1 to
   2147483647, or stands below the largest page size.
 - `GOPHENBERG_TOAST_DURATION` is not a whole number of milliseconds

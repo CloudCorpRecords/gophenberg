@@ -13,6 +13,7 @@ const settingsSchema = z.object({
 const listSettingsSchema = z.object({
 	list_page_sizes: z.array(z.number()),
 	list_page_size: z.number(),
+	picker_page_size: z.number(),
 	toast_milliseconds: z.number(),
 	toast_name_length: z.number(),
 	format_locale: z.string(),

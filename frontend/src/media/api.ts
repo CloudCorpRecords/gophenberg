@@ -4,8 +4,6 @@ import { z } from 'zod'
 
 import { errorText } from '../i18n/errors'
 
-const MEDIA_PER_PAGE = 20
-
 /** How many identities one request for named files may carry, as the server caps them. */
 const MEDIA_IDS_PER_CALL = 100
 
@@ -36,6 +34,8 @@ const mediaSchema = z.object({
 })
 
 const pageSchema = z.object({ items: z.array(mediaSchema), total: z.number() })
+
+const listingSchema = pageSchema.extend({ per_page: z.number() })
 
 const errorSchema = z.object({
 	error: z.string(),
@@ -72,6 +72,7 @@ export interface MediaItem {
 export interface MediaPage {
 	items: MediaItem[]
 	total: number
+	perPage: number
 }
 
 export interface MediaQuery {
@@ -79,6 +80,7 @@ export interface MediaQuery {
 	mimes?: string[]
 	search?: string
 	page?: number
+	perPage?: number
 }
 
 export interface MediaDescriptions {
@@ -189,11 +191,14 @@ export function mediaSrc(file: string): string {
 
 /**
  * Returns one page of media matching the query.
- * @param query - The filters and page to ask for.
- * @returns The page and the total number of matches.
+ * @param query - The filters, page and page size to ask for, the server's own page size when it names none.
+ * @returns The page, the total number of matches and the page size the server used.
  */
 export async function listMedia(query: MediaQuery): Promise<MediaPage> {
-	const params = new URLSearchParams({ per_page: String(MEDIA_PER_PAGE) })
+	const params = new URLSearchParams()
+	if (query.perPage !== undefined) {
+		params.set('per_page', String(query.perPage))
+	}
 	if (query.type) {
 		params.set('type', query.type)
 	}
@@ -210,8 +215,8 @@ export async function listMedia(query: MediaQuery): Promise<MediaPage> {
 	if (!response.ok) {
 		throw new Error(`listing media failed with status ${response.status}`)
 	}
-	const page = pageSchema.parse(await response.json())
-	return { items: page.items.map(toMedia), total: page.total }
+	const page = listingSchema.parse(await response.json())
+	return { items: page.items.map(toMedia), total: page.total, perPage: page.per_page }
 }
 
 /**

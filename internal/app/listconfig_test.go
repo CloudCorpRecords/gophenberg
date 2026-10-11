@@ -3,6 +3,11 @@
 package app
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,7 +35,7 @@ func TestListSettingsTakeTheDefaultsWhenTheEnvironmentNamesNone(t *testing.T) {
 		t.Fatalf("loadRunConfig() error = %v, want nil", err)
 	}
 	want := server.ListSettings{
-		PageSizes: []int{10, 20, 50, 100}, PageSize: 20, PageCap: 100,
+		PageSizes: []int{10, 20, 50, 100}, PageSize: 20, PickerPageSize: 50, PageCap: 100,
 		ToastDuration: 6 * time.Second, ToastNameLength: 45, FormatLocale: "es-ES",
 	}
 	if !reflect.DeepEqual(held, want) {
@@ -55,12 +60,90 @@ func TestListSettingsReadWhatTheEnvironmentNames(t *testing.T) {
 		t.Fatalf("loadRunConfig() error = %v, want nil", err)
 	}
 	want := server.ListSettings{
-		PageSizes: []int{5, 15, 45}, PageSize: 15, PageCap: 60,
+		PageSizes: []int{5, 15, 45}, PageSize: 15, PickerPageSize: 15, PageCap: 60,
 		ToastDuration: 1500 * time.Millisecond, ToastNameLength: 30, FormatLocale: "en-GB",
 	}
 	if !reflect.DeepEqual(held, want) {
 		t.Errorf("lists = %+v, want %+v", held, want)
 	}
+}
+
+func TestListSettingsOpenThePickerAtASizeTheListsOffer(t *testing.T) {
+	t.Parallel()
+
+	for name, asked := range map[string]struct {
+		env  map[string]string
+		want int
+	}{
+		"none named with 50 offered": {map[string]string{}, 50},
+		"none named with 50 left out": {map[string]string{
+			"GOPHENBERG_LIST_PAGE_SIZES": "5,15,45", "GOPHENBERG_LIST_PAGE_SIZE": "15",
+		}, 15},
+		"an offered size named": {map[string]string{"GOPHENBERG_PICKER_PAGE_SIZE": "100"}, 100},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			held, err := listsRead(t, asked.env)
+
+			if err != nil {
+				t.Fatalf("loadRunConfig() error = %v, want nil", err)
+			}
+			if held.PickerPageSize != asked.want {
+				t.Errorf("PickerPageSize = %d, want %d", held.PickerPageSize, asked.want)
+			}
+		})
+	}
+}
+
+func TestRunServesThePickerPageSizeTheEnvironmentNamed(t *testing.T) {
+	t.Parallel()
+
+	address := testkit.FreeAddr(t)
+	env := map[string]string{
+		"GOPHENBERG_DATABASE_URL":     emptyDatabaseURL(t),
+		"GOPHENBERG_ADDR":             address,
+		"GOPHENBERG_WEB_DIR":          t.TempDir(),
+		"GOPHENBERG_PICKER_PAGE_SIZE": "10",
+	}
+	if err := seedMigrated(t.Context(), testkit.Getenv(env), new(bytes.Buffer)); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, testkit.Getenv(env), io.Discard, noPlugins) }()
+	base := "http://" + address
+	awaitServer(t, base)
+
+	served := servedPickerPageSize(t, loggedInClient(t, base), base+"/api/settings")
+
+	if served != 10 {
+		t.Errorf("picker_page_size = %d, want the 10 GOPHENBERG_PICKER_PAGE_SIZE named", served)
+	}
+
+	cancel()
+	<-done
+}
+
+// servedPickerPageSize returns the picker page size the settings answer at url carries.
+func servedPickerPageSize(t *testing.T, client *http.Client, url string) int {
+	t.Helper()
+	response, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("getting %s: %v", url, err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("%s status = %d, want %d", url, response.StatusCode, http.StatusOK)
+	}
+	var held struct {
+		PickerPageSize int `json:"picker_page_size"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&held); err != nil {
+		t.Fatalf("reading %s: %v", url, err)
+	}
+	return held.PickerPageSize
 }
 
 func TestListSettingsTakeTheWidestBoundsTheyAllow(t *testing.T) {
@@ -112,6 +195,9 @@ func TestListSettingsRefuseWhatTheListsCannotUse(t *testing.T) {
 		"a size past the cap":            {"GOPHENBERG_LIST_PAGE_SIZES", "10,200", "past GOPHENBERG_LIST_PAGE_CAP 100"},
 		"an opening size not offered":    {"GOPHENBERG_LIST_PAGE_SIZE", "30", "one of GOPHENBERG_LIST_PAGE_SIZES"},
 		"an opening size that is a word": {"GOPHENBERG_LIST_PAGE_SIZE", "many", "whole number"},
+		"a picker size not offered":      {"GOPHENBERG_PICKER_PAGE_SIZE", "30", "one of GOPHENBERG_LIST_PAGE_SIZES"},
+		"a picker size that is a word":   {"GOPHENBERG_PICKER_PAGE_SIZE", "many", "whole number"},
+		"a picker size of zero":          {"GOPHENBERG_PICKER_PAGE_SIZE", "0", "above zero"},
 		"a cap under the default sizes": {
 			"GOPHENBERG_LIST_PAGE_CAP", "40", "at or above the largest page size 100",
 		},

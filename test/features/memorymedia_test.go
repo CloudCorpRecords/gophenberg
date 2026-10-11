@@ -3,31 +3,40 @@
 package features_test
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/media"
 )
 
 // memoryMedia holds one scenario's media library in memory.
 type memoryMedia struct {
-	mu    sync.Mutex
-	next  int64
-	items map[int64]media.Media
+	mu       sync.Mutex
+	next     int64
+	items    map[int64]media.Media
+	accounts *memoryStore
 }
 
-// newMemoryMedia returns an empty in-memory media store.
-func newMemoryMedia() *memoryMedia {
-	return &memoryMedia{items: make(map[int64]media.Media)}
+// newMemoryMedia returns an empty in-memory media store naming its authors from the accounts.
+func newMemoryMedia(accounts *memoryStore) *memoryMedia {
+	return &memoryMedia{items: make(map[int64]media.Media), accounts: accounts}
 }
 
-// Create stores a new media item and returns it with its assigned identifier.
+// Create stores a new media item once its author holds an account and returns it with its assigned identifier.
 func (s *memoryMedia) Create(_ context.Context, m media.Media) (media.Media, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.accounts.holdsUser(m.AuthorID) {
+		return media.Media{}, fmt.Errorf("memory: create media: author %s holds no account", m.AuthorID)
+	}
 	s.next++
 	m.ID = s.next
 	s.items[m.ID] = m
@@ -58,19 +67,53 @@ func (s *memoryMedia) ByIDs(_ context.Context, ids []int64) ([]media.Media, erro
 	return listed, nil
 }
 
-// List returns the media items matching the filter, newest first, and the
-// total number matching it.
-func (s *memoryMedia) List(_ context.Context, f media.Filter) ([]media.Media, int, error) {
+// List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
+func (s *memoryMedia) List(_ context.Context, f media.Filter) ([]media.Listed, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	matched := make([]media.Media, 0, len(s.items))
+	matched := make([]media.Listed, 0, len(s.items))
 	for _, m := range s.items {
 		if matches(m, f) {
-			matched = append(matched, m)
+			matched = append(matched, media.Listed{Media: m, AuthorName: s.accounts.nameOf(m.AuthorID)})
 		}
 	}
-	sort.Slice(matched, func(i, j int) bool { return matched[i].ID > matched[j].ID })
+	slices.SortFunc(matched, func(a, b media.Listed) int {
+		return cmp.Or(mediaListOrder(f, a, b), b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID))
+	})
 	return page(matched, f), len(matched), nil
+}
+
+// mediaListOrder compares two listed items by the column and direction the filter names, the date added by default.
+func mediaListOrder(f media.Filter, a, b media.Listed) int {
+	var by int
+	switch f.OrderBy {
+	case media.OrderByTitle:
+		by = collated(a.Title, b.Title)
+	case media.OrderByAuthor:
+		by = collated(a.AuthorName, b.AuthorName)
+	case media.OrderByModified:
+		by = a.UpdatedAt.Compare(b.UpdatedAt)
+	default:
+		by = a.CreatedAt.Compare(b.CreatedAt)
+	}
+	if f.Order != media.OrderAsc {
+		return -by
+	}
+	return by
+}
+
+// changeTitled applies the change to the stored item carrying the title.
+func (s *memoryMedia) changeTitled(title string, change func(*media.Media)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, item := range s.items {
+		if item.Title == title {
+			change(&item)
+			s.items[id] = item
+			return nil
+		}
+	}
+	return fmt.Errorf("no media item carries the title %q", title)
 }
 
 // matches reports whether the item satisfies the filter.
@@ -78,15 +121,29 @@ func matches(m media.Media, f media.Filter) bool {
 	if f.Type != "" && m.Type != f.Type {
 		return false
 	}
-	if !matchesMime(m, f.Mimes) {
+	if !matchesMime(m, f.Mimes) || !withinAuthorsAndDates(m, f) {
 		return false
 	}
 	if f.Search == "" {
 		return true
 	}
 	search := strings.ToLower(f.Search)
-	return strings.Contains(strings.ToLower(m.Title), search) ||
-		strings.Contains(strings.ToLower(m.File), search)
+	return slices.ContainsFunc([]string{m.Title, m.File, m.Caption, m.Description}, func(words string) bool {
+		return strings.Contains(strings.ToLower(words), search)
+	})
+}
+
+// withinAuthorsAndDates reports whether the item stands within the authors and the date bounds the filter narrows to.
+func withinAuthorsAndDates(m media.Media, f media.Filter) bool {
+	switch {
+	case len(f.Authors) > 0 && !slices.Contains(f.Authors, m.AuthorID), slices.Contains(f.ExcludeAuthors, m.AuthorID):
+		return false
+	case f.Before != nil && !m.CreatedAt.Before(*f.Before), f.After != nil && !m.CreatedAt.After(*f.After):
+		return false
+	case f.ModifiedBefore != nil && !m.UpdatedAt.Before(*f.ModifiedBefore):
+		return false
+	}
+	return f.ModifiedAfter == nil || m.UpdatedAt.After(*f.ModifiedAfter)
 }
 
 // matchesMime reports whether the item's content type starts with any prefix.
@@ -103,7 +160,7 @@ func matchesMime(m media.Media, prefixes []string) bool {
 }
 
 // page returns the slice of items the filter's page holds.
-func page(items []media.Media, f media.Filter) []media.Media {
+func page(items []media.Listed, f media.Filter) []media.Listed {
 	start := (f.Page - 1) * f.PerPage
 	if start >= len(items) {
 		return nil
@@ -142,4 +199,23 @@ func (s *memoryMedia) Delete(_ context.Context, id int64) (media.Media, error) {
 	}
 	delete(s.items, id)
 	return m, nil
+}
+
+func TestMediaStoreRefusesAnAuthorWithoutAnAccount(t *testing.T) {
+	t.Parallel()
+
+	store := newMemoryMedia(newMemoryStore())
+	orphan, err := media.New("2026/10/orphan.jpg", "orphan", "image/jpeg", uuid.Must(uuid.NewV7()))
+	if err != nil {
+		t.Fatalf("New() error = %v, want nil", err)
+	}
+
+	_, err = store.Create(t.Context(), orphan)
+
+	if err == nil {
+		t.Fatal("Create() error = nil, want the author refused for holding no account")
+	}
+	if _, total, _ := store.List(t.Context(), media.Filter{Page: 1, PerPage: 10}); total != 0 {
+		t.Errorf("List() total = %d, want the refused item left out", total)
+	}
 }

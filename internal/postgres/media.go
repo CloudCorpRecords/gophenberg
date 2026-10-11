@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -92,32 +93,34 @@ func (s *MediaStore) Saved(ctx context.Context, files []string) (map[string]bool
 	return saved, nil
 }
 
-// List returns the media items matching the filter, newest first, and the
-// total number matching it.
-func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Media, int, error) {
-	search := escapeLike(f.Search)
-	mimes := escapedPrefixes(f.Mimes)
-	total, err := s.queries.CountMedia(ctx, db.CountMediaParams{
-		MediaType: string(f.Type),
-		Mimes:     mimes,
-		Search:    search,
-	})
+// List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
+func (s *MediaStore) List(ctx context.Context, f media.Filter) ([]media.Listed, int, error) {
+	narrowed := mediaNarrowing(f)
+	total, err := s.queries.CountMedia(ctx, narrowed)
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: count media: %w", err)
 	}
 	rows, err := s.queries.ListMedia(ctx, db.ListMediaParams{
-		MediaType: string(f.Type),
-		Mimes:     mimes,
-		Search:    search,
-		RowLimit:  int32(f.PerPage),
-		RowOffset: pageOffset(f.Page, f.PerPage),
+		MediaType:       narrowed.MediaType,
+		Mimes:           narrowed.Mimes,
+		Authors:         narrowed.Authors,
+		ExcludedAuthors: narrowed.ExcludedAuthors,
+		Before:          narrowed.Before,
+		After:           narrowed.After,
+		ModifiedBefore:  narrowed.ModifiedBefore,
+		ModifiedAfter:   narrowed.ModifiedAfter,
+		Search:          narrowed.Search,
+		OrderBy:         string(f.OrderBy),
+		OrderDir:        string(f.Order),
+		RowLimit:        int32(f.PerPage),
+		RowOffset:       pageOffset(f.Page, f.PerPage),
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: list media: %w", err)
 	}
-	items := make([]media.Media, len(rows))
+	items := make([]media.Listed, len(rows))
 	for i, row := range rows {
-		items[i] = toMedia(row)
+		items[i] = listedMedia(row)
 	}
 	return items, int(total), nil
 }
@@ -157,6 +160,21 @@ func (s *MediaStore) Delete(ctx context.Context, id int64) (media.Media, error) 
 	return toMedia(row), nil
 }
 
+// mediaNarrowing returns the arguments the shared media list and count queries narrow the filter by.
+func mediaNarrowing(f media.Filter) db.CountMediaParams {
+	return db.CountMediaParams{
+		MediaType:       string(f.Type),
+		Mimes:           escapedPrefixes(f.Mimes),
+		Authors:         append([]uuid.UUID{}, f.Authors...),
+		ExcludedAuthors: append([]uuid.UUID{}, f.ExcludeAuthors...),
+		Before:          f.Before,
+		After:           f.After,
+		ModifiedBefore:  f.ModifiedBefore,
+		ModifiedAfter:   f.ModifiedAfter,
+		Search:          escapeLike(f.Search),
+	}
+}
+
 // escapedPrefixes returns the prefixes with the pattern characters of LIKE escaped.
 func escapedPrefixes(prefixes []string) []string {
 	escaped := make([]string, len(prefixes))
@@ -184,5 +202,29 @@ func toMedia(row db.CoreMedia) media.Media {
 		AuthorID:    row.AuthorID,
 		CreatedAt:   row.CreatedAt.UTC(),
 		UpdatedAt:   row.UpdatedAt.UTC(),
+	}
+}
+
+// listedMedia maps a listed row to the media item it stands for, beside its author's name, with UTC timestamps.
+func listedMedia(row db.ListMediaRow) media.Listed {
+	return media.Listed{
+		Media: media.Media{
+			ID:          row.ID,
+			Type:        media.Type(row.MediaType),
+			File:        row.File,
+			Title:       row.Title,
+			AltText:     row.AltText,
+			Caption:     row.Caption,
+			Description: row.Description,
+			MimeType:    row.MimeType,
+			Width:       int(row.Width),
+			Height:      int(row.Height),
+			Filesize:    row.Filesize,
+			Sizes:       row.Sizes,
+			AuthorID:    row.AuthorID,
+			CreatedAt:   row.CreatedAt.UTC(),
+			UpdatedAt:   row.UpdatedAt.UTC(),
+		},
+		AuthorName: row.AuthorName,
 	}
 }

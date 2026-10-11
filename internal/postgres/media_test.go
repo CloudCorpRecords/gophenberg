@@ -5,6 +5,7 @@ package postgres_test
 import (
 	"errors"
 	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -164,6 +165,214 @@ func TestMediaStoreListsNewestFirst(t *testing.T) {
 	}
 }
 
+// mustCreateMediaAt stores an image under the author, added and last modified at the given moments.
+func mustCreateMediaAt(
+	t *testing.T, store *postgres.MediaStore, title string, author uuid.UUID, added, modified time.Time,
+) {
+	t.Helper()
+	item := mustImage(t, "2026/08/"+title+".jpg", title, author)
+	item.CreatedAt, item.UpdatedAt = added, modified
+	mustCreateMedia(t, store, item)
+}
+
+// listedTitles returns the titles of the rows the filter lists, in the order the store answers them.
+func listedTitles(t *testing.T, store *postgres.MediaStore, f media.Filter) []string {
+	t.Helper()
+	f.Page, f.PerPage = 1, 10
+	items, _, err := store.List(t.Context(), f)
+	if err != nil {
+		t.Fatalf("List(%q %q) error = %v, want nil", f.OrderBy, f.Order, err)
+	}
+	titles := make([]string, len(items))
+	for i, item := range items {
+		titles[i] = item.Title
+	}
+	return titles
+}
+
+func TestMediaStoreListSortsAsTheFilterNames(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newMediaStoreWithPool(t)
+	sortsFirst := addAuthor(t, pool, "Author Sorting First")
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, store, "harbor", author, day(time.July), day(time.July))
+	mustCreateMediaAt(t, store, "cliff", sortsFirst, day(time.March), day(time.September))
+	mustCreateMediaAt(t, store, "manual", author, day(time.May), day(time.May))
+
+	tests := []struct {
+		orderBy media.OrderBy
+		order   media.Order
+		want    []string
+	}{
+		{media.OrderByDate, media.OrderAsc, []string{"cliff", "manual", "harbor"}},
+		{media.OrderByDate, media.OrderDesc, []string{"harbor", "manual", "cliff"}},
+		{media.OrderByModified, media.OrderAsc, []string{"manual", "harbor", "cliff"}},
+		{media.OrderByModified, media.OrderDesc, []string{"cliff", "harbor", "manual"}},
+		{media.OrderByTitle, media.OrderAsc, []string{"cliff", "harbor", "manual"}},
+		{media.OrderByTitle, media.OrderDesc, []string{"manual", "harbor", "cliff"}},
+		{media.OrderByAuthor, media.OrderAsc, []string{"cliff", "harbor", "manual"}},
+		{media.OrderByAuthor, media.OrderDesc, []string{"harbor", "manual", "cliff"}},
+	}
+	for _, tt := range tests {
+		got := listedTitles(t, store, media.Filter{OrderBy: tt.orderBy, Order: tt.order})
+
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("List(%q %q) = %q, want %q", tt.orderBy, tt.order, got, tt.want)
+		}
+	}
+}
+
+// narrowedTitles returns the titles of the rows the filter lists, failing when the total differs from the rows.
+func narrowedTitles(t *testing.T, store *postgres.MediaStore, f media.Filter) []string {
+	t.Helper()
+	f.Page, f.PerPage = 1, 10
+	items, total, err := store.List(t.Context(), f)
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if total != len(items) {
+		t.Errorf("List() total = %d, want the %d rows it lists", total, len(items))
+	}
+	titles := make([]string, len(items))
+	for i, item := range items {
+		titles[i] = item.Title
+	}
+	return titles
+}
+
+func TestMediaStoreListNarrowsByAuthor(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newMediaStoreWithPool(t)
+	second := addAuthor(t, pool, "Second Author")
+	mustCreateMedia(t, store, mustImage(t, "2026/08/harbor.jpg", "harbor", author))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/pier.jpg", "pier", second))
+
+	tests := []struct {
+		name   string
+		filter media.Filter
+		want   []string
+	}{
+		{"one author", media.Filter{Authors: []uuid.UUID{second}}, []string{"pier"}},
+		{"both authors", media.Filter{Authors: []uuid.UUID{author, second}}, []string{"pier", "harbor"}},
+		{"one author left out", media.Filter{ExcludeAuthors: []uuid.UUID{second}}, []string{"harbor"}},
+		{"none named", media.Filter{}, []string{"pier", "harbor"}},
+	}
+	for _, tt := range tests {
+		if got := narrowedTitles(t, store, tt.filter); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: List() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestMediaStoreListNarrowsByTheDatesAddedAndModified(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	day := func(month time.Month, date int) *time.Time {
+		at := time.Date(2026, month, date, 0, 0, 0, 0, time.UTC)
+		return &at
+	}
+	mustCreateMediaAt(t, store, "harbor", author, *day(time.July, 10), *day(time.July, 10))
+	mustCreateMediaAt(t, store, "cliff", author, *day(time.March, 10), *day(time.September, 10))
+	mustCreateMediaAt(t, store, "manual", author, *day(time.May, 10), *day(time.May, 10))
+
+	tests := []struct {
+		name   string
+		filter media.Filter
+		want   []string
+	}{
+		{"added before", media.Filter{Before: day(time.June, 1)}, []string{"manual", "cliff"}},
+		{"added after", media.Filter{After: day(time.June, 1)}, []string{"harbor"}},
+		{"added between", media.Filter{After: day(time.April, 1), Before: day(time.June, 1)}, []string{"manual"}},
+		{"added before its own day", media.Filter{Before: day(time.May, 10)}, []string{"cliff"}},
+		{"added after its own day", media.Filter{After: day(time.May, 10)}, []string{"harbor"}},
+		{"modified before", media.Filter{ModifiedBefore: day(time.June, 1)}, []string{"manual"}},
+		{"modified after", media.Filter{ModifiedAfter: day(time.June, 1)}, []string{"harbor", "cliff"}},
+		{"modified before its own day", media.Filter{ModifiedBefore: day(time.July, 10)}, []string{"manual"}},
+		{"modified after its own day", media.Filter{ModifiedAfter: day(time.July, 10)}, []string{"cliff"}},
+	}
+	for _, tt := range tests {
+		if got := narrowedTitles(t, store, tt.filter); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: List() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestMediaStoreListBreaksATieByTheUploadDateBeforeTheInsertOrder(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, store, "harbor", author, day(time.July), day(time.July))
+	mustCreateMediaAt(t, store, "cliff", author, day(time.March), day(time.March))
+	mustCreateMediaAt(t, store, "manual", author, day(time.May), day(time.May))
+
+	for order, want := range map[media.Order][]string{
+		media.OrderAsc:  {"harbor", "manual", "cliff"},
+		media.OrderDesc: {"harbor", "manual", "cliff"},
+	} {
+		got := listedTitles(t, store, media.Filter{OrderBy: media.OrderByAuthor, Order: order})
+
+		if !slices.Equal(got, want) {
+			t.Errorf("List(author %q) = %q, want the newest upload first %q", order, got, want)
+		}
+	}
+}
+
+func TestMediaStoreListBreaksATieNewestUploadFirst(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	same := time.Date(2026, time.July, 10, 0, 0, 0, 0, time.UTC)
+	later := same.Add(24 * time.Hour)
+	mustCreateMediaAt(t, store, "harbor", author, same, same)
+	mustCreateMediaAt(t, store, "manual", author, same, same)
+	mustCreateMediaAt(t, store, "cliff", author, same, later)
+
+	for order, want := range map[media.Order][]string{
+		media.OrderAsc:  {"manual", "harbor", "cliff"},
+		media.OrderDesc: {"cliff", "manual", "harbor"},
+	} {
+		got := listedTitles(t, store, media.Filter{OrderBy: media.OrderByModified, Order: order})
+
+		if !slices.Equal(got, want) {
+			t.Errorf("List(modified %q) = %q, want %q", order, got, want)
+		}
+	}
+}
+
+func TestMediaStoreListNamesTheAuthorOfEveryRow(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newMediaStoreWithPool(t)
+	second := addAuthor(t, pool, "Second Author")
+	mustCreateMedia(t, store, mustImage(t, "2026/08/harbor.jpg", "harbor", author))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/cliff.jpg", "cliff", second))
+	mustCreateMedia(t, store, mustImage(t, "2026/08/pier.jpg", "pier", author))
+
+	items, total, err := store.List(t.Context(), media.Filter{Page: 1, PerPage: 10})
+
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if total != 3 || len(items) != total {
+		t.Fatalf("List() = %d items with total %d, want the count equal to the three rows", len(items), total)
+	}
+	want := map[uuid.UUID]string{author: "Maria Perez", second: "Second Author"}
+	named := make(map[string]bool, len(want))
+	for _, item := range items {
+		if item.AuthorName != want[item.AuthorID] {
+			t.Errorf("%q names its author %q, want %q", item.Title, item.AuthorName, want[item.AuthorID])
+		}
+		named[item.AuthorName] = true
+	}
+	if len(named) != len(want) {
+		t.Errorf("List() names %d authors, want both", len(named))
+	}
+}
+
 func TestMediaStoreListFiltersByType(t *testing.T) {
 	t.Parallel()
 
@@ -278,6 +487,27 @@ func TestMediaStoreListSearchesTitleAndFile(t *testing.T) {
 	}
 	if len(byFile) != 1 || byFile[0].File != "2026/08/dsc-0042.jpg" {
 		t.Errorf("List(dsc-0042) = %d items, want the file match alone", len(byFile))
+	}
+}
+
+func TestMediaStoreListSearchesCaptionAndDescription(t *testing.T) {
+	t.Parallel()
+
+	store, author := newMediaStore(t)
+	captioned := mustImage(t, "2026/08/cliff.jpg", "cliff", author)
+	captioned.Caption = "A lighthouse above the bay"
+	mustCreateMedia(t, store, captioned)
+	described := mustImage(t, "2026/08/manual.jpg", "manual", author)
+	described.Description = "Keeping the lighthouse lamp lit"
+	mustCreateMedia(t, store, described)
+	altered := mustImage(t, "2026/08/harbor.jpg", "harbor", author)
+	altered.AltText = "A lighthouse at dusk"
+	mustCreateMedia(t, store, altered)
+
+	got := narrowedTitles(t, store, media.Filter{Search: "lighthouse"})
+
+	if want := []string{"manual", "cliff"}; !slices.Equal(got, want) {
+		t.Errorf("List(lighthouse) = %q, want the caption and description matches %q", got, want)
 	}
 }
 

@@ -144,9 +144,13 @@ func aVisitorPostsAFile(ctx context.Context) error {
 
 // storedMedia returns every item the scenario's library holds, newest first.
 func storedMedia(w *world) ([]media.Media, error) {
-	items, _, err := w.mediaStore.List(context.Background(), media.Filter{Page: 1, PerPage: 1000})
+	rows, _, err := w.mediaStore.List(context.Background(), media.Filter{Page: 1, PerPage: 1000})
 	if err != nil {
 		return nil, fmt.Errorf("listing the library: %w", err)
+	}
+	items := make([]media.Media, len(rows))
+	for i, row := range rows {
+		items[i] = row.Media
 	}
 	return items, nil
 }

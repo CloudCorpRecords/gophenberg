@@ -3,11 +3,13 @@
 import { StyleProvider } from '@gophenberg/frontend-sdk'
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { allowedMimes, MediaLibraryPicker, selectionFrom } from '../media/MediaLibraryPicker'
+import { SiteFormatGate } from '../settings/SiteFormatGate'
+import { siteSettings } from './siteSettings'
 
 const HARBOR = {
 	id: 7,
@@ -46,7 +48,11 @@ const MANUAL = {
  * @param items - The rows the listing answers.
  */
 function listing(items: unknown[] = [HARBOR, CLIFF, MANUAL]) {
-	server.use(http.get('/api/media', () => HttpResponse.json({ items, total: items.length })))
+	server.use(
+		http.get('/api/media', () =>
+			HttpResponse.json({ items, total: items.length, per_page: siteSettings.picker_page_size }),
+		),
+	)
 }
 
 beforeEach(() => {
@@ -97,12 +103,51 @@ test('opens a library holding what the API listed', async () => {
 	expect(screen.getByText('Mountain ridge')).toBeInTheDocument()
 })
 
+test('asks the page size the settings name for the picker', async () => {
+	const asked: (string | null)[] = []
+	server.use(
+		http.get('/api/settings', () => HttpResponse.json({ ...siteSettings, picker_page_size: 100 })),
+		http.get('/api/media', ({ request }) => {
+			asked.push(new URL(request.url).searchParams.get('per_page'))
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: 100 })
+		}),
+	)
+	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+	render(
+		<QueryClientProvider client={client}>
+			<SiteFormatGate loading={null}>
+				<MediaLibraryPicker
+					onSelect={() => {}}
+					render={({ open }) => <button onClick={open}>Media Library</button>}
+				/>
+			</SiteFormatGate>
+		</QueryClientProvider>,
+	)
+	await userEvent.click(await screen.findByRole('button', { name: 'Media Library' }))
+
+	await screen.findByText('Harbor at dawn')
+
+	expect(asked).toEqual(['100'])
+})
+
+test('counts its pages by the size the server served', async () => {
+	server.use(
+		http.get('/api/media', () => HttpResponse.json({ items: [HARBOR, CLIFF], total: 25, per_page: 10 })),
+	)
+	await openPicker()
+	await screen.findByText('Harbor at dawn')
+
+	const pages = within(screen.getByRole('combobox', { name: 'Current page' })).getAllByRole('option')
+
+	expect(pages.map((page) => page.textContent)).toEqual(['1', '2', '3'])
+})
+
 test('asks only for the kinds the block accepts', async () => {
 	let asked = ''
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).searchParams.get('mime') ?? ''
-			return HttpResponse.json({ items: [HARBOR], total: 1 })
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: siteSettings.picker_page_size })
 		}),
 	)
 
@@ -116,7 +161,7 @@ test('asks for each kind a mixed block accepts', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).searchParams.get('mime') ?? ''
-			return HttpResponse.json({ items: [HARBOR], total: 1 })
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: siteSettings.picker_page_size })
 		}),
 	)
 
@@ -130,7 +175,7 @@ test('asks for every kind when the block accepts anything', async () => {
 	server.use(
 		http.get('/api/media', ({ request }) => {
 			asked = new URL(request.url).search
-			return HttpResponse.json({ items: [HARBOR], total: 1 })
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: siteSettings.picker_page_size })
 		}),
 	)
 

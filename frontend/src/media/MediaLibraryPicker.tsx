@@ -4,22 +4,21 @@ import { Button, Dialog, Stack, StyleProvider, Text } from '@gophenberg/frontend
 import { DataViewsPicker } from '@gophenberg/frontend-sdk/dataviews'
 import type { View } from '@gophenberg/frontend-sdk/dataviews'
 import type { MediaLibraryProps } from '@gophenberg/frontend-sdk/editor'
-import { ErrorNotice } from '@gopherium/godmin'
+import { ErrorNotice, paginationOf } from '@gopherium/godmin'
 import { useQuery } from '@tanstack/react-query'
 import { __ } from '@wordpress/i18n'
 import { useState } from 'react'
 
+import { useListSettings } from '../settings/useListSettings'
 import './media.css'
 import { listMedia, mediaQueryKey } from './api'
 import type { MediaItem, MediaPage } from './api'
 import { toAttachment } from './editorMedia'
 import { mediaFields } from './fields'
 
-const PER_PAGE = 20
-
 const PREVIEW_SIZE = 170
 
-const EMPTY_PAGE: MediaPage = { items: [], total: 0 }
+const EMPTY_PAGE: MediaPage = { items: [], total: 0, perPage: 0 }
 
 const INITIAL_VIEW = {
 	type: 'pickerGrid',
@@ -28,7 +27,6 @@ const INITIAL_VIEW = {
 	mediaField: 'thumbnail',
 	search: '',
 	page: 1,
-	perPage: PER_PAGE,
 	layout: { previewSize: PREVIEW_SIZE },
 } as unknown as View
 
@@ -68,14 +66,16 @@ export function MediaLibraryPicker({
 	onClose,
 	render,
 }: MediaLibraryProps) {
+	const settings = useListSettings().data
 	const [open, setOpen] = useState(false)
-	const [view, setView] = useState<View>(INITIAL_VIEW)
+	const [held, setHeld] = useState<View>(INITIAL_VIEW)
+	const view = { ...held, perPage: held.perPage ?? settings?.picker_page_size }
 	const [selection, setSelection] = useState<string[]>([])
 	const takesMany = multiple === true || multiple === 'add'
 	const mimes = allowedMimes(allowedTypes)
 	const media = useQuery({
-		queryKey: [...mediaQueryKey, 'picker', mimes.join(','), view.search, view.page],
-		queryFn: () => listMedia({ mimes, search: view.search, page: view.page }),
+		queryKey: [...mediaQueryKey, 'picker', mimes.join(','), view.search, view.page, view.perPage],
+		queryFn: () => listMedia({ mimes, search: view.search, page: view.page, perPage: view.perPage }),
 		enabled: open,
 	})
 	const page = media.data ?? EMPTY_PAGE
@@ -129,17 +129,14 @@ export function MediaLibraryPicker({
 									fields={mediaFields}
 									actions={actions}
 									view={view}
-									onChangeView={setView}
+									onChangeView={setHeld}
 									selection={selection}
 									onChangeSelection={setSelection}
 									isLoading={media.isPending}
 									getItemId={(item: MediaItem) => String(item.id)}
 									searchLabel={__('Search media', 'gophenberg')}
-									config={{ perPageSizes: [PER_PAGE] }}
-									paginationInfo={{
-										totalItems: page.total,
-										totalPages: Math.max(1, Math.ceil(page.total / PER_PAGE)),
-									}}
+									config={{ perPageSizes: [] }}
+									paginationInfo={paginationOf({ total: page.total, limit: page.perPage })}
 									defaultLayouts={
 										{
 											pickerGrid: { fields: [] },

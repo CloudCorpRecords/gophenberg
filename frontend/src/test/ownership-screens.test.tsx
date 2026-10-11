@@ -7,6 +7,7 @@ import { beforeAll, expect, test } from 'vitest'
 
 import { adminUser, renderAt } from './render'
 import { storedPost } from './postFixture'
+import { siteSettings } from './siteSettings'
 
 const FOREIGN = '019fb000-0000-7000-8000-0000000000ff'
 
@@ -80,6 +81,7 @@ function serveMedia(authorId: string) {
 					},
 				],
 				total: 1,
+				per_page: siteSettings.list_page_size,
 			}),
 		),
 	)

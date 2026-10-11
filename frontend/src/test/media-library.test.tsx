@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { deleteFailure, deleteQuestion } from '../media/actions'
 import { chosenFile, droppedFile, filteredKind } from '../media/MediaScreen'
 import { renderAt } from './render'
+import { siteSettings } from './siteSettings'
 
 const HARBOR = {
 	id: 7,
@@ -52,7 +53,11 @@ const MANUAL = {
  * @param items - The rows the listing answers.
  */
 function listing(items: unknown[] = [HARBOR, MANUAL]) {
-	server.use(http.get('/api/media', () => HttpResponse.json({ items, total: items.length })))
+	server.use(
+		http.get('/api/media', () =>
+			HttpResponse.json({ items, total: items.length, per_page: siteSettings.list_page_size }),
+		),
+	)
 }
 
 beforeEach(() => {
@@ -64,6 +69,35 @@ test('lists every media item the API returned', async () => {
 
 	expect(await screen.findByText('Harbor at dawn')).toBeInTheDocument()
 	expect(screen.getByText('Manual')).toBeInTheDocument()
+})
+
+test('asks the page size the settings name', async () => {
+	const asked: (string | null)[] = []
+	server.use(
+		http.get('/api/settings', () => HttpResponse.json({ ...siteSettings, list_page_size: 100 })),
+		http.get('/api/media', ({ request }) => {
+			asked.push(new URL(request.url).searchParams.get('per_page'))
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: 100 })
+		}),
+	)
+	renderAt('/media')
+
+	await screen.findByText('Harbor at dawn')
+
+	expect(asked).toEqual(['100'])
+})
+
+test('counts its pages by the size the server served', async () => {
+	server.use(
+		http.get('/api/settings', () => HttpResponse.json({ ...siteSettings, list_page_size: 50 })),
+		http.get('/api/media', () => HttpResponse.json({ items: [HARBOR, MANUAL], total: 25, per_page: 10 })),
+	)
+	renderAt('/media')
+	await screen.findByText('Harbor at dawn')
+
+	const pages = within(screen.getByRole('combobox', { name: 'Current page' })).getAllByRole('option')
+
+	expect(pages.map((page) => page.textContent)).toEqual(['1', '2', '3'])
 })
 
 test('draws a picture from its smallest fitting rendition', async () => {

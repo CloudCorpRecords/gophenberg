@@ -16,7 +16,11 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/google/uuid"
 
+	"github.com/gopherium/gouncer/authkit"
+
 	"github.com/gopherium/gophenberg/internal/media"
+	"github.com/gopherium/gophenberg/internal/role"
+	"github.com/gopherium/gophenberg/internal/server"
 )
 
 // The descriptions the describing scenario saves.
@@ -25,6 +29,12 @@ const (
 	savedAltText     = "Fishing boats moored at sunrise"
 	savedCaption     = "The harbor before the market opens"
 	savedDescription = "Taken from the eastern pier"
+)
+
+// The account the scenarios store as a second author beside the administrator.
+const (
+	anotherAuthorEmail = "another-author@example.com"
+	anotherAuthorName  = "Another Author"
 )
 
 // listedMedia is one media item as the admin list reports it.
@@ -37,6 +47,8 @@ type listedMedia struct {
 	Caption     string                `json:"caption"`
 	Description string                `json:"description"`
 	Sizes       map[string]listedSize `json:"sizes"`
+	AuthorID    string                `json:"author_id"`
+	AuthorName  string                `json:"author_name"`
 	UpdatedAt   time.Time             `json:"updated_at"`
 }
 
@@ -45,7 +57,7 @@ type listedSize struct {
 	File string `json:"file"`
 }
 
-// aSeededMediaLibrary starts a server and fills its library through the real pipeline.
+// aSeededMediaLibrary starts a server and fills its library through the real pipeline as the administrator.
 func aSeededMediaLibrary(ctx context.Context) error {
 	w, err := worldOf(ctx)
 	if err != nil {
@@ -54,12 +66,18 @@ func aSeededMediaLibrary(ctx context.Context) error {
 	if err := w.start(ctx); err != nil {
 		return err
 	}
-	return w.seedMediaLibrary()
+	if err := theAdministratorAccountExists(ctx); err != nil {
+		return err
+	}
+	admin, err := w.users.UserByEmail(ctx, adminEmail)
+	if err != nil {
+		return fmt.Errorf("finding the administrator: %w", err)
+	}
+	return w.seedMediaLibrary(admin.ID)
 }
 
-// seedMediaLibrary ingests two images and a document as a fixed seed.
-func (w *world) seedMediaLibrary() error {
-	author := uuid.Must(uuid.NewV7())
+// seedMediaLibrary ingests two images and a document under the author as a fixed seed.
+func (w *world) seedMediaLibrary(author uuid.UUID) error {
 	harbor, err := jpegImage(600, 400)
 	if err != nil {
 		return err
@@ -77,13 +95,85 @@ func (w *world) seedMediaLibrary() error {
 		{"manual.pdf", pdfDocument()},
 	}
 	for _, seed := range seeds {
-		item, err := w.mediaFiles.Ingest(context.Background(), seed.name, seed.data, author)
-		if err != nil {
-			return fmt.Errorf("seeding %q: %w", seed.name, err)
+		if err := w.storeUpload(seed.name, seed.data, author); err != nil {
+			return err
 		}
-		if _, err := w.mediaStore.Create(context.Background(), item); err != nil {
-			return fmt.Errorf("storing the seed %q: %w", seed.name, err)
+	}
+	return nil
+}
+
+// storeUpload ingests the file through the real pipeline under the author and stores the item it makes.
+func (w *world) storeUpload(name string, data []byte, author uuid.UUID) error {
+	item, err := w.mediaFiles.Ingest(context.Background(), name, data, author)
+	if err != nil {
+		return fmt.Errorf("ingesting %q: %w", name, err)
+	}
+	if _, err := w.mediaStore.Create(context.Background(), item); err != nil {
+		return fmt.Errorf("storing %q: %w", name, err)
+	}
+	return nil
+}
+
+// theImageWasUploadedByAnotherAuthor stores a fresh image under an account other than the administrator.
+func theImageWasUploadedByAnotherAuthor(ctx context.Context, name string) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = authkit.EnsureAdmin(ctx, w.users, anotherAuthorEmail, anotherAuthorName, adminPassword, role.Author)
+	if err != nil {
+		return fmt.Errorf("storing another author: %w", err)
+	}
+	author, err := w.users.UserByEmail(ctx, anotherAuthorEmail)
+	if err != nil {
+		return fmt.Errorf("finding another author: %w", err)
+	}
+	photo, err := jpegImage(60, 40)
+	if err != nil {
+		return err
+	}
+	return w.storeUpload(name, photo, author.ID)
+}
+
+// everyListedItemNamesItsUploader asserts each item of the last listing names its uploader, from two accounts at least.
+func everyListedItemNamesItsUploader(ctx context.Context) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if err := w.expect(http.StatusOK); err != nil {
+		return fmt.Errorf("listing the library: %w", err)
+	}
+	var listed struct {
+		Items []listedMedia `json:"items"`
+	}
+	if err := w.answer.decode(&listed); err != nil {
+		return err
+	}
+	uploaders := make(map[string]bool, len(listed.Items))
+	for _, item := range listed.Items {
+		if err := w.namesItsUploader(item); err != nil {
+			return err
 		}
+		uploaders[item.AuthorID] = true
+	}
+	if len(uploaders) < 2 {
+		return errors.New("the listing names fewer than two accounts, want the upload of each account listed")
+	}
+	return nil
+}
+
+// namesItsUploader asserts the listed item carries the name of the account that uploaded it.
+func (w *world) namesItsUploader(item listedMedia) error {
+	author, err := uuid.Parse(item.AuthorID)
+	if err != nil {
+		return fmt.Errorf("%q names the author %q, want an account id", item.Title, item.AuthorID)
+	}
+	if !w.users.holdsUser(author) {
+		return fmt.Errorf("no account uploaded %q, want every item uploaded by one", item.Title)
+	}
+	if want := w.users.nameOf(author); item.AuthorName != want {
+		return fmt.Errorf("%q names its author %q, want %q", item.Title, item.AuthorName, want)
 	}
 	return nil
 }
@@ -502,6 +592,62 @@ func asksForMediaNeverStored(ctx context.Context) error {
 	return w.get(mediaPath + "/987654")
 }
 
+// theAdminListsOpenAtAndCarryAtMost serves the site again, its lists opening at size and carrying at most ceiling.
+func theAdminListsOpenAtAndCarryAtMost(ctx context.Context, size, ceiling int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if size >= ceiling {
+		return fmt.Errorf("lists opening at %d items cannot carry at most %d, want the cap above the size", size, ceiling)
+	}
+	w.lists = server.ListSettings{PageSizes: []int{size, ceiling}, PageSize: size, PageCap: ceiling}
+	return w.serveAgain()
+}
+
+// listsTheLibrary lists the library naming no parameter.
+func listsTheLibrary(ctx context.Context) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	return w.get(mediaPath)
+}
+
+// listsTheLibraryAtATime lists the library in pages of the size.
+func listsTheLibraryAtATime(ctx context.Context, size int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	return w.get(fmt.Sprintf("%s?per_page=%d", mediaPath, size))
+}
+
+// theLibraryWasPagedAtATime asserts the listing answered the page size it used and carried no more items than it.
+func theLibraryWasPagedAtATime(ctx context.Context, size int) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	if err := w.expect(http.StatusOK); err != nil {
+		return fmt.Errorf("listing the library: %w", err)
+	}
+	var listed struct {
+		Items   []listedMedia `json:"items"`
+		PerPage int           `json:"per_page"`
+	}
+	if err := w.answer.decode(&listed); err != nil {
+		return err
+	}
+	if listed.PerPage != size {
+		return fmt.Errorf("the library was paged %d at a time, want %d", listed.PerPage, size)
+	}
+	if len(listed.Items) > size {
+		return fmt.Errorf("the page carries %d items, want at most %d", len(listed.Items), size)
+	}
+	return nil
+}
+
 // listsTheLibraryWith lists the library with the named parameters.
 func listsTheLibraryWith(ctx context.Context, parameters string) error {
 	w, err := worldOf(ctx)
@@ -509,9 +655,18 @@ func listsTheLibraryWith(ctx context.Context, parameters string) error {
 		return err
 	}
 	queries := map[string]string{
-		`the type "audio"`:    "?type=audio",
-		`the page "0"`:        "?page=0",
-		`the page size "500"`: "?per_page=500",
+		`the type "audio"`:                     "?type=audio",
+		`the page "0"`:                         "?page=0",
+		`the page size "0"`:                    "?per_page=0",
+		`the page size "x"`:                    "?per_page=x",
+		`the sort "slug"`:                      "?orderby=slug",
+		`the sort order "sideways"`:            "?order=sideways",
+		`the author "nobody"`:                  "?author=nobody",
+		`the excluded author "nobody"`:         "?author_exclude=nobody",
+		`the date added before "yesterday"`:    "?before=yesterday",
+		`the date added after "yesterday"`:     "?after=yesterday",
+		`the date modified before "yesterday"`: "?modified_before=yesterday",
+		`the date modified after "yesterday"`:  "?modified_after=yesterday",
 	}
 	query, known := queries[parameters]
 	if !known {
@@ -532,8 +687,11 @@ func theRequestIsRefusedAsABadListing(ctx context.Context) error {
 // initializeMediaLibrary binds the steps of the media library feature.
 func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	registerSharedSteps(sc)
+	registerMediaListSteps(sc)
 	sc.Given(`^a running Gophenberg holding a seeded media library$`, aSeededMediaLibrary)
 	sc.Given(`^two administrators read the image "([^"]*)"$`, twoAdministratorsRead)
+	sc.Given(`^the admin lists open at (\d+) items and carry at most (\d+) a page$`, theAdminListsOpenAtAndCarryAtMost)
+	sc.Given(`^the image "([^"]*)" was uploaded by another author$`, theImageWasUploadedByAnotherAuthor)
 	sc.When(`^the administrator uploads a new image named "([^"]*)"$`, uploadsANewImageNamed)
 	sc.When(`^the administrator searches the library for "([^"]*)"$`, searchesTheLibraryFor)
 	sc.When(`^the administrator filters the library to images$`, filtersTheLibraryToImages)
@@ -545,12 +703,16 @@ func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	sc.When(`^the administrator permanently deletes the image "([^"]*)"$`, permanentlyDeletesTheImage)
 	sc.When(`^the administrator deletes "([^"]*)" again$`, deletesAgain)
 	sc.When(`^the administrator asks for media that was never stored$`, asksForMediaNeverStored)
+	sc.When(`^the administrator lists the library$`, listsTheLibrary)
+	sc.When(`^the administrator lists the library (\d+) at a time$`, listsTheLibraryAtATime)
 	sc.When(`^the administrator lists the library with (.+)$`, listsTheLibraryWith)
 	sc.Then(`^the library lists "([^"]*)" first$`, theLibraryListsFirst)
 	sc.Then(`^the library lists only media matching "([^"]*)"$`, theLibraryListsOnlyMatching)
 	sc.Then(`^the library lists no plain files$`, theLibraryListsNoPlainFiles)
 	sc.Then(`^the library still lists every image$`, theLibraryStillListsEveryImage)
 	sc.Then(`^the library reports the total while listing the remainder$`, theLibraryReportsTheTotal)
+	sc.Then(`^the library was paged (\d+) at a time$`, theLibraryWasPagedAtATime)
+	sc.Then(`^every listed item names the account that uploaded it$`, everyListedItemNamesItsUploader)
 	sc.Then(`^reading "([^"]*)" back returns every saved description$`, readingBackReturnsTheDescriptions)
 	sc.Then(`^the request is accepted$`, theRequestIsAccepted)
 	sc.Then(`^the second save is refused as a conflict$`, theSecondSaveIsRefusedAsAConflict)
@@ -559,4 +721,5 @@ func initializeMediaLibrary(sc *godog.ScenarioContext) {
 	sc.Then(`^the files of "([^"]*)" are gone from the media directory$`, theFilesAreGoneFromTheMediaDirectory)
 	sc.Then(`^the request reports the media does not exist$`, theRequestReportsTheMediaDoesNotExist)
 	sc.Then(`^the request is refused as a bad listing$`, theRequestIsRefusedAsABadListing)
+	sc.Then(`^the request is refused with the code "([^"]*)"$`, theRequestIsRefusedWithTheCode)
 }

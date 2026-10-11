@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/media"
 	"github.com/gopherium/gophenberg/internal/mediahost"
@@ -33,6 +36,7 @@ type fakeMediaStore struct {
 	mu          sync.Mutex
 	next        int64
 	items       map[int64]media.Media
+	authors     map[uuid.UUID]string
 	updateCalls int
 	lastFilter  media.Filter
 	createErr   error
@@ -86,22 +90,24 @@ func (s *fakeMediaStore) ByIDs(_ context.Context, ids []int64) ([]media.Media, e
 	return listed, nil
 }
 
-// List returns every stored item newest first with their count, or fails as told.
-func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Media, int, error) {
+// List returns the filter's page of the stored items newest first beside their authors' names, or fails as told.
+func (s *fakeMediaStore) List(_ context.Context, f media.Filter) ([]media.Listed, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastFilter = f
 	if s.listErr != nil {
 		return nil, 0, s.listErr
 	}
-	items := make([]media.Media, 0, len(s.items))
+	items := make([]media.Listed, 0, len(s.items))
 	for _, m := range s.items {
 		if f.Type == "" || m.Type == f.Type {
-			items = append(items, m)
+			items = append(items, media.Listed{Media: m, AuthorName: s.authors[m.AuthorID]})
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID > items[j].ID })
-	return items, len(items), nil
+	total := len(items)
+	start := min((f.Page-1)*f.PerPage, total)
+	return items[start:min(start+f.PerPage, total)], total, nil
 }
 
 // Update stores the item's descriptions, or reports a missing item or a stale edit.
@@ -155,6 +161,14 @@ func (s *fakeMediaStore) count() int {
 // mediaServer returns a signed in handler over a real library and the given store.
 func mediaServer(t *testing.T, library *mediahost.Library, store media.Store) http.Handler {
 	t.Helper()
+	return pagedMediaServer(t, library, store, server.ListSettings{})
+}
+
+// pagedMediaServer returns a signed in handler over a real library and the store, paging as the settings name.
+func pagedMediaServer(
+	t *testing.T, library *mediahost.Library, store media.Store, lists server.ListSettings,
+) http.Handler {
+	t.Helper()
 	users := newFakeUserStore()
 	addAda(t, users)
 	return authedServerWithStores(t, server.Config{
@@ -163,6 +177,7 @@ func mediaServer(t *testing.T, library *mediahost.Library, store media.Store) ht
 		Types:      newFakeTypeStore(),
 		Media:      library,
 		MediaStore: store,
+		Lists:      lists,
 	})
 }
 
@@ -211,17 +226,18 @@ func sendMediaUpload(t *testing.T, handler http.Handler, filename string, data [
 
 // mediaBody is the media item shape the admin API answers.
 type mediaBody struct {
-	ID        int64     `json:"id"`
-	Type      string    `json:"type"`
-	File      string    `json:"file"`
-	Title     string    `json:"title"`
-	AltText   string    `json:"alt_text"`
-	MimeType  string    `json:"mime_type"`
-	Width     int       `json:"width"`
-	Height    int       `json:"height"`
-	AuthorID  string    `json:"author_id"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Sizes     map[string]struct {
+	ID         int64     `json:"id"`
+	Type       string    `json:"type"`
+	File       string    `json:"file"`
+	Title      string    `json:"title"`
+	AltText    string    `json:"alt_text"`
+	MimeType   string    `json:"mime_type"`
+	Width      int       `json:"width"`
+	Height     int       `json:"height"`
+	AuthorID   string    `json:"author_id"`
+	AuthorName string    `json:"author_name"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Sizes      map[string]struct {
 		File  string `json:"file"`
 		Width int    `json:"width"`
 	} `json:"sizes"`
@@ -437,6 +453,39 @@ func TestListingMediaAnswersItemsWithTheirTotal(t *testing.T) {
 	}
 }
 
+func TestListingMediaNamesTheAuthorOfEveryRow(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeMediaStore()
+	first, second := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	store.authors = map[uuid.UUID]string{first: "Maria Perez", second: "Second Author"}
+	for i, author := range []uuid.UUID{first, second, first} {
+		if _, err := store.Create(context.Background(), media.Media{
+			Type: media.TypeImage, Title: fmt.Sprintf("item %d", i), MimeType: "image/jpeg", AuthorID: author,
+		}); err != nil {
+			t.Fatalf("storing item %d: %v", i, err)
+		}
+	}
+	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+
+	recorder := doRequest(t, handler, http.MethodGet, "/api/media", "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := decodeBody[struct {
+		Items []mediaBody `json:"items"`
+	}](t, recorder)
+	if len(body.Items) != 3 {
+		t.Fatalf("listing = %d items, want all three", len(body.Items))
+	}
+	for _, item := range body.Items {
+		if want := store.authors[uuid.MustParse(item.AuthorID)]; item.AuthorName != want {
+			t.Errorf("%q names its author %q, want %q", item.Title, item.AuthorName, want)
+		}
+	}
+}
+
 func TestListingMediaNarrowsByContentType(t *testing.T) {
 	t.Parallel()
 
@@ -465,19 +514,151 @@ func TestListingMediaNarrowsByContentType(t *testing.T) {
 	}
 }
 
+func TestListingMediaNarrowsByAuthorAndDates(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeMediaStore()
+	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+	kept := []uuid.UUID{
+		uuid.MustParse("0199a1b2-0000-7000-8000-000000000001"), uuid.MustParse("0199a1b2-0000-7000-8000-000000000002"),
+	}
+	left := uuid.MustParse("0199a1b2-0000-7000-8000-000000000003")
+	at := func(month time.Month) time.Time { return time.Date(2026, month, 1, 0, 0, 0, 0, time.UTC) }
+	query := url.Values{
+		"author":          {kept[0].String() + "," + kept[1].String()},
+		"author_exclude":  {left.String()},
+		"after":           {"2026-03-01T00:00:00Z"},
+		"before":          {"2026-04-01T02:00:00+02:00"},
+		"modified_after":  {"2026-05-01T00:00:00Z"},
+		"modified_before": {"2026-06-01T00:00:00Z"},
+	}
+
+	recorder := doRequest(t, handler, http.MethodGet, "/api/media?"+query.Encode(), "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	f := store.lastFilter
+	if !slices.Equal(f.Authors, kept) || !slices.Equal(f.ExcludeAuthors, []uuid.UUID{left}) {
+		t.Errorf("the store was asked for authors %v leaving out %v, want %v leaving out %v",
+			f.Authors, f.ExcludeAuthors, kept, left)
+	}
+	for _, bound := range []struct {
+		name string
+		got  *time.Time
+		want time.Time
+	}{
+		{"after", f.After, at(time.March)}, {"before", f.Before, at(time.April)},
+		{"modified_after", f.ModifiedAfter, at(time.May)}, {"modified_before", f.ModifiedBefore, at(time.June)},
+	} {
+		if bound.got == nil || !bound.got.Equal(bound.want) || bound.got.Location() != time.UTC {
+			t.Errorf("the store was asked for %s %v, want %v in UTC", bound.name, bound.got, bound.want)
+		}
+	}
+}
+
+func TestListingMediaSortsAsTheQueryNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		query   string
+		orderBy media.OrderBy
+		order   media.Order
+	}{
+		{"", media.OrderByDate, media.OrderDesc},
+		{"?order=asc", media.OrderByDate, media.OrderAsc},
+		{"?orderby=title", media.OrderByTitle, media.OrderDesc},
+		{"?orderby=title&order=asc", media.OrderByTitle, media.OrderAsc},
+		{"?orderby=modified&order=asc", media.OrderByModified, media.OrderAsc},
+		{"?orderby=author&order=desc", media.OrderByAuthor, media.OrderDesc},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
+			store := newFakeMediaStore()
+			handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store)
+
+			recorder := doRequest(t, handler, http.MethodGet, "/api/media"+tt.query, "")
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if store.lastFilter.OrderBy != tt.orderBy || store.lastFilter.Order != tt.order {
+				t.Errorf("the store was asked for %q %q, want %q %q",
+					store.lastFilter.OrderBy, store.lastFilter.Order, tt.orderBy, tt.order)
+			}
+		})
+	}
+}
+
 func TestListingMediaRefusesParametersItCannotMakeSenseOf(t *testing.T) {
 	t.Parallel()
 
 	handler := mediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), newFakeMediaStore())
 
 	badQueries := []string{
-		"?type=audio", "?page=0", "?page=x", "?per_page=500", "?per_page=x", "?per_page=0",
+		"?type=audio", "?page=0", "?page=x", "?per_page=x", "?per_page=0",
+		"?orderby=slug", "?orderby=", "?order=sideways", "?order=",
+		"?author=nobody", "?author_exclude=nobody", "?before=yesterday", "?after=yesterday",
+		"?modified_before=yesterday", "?modified_after=yesterday",
 	}
 	for _, badQuery := range badQueries {
 		recorder := doRequest(t, handler, http.MethodGet, "/api/media"+badQuery, "")
 		if recorder.Code != http.StatusBadRequest {
 			t.Errorf("listing with %q status = %d, want %d", badQuery, recorder.Code, http.StatusBadRequest)
+			continue
 		}
+		if code := errorCode(t, recorder); code != "list_parameters_invalid" {
+			t.Errorf("listing with %q code = %q, want list_parameters_invalid", badQuery, code)
+		}
+	}
+}
+
+// heldMediaItems stores count bare images straight into the store.
+func heldMediaItems(t *testing.T, store *fakeMediaStore, count int) {
+	t.Helper()
+	for i := range count {
+		if _, err := store.Create(context.Background(), media.Media{
+			Type: media.TypeImage, Title: fmt.Sprintf("item %d", i), MimeType: "image/jpeg",
+		}); err != nil {
+			t.Fatalf("storing item %d: %v", i, err)
+		}
+	}
+}
+
+func TestListingMediaPagesAtTheConfiguredSizeAndCutsALargerPageToTheCap(t *testing.T) {
+	t.Parallel()
+
+	for name, asked := range map[string]struct {
+		query string
+		want  int
+	}{
+		"no page size":             {"", 10},
+		"a page size past the cap": {"?per_page=500", 50},
+		"exactly the cap":          {"?per_page=50", 50},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			store := newFakeMediaStore()
+			heldMediaItems(t, store, 60)
+			handler := pagedMediaServer(t, mediahost.New(mediahost.Config{Dir: t.TempDir()}), store,
+				server.ListSettings{PageSizes: []int{10, 50}, PageSize: 10, PageCap: 50})
+
+			recorder := doRequest(t, handler, http.MethodGet, "/api/media"+asked.query, "")
+
+			used := answeredPageSize(t, recorder)
+			body := decodeBody[struct {
+				Items []mediaBody `json:"items"`
+				Total int         `json:"total"`
+			}](t, recorder)
+			if used != asked.want || store.lastFilter.PerPage != asked.want {
+				t.Errorf("answered %d and listed %d, want %d", used, store.lastFilter.PerPage, asked.want)
+			}
+			if len(body.Items) != asked.want || body.Total != 60 {
+				t.Errorf("listing = %d items of %d, want %d of 60", len(body.Items), body.Total, asked.want)
+			}
+		})
 	}
 }
 
@@ -847,7 +1028,7 @@ func TestListingMediaByIdentityRefusesWhatItCannotRead(t *testing.T) {
 		"an identity that is no number":       "ids=1,x",
 		"an identity below one":               "ids=0",
 		"no identity at all":                  "ids=",
-		"more identities than a page carries": "ids=" + strings.Repeat("1,", 100) + "1",
+		"more identities than one call names": "ids=" + strings.Repeat("1,", 100) + "1",
 		"a search beside the identities":      "ids=1&search=harbor",
 		"a page beside the identities":        "ids=1&page=2",
 		"the identities asked for twice":      "ids=1&ids=2",

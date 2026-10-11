@@ -48,7 +48,7 @@ func listSettingsFrom(env gonsole.Env) (server.ListSettings, error) {
 	return held, nil
 }
 
-// listPagingFrom reads the page sizes a list offers, the one it opens at and the most one page carries.
+// listPagingFrom reads the page sizes a list offers, the ones it and the picker open at, and the most one page carries.
 func listPagingFrom(env gonsole.Env) (server.ListSettings, error) {
 	ceiling, err := env.Count("LIST_PAGE_CAP", server.DefaultListPageCap, gonsole.AtMost(largestPageCap))
 	if err != nil {
@@ -64,13 +64,25 @@ func listPagingFrom(env gonsole.Env) (server.ListSettings, error) {
 		return server.ListSettings{}, fmt.Errorf("%s: must stand at or above the largest page size %d, got %d",
 			env.Key("LIST_PAGE_CAP"), largest, ceiling)
 	}
-	size, err := env.Count("LIST_PAGE_SIZE", server.DefaultListPageSize)
+	size, err := offeredSize(env, "LIST_PAGE_SIZE", sizes, server.DefaultListPageSize)
 	if err != nil {
 		return server.ListSettings{}, err
 	}
-	if !slices.Contains(sizes, size) {
-		return server.ListSettings{}, fmt.Errorf("%s: must be one of %s %v, got %d",
-			env.Key("LIST_PAGE_SIZE"), env.Key("LIST_PAGE_SIZES"), sizes, size)
+	picker, err := offeredSize(env, "PICKER_PAGE_SIZE", sizes, server.DefaultPickerPageSizeAmong(sizes, size))
+	if err != nil {
+		return server.ListSettings{}, err
 	}
-	return server.ListSettings{PageSizes: sizes, PageSize: size, PageCap: ceiling}, nil
+	return server.ListSettings{PageSizes: sizes, PageSize: size, PickerPageSize: picker, PageCap: ceiling}, nil
+}
+
+// offeredSize returns the named page size, the fallback when it is empty, an error when the sizes do not offer it.
+func offeredSize(env gonsole.Env, name string, sizes []int, fallback int) (int, error) {
+	size, err := env.Count(name, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if !slices.Contains(sizes, size) {
+		return 0, fmt.Errorf("%s: must be one of %s %v, got %d", env.Key(name), env.Key("LIST_PAGE_SIZES"), sizes, size)
+	}
+	return size, nil
 }
