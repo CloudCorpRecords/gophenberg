@@ -3,12 +3,16 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
+	"github.com/gopherium/gouncer"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/gopherium/gophenberg/internal/role"
 )
 
 // accountsSite returns the settings of a migrated database holding an admin, an editor and an author.
@@ -124,5 +128,16 @@ func TestAPreviewOfAnAccountChangeRecordsNothing(t *testing.T) {
 	}
 	if held := recordsOf(t, getenv); len(held) != 0 {
 		t.Errorf("records = %q, want none", held)
+	}
+}
+
+func TestAccountRolesCountEveryRoleCarryingManageUsersAsPrivileged(t *testing.T) {
+	t.Parallel()
+
+	held := accountRoles(declared(t, declaringRole("teams", "team_lead", string(role.ManageUsers))))
+
+	privileged := gouncer.Roles{role.Admin, "team_lead"}
+	if !slices.Equal(held.Privileged, privileged) || !slices.Contains(held.Known, "team_lead") {
+		t.Errorf("accountRoles() = %+v, want team_lead known and privileged beside admin", held)
 	}
 }
