@@ -109,6 +109,21 @@ func wasUploadedByAnAuthorWhoseNameSortsFirst(ctx context.Context, title string)
 	return w.mediaStore.changeTitled(title, func(item *media.Media) { item.AuthorID = author.ID })
 }
 
+// theImageCarriesThe gives the stored item titled title the words as its caption or its description.
+func theImageCarriesThe(ctx context.Context, title, field, words string) error {
+	w, err := worldOf(ctx)
+	if err != nil {
+		return err
+	}
+	return w.mediaStore.changeTitled(title, func(item *media.Media) {
+		if field == "caption" {
+			item.Caption = words
+			return
+		}
+		item.Description = words
+	})
+}
+
 // listsTheLibrarySortedByIn lists the library sorted by the column in the direction.
 func listsTheLibrarySortedByIn(ctx context.Context, orderBy, order string) error {
 	w, err := worldOf(ctx)
@@ -242,6 +257,7 @@ func registerMediaListSteps(sc *godog.ScenarioContext) {
 	sc.Given(`^"([^"]*)" and "([^"]*)" were modified at the same moment$`, wereModifiedAtTheSameMoment)
 	sc.Given(`^"([^"]*)" was modified after them$`, wasModifiedAfterThem)
 	sc.Given(`^"([^"]*)" was uploaded by an author whose name sorts first$`, wasUploadedByAnAuthorWhoseNameSortsFirst)
+	sc.Given(`^the image "([^"]*)" carries the (caption|description) "([^"]*)"$`, theImageCarriesThe)
 	sc.When(`^the administrator lists the library sorted by "([^"]*)" "([^"]*)"$`, listsTheLibrarySortedByIn)
 	sc.When(`^the administrator lists the library sorted by "([^"]*)"$`, listsTheLibrarySortedBy)
 	sc.When(`^the administrator filters the library to the uploads of that author$`,

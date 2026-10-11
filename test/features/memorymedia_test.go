@@ -128,8 +128,9 @@ func matches(m media.Media, f media.Filter) bool {
 		return true
 	}
 	search := strings.ToLower(f.Search)
-	return strings.Contains(strings.ToLower(m.Title), search) ||
-		strings.Contains(strings.ToLower(m.File), search)
+	return slices.ContainsFunc([]string{m.Title, m.File, m.Caption, m.Description}, func(words string) bool {
+		return strings.Contains(strings.ToLower(words), search)
+	})
 }
 
 // withinAuthorsAndDates reports whether the item stands within the authors and the date bounds the filter narrows to.

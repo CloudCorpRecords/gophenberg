@@ -68,7 +68,6 @@ Feature: Managing the media library
     When the administrator searches the library for "harbor"
     Then the library lists only media matching "harbor"
 
-  @wip
   Scenario Outline: Searching the library by <field>
     Given the image "cliff" carries the <field> "A lighthouse above the bay"
     When the administrator searches the library for "lighthouse"
