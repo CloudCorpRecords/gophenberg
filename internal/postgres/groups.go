@@ -1055,7 +1055,7 @@ func relationsBelow(f content.Field, held []int32) []int32 {
 
 // settledFieldWrite runs the write once the check passes and the key is held free of every rival group sharing a type.
 func (s *TypeStore) settledFieldWrite(
-	ctx context.Context, groupID int, key string, leaving int, recheck content.Recheck, write func(*db.Queries) error,
+	ctx context.Context, groupID int, key string, recheck content.Recheck, write func(*db.Queries) error,
 ) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		queries := s.queries.WithTx(tx)
@@ -1065,7 +1065,7 @@ func (s *TypeStore) settledFieldWrite(
 		if err := rechecked(ctx, queries, recheck); err != nil {
 			return err
 		}
-		if err := keyFreeInGroup(ctx, queries, groupID, key, leaving); err != nil {
+		if err := keyFreeInGroup(ctx, queries, groupID, key, 0); err != nil {
 			return err
 		}
 		return write(queries)
@@ -1152,7 +1152,7 @@ func (s *TypeStore) CreateFieldInGroup(
 	ctx context.Context, groupID int, f content.Field, recheck content.Recheck,
 ) (content.Field, error) {
 	var created content.Field
-	err := s.settledFieldWrite(ctx, groupID, f.Key, 0, recheck, func(queries *db.Queries) error {
+	err := s.settledFieldWrite(ctx, groupID, f.Key, recheck, func(queries *db.Queries) error {
 		row, err := queries.CreateContentField(ctx, db.CreateContentFieldParams{
 			GroupID:   int32(groupID),
 			Origin:    originColumn(f.Origin),
