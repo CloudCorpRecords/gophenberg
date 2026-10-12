@@ -6,12 +6,22 @@ import { expect, test } from 'vitest'
 
 import { repositoryRoot } from '../../scripts/config.ts'
 
-/** The scoped design system packages that render unstyled or lose their state when two copies load. */
+/** The scoped packages that render unstyled or lose their state when two copies load. */
 const SINGLE_COPY = [
 	'@gopherium/godmin',
 	'@gopherium/react-auth',
 	'@wordpress/a11y',
+	'@wordpress/block-editor',
+	'@wordpress/blocks',
+	'@wordpress/components',
+	'@wordpress/data',
+	'@wordpress/date',
+	'@wordpress/element',
+	'@wordpress/hooks',
 	'@wordpress/icons',
+	'@wordpress/keyboard-shortcuts',
+	'@wordpress/private-apis',
+	'@wordpress/rich-text',
 	'@wordpress/style-runtime',
 	'@wordpress/theme',
 	'@wordpress/ui',
