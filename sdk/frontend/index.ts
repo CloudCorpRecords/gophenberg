@@ -18,6 +18,7 @@ export interface NavItem {
 	label: string
 	to: string
 	icon: ReactElement<ComponentProps<'svg'>>
+	capability?: Capability
 }
 
 export interface FrontendPlugin {
