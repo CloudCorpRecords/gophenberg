@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/content"
+	"github.com/gopherium/gophenberg/internal/media"
 )
 
 // keptRows returns how many of n rows a short store keeps, by the rule's name.
@@ -77,5 +78,23 @@ func (s shortTypes) List(ctx context.Context) ([]content.Type, error) {
 // ListGroups returns the stored groups cut short.
 func (s shortTypes) ListGroups(ctx context.Context) ([]content.Group, error) {
 	rows, err := s.TypeStore.ListGroups(ctx)
+	return shorten(rows, s.keep), err
+}
+
+// shortMedia is a media store whose listing and reads by identity keep only some of their rows.
+type shortMedia struct {
+	media.Store
+	keep func(n int) int
+}
+
+// List returns the stored listing cut short.
+func (s shortMedia) List(ctx context.Context, f media.Filter) ([]media.Listed, int, error) {
+	rows, total, err := s.Store.List(ctx, f)
+	return shorten(rows, s.keep), total, err
+}
+
+// ByIDs returns the named items cut short.
+func (s shortMedia) ByIDs(ctx context.Context, ids []int64) ([]media.Media, error) {
+	rows, err := s.Store.ByIDs(ctx, ids)
 	return shorten(rows, s.keep), err
 }

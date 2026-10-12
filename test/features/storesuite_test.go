@@ -75,6 +75,16 @@ func shortStores(rule string) contenttest.Factory {
 	}
 }
 
+// shortMediaStores returns a factory of in-memory media stores whose reads keep only the rows the named rule leaves.
+func shortMediaStores(rule string) mediatest.Factory {
+	return func(t *testing.T) mediatest.Stores {
+		t.Helper()
+		s := memoryMediaStores(t)
+		s.Media = shortMedia{Store: s.Media, keep: keptRows[rule]}
+		return s
+	}
+}
+
 func TestContentStoreSuite(t *testing.T) {
 	t.Parallel()
 
@@ -142,4 +152,14 @@ func TestTypeStoreSuiteFailsWithoutPanickingOnShortRows(t *testing.T) {
 	t.Parallel()
 
 	shortRowsRuns(t, "TestTypeStoreSuiteFailsWithoutPanickingOnShortRows", len(contenttest.TypeCases()))
+}
+
+func TestMediaStoreSuiteFailsWithoutPanickingOnShortRows(t *testing.T) {
+	if rule := os.Getenv(shortRowsVariable); rule != "" {
+		mediatest.Run(t, shortMediaStores(rule))
+		return
+	}
+	t.Parallel()
+
+	shortRowsRuns(t, "TestMediaStoreSuiteFailsWithoutPanickingOnShortRows", len(mediatest.Cases()))
 }
