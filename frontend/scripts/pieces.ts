@@ -3,7 +3,20 @@
 import ts from 'typescript'
 
 /** A mutate entry naming a range, capturing its first and last line. */
-export const RANGE = /:(\d+)-(\d+)$/
+const RANGE = /:(\d+)-(\d+)$/
+
+/** The first and last line of a range, counted from 1. */
+interface Lines {
+	first: number
+	last: number
+}
+
+/** One mutate entry, as the file it names and its lines, none for a whole file. */
+export interface Piece {
+	target: string
+	file: string
+	lines?: Lines
+}
 
 /**
  * Returns the file a mutate entry names.
@@ -12,6 +25,17 @@ export const RANGE = /:(\d+)-(\d+)$/
  */
 export function targetFile(target: string): string {
 	return target.replace(RANGE, '')
+}
+
+/**
+ * Returns the file and the lines a mutate entry names.
+ * @param target - The mutate entry, as file:start-end or a whole file.
+ * @returns The piece.
+ */
+export function pieceOf(target: string): Piece {
+	const range = RANGE.exec(target)
+	const file = targetFile(target)
+	return range === null ? { target, file } : { target, file, lines: { first: Number(range[1]), last: Number(range[2]) } }
 }
 
 /**
@@ -36,13 +60,10 @@ export function statementStarts(source: string, fileName: string): number[] {
  * @returns The pieces in line order, or the entry itself when it names no range.
  */
 export function cutTarget(target: string, starts: number[]): string[] {
-	const range = RANGE.exec(target)
-	if (range === null) {
+	const { file, lines } = pieceOf(target)
+	if (lines === undefined) {
 		return [target]
 	}
-	const file = targetFile(target)
-	const first = Number(range[1])
-	const last = Number(range[2])
-	const bounds = [first, ...starts.filter((line) => line > first && line <= last)]
-	return bounds.map((start, place) => `${file}:${start}-${(bounds[place + 1] ?? last + 1) - 1}`)
+	const bounds = [lines.first, ...starts.filter((line) => line > lines.first && line <= lines.last)]
+	return bounds.map((start, place) => `${file}:${start}-${(bounds[place + 1] ?? lines.last + 1) - 1}`)
 }

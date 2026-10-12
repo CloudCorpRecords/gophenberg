@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Instrumenter, type InstrumenterOptions } from '@stryker-mutator/instrumenter'
+import { type File, Instrumenter, type InstrumenterOptions } from '@stryker-mutator/instrumenter'
 
-import { RANGE, targetFile } from './pieces.ts'
+import { type Piece, pieceOf } from './pieces.ts'
 import { strykerPlugins } from './textDomain.ts'
-
-/** The log levels the instrumenter may write at. */
-const LEVELS = ['Trace', 'Debug', 'Info', 'Warn', 'Error', 'Fatal']
 
 /**
  * Drops a log message.
@@ -21,30 +18,25 @@ const drop = (): undefined => undefined
 const off = (): boolean => false
 
 /** A logger that drops every message. */
-const QUIET = Object.fromEntries(
-	LEVELS.flatMap((level) => [
-		[level.toLowerCase(), drop],
-		[`is${level}Enabled`, off],
-	]),
-) as unknown as ConstructorParameters<typeof Instrumenter>[0]
+const QUIET: ConstructorParameters<typeof Instrumenter>[0] = {
+	isTraceEnabled: off,
+	isDebugEnabled: off,
+	isInfoEnabled: off,
+	isWarnEnabled: off,
+	isErrorEnabled: off,
+	isFatalEnabled: off,
+	trace: drop,
+	debug: drop,
+	info: drop,
+	warn: drop,
+	error: drop,
+	fatal: drop,
+}
 
 /** The part of the Stryker config that shapes which mutants a run makes. */
 export interface MutationConfig {
 	ignorers?: string[]
 	mutator?: { plugins?: unknown[] | null; excludedMutations?: string[] }
-}
-
-/** The first and last line of a range, counted from 1. */
-interface Lines {
-	first: number
-	last: number
-}
-
-/** One mutate entry, as the file it names and its lines, none for a whole file. */
-interface Piece {
-	target: string
-	file: string
-	lines?: Lines
 }
 
 /**
@@ -99,22 +91,11 @@ export async function countMutants(
 }
 
 /**
- * Returns the file and the lines a mutate entry names.
- * @param target - The mutate entry, as file:start-end or a whole file.
- * @returns The piece.
- */
-function pieceOf(target: string): Piece {
-	const range = RANGE.exec(target)
-	const file = targetFile(target)
-	return range === null ? { target, file } : { target, file, lines: { first: Number(range[1]), last: Number(range[2]) } }
-}
-
-/**
  * Returns the mutate description Stryker builds for the pieces of one file, its lines counted from 0.
  * @param pieces - The pieces of the file.
  * @returns True when a piece is the whole file, otherwise every range from its first column to its last line end.
  */
-function mutateOf(pieces: Piece[]) {
+function mutateOf(pieces: Piece[]): File['mutate'] {
 	const ranges = pieces.flatMap(({ lines }) =>
 		lines === undefined
 			? []

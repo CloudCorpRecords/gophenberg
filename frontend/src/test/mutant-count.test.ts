@@ -17,9 +17,13 @@ const SOURCE = [
 	'export type Name = string',
 ].join('\n')
 
+const OTHER = 'frontend/src/other.ts'
+
 const WITH_DOMAIN = instrumenterOptions({ ignorers: ['text-domain'] })
 
 const sourceOf = () => SOURCE
+
+const readEither = (file: string) => (file === OTHER ? 'export const b = !a' : SOURCE)
 
 test('counts the mutants Stryker makes inside each range', async () => {
 	const counts = await countMutants([`${FILE}:1-3`, `${FILE}:5-5`], sourceOf, WITH_DOMAIN)
@@ -55,21 +59,15 @@ test('loses no mutant when a range is cut at its statement starts', async () => 
 })
 
 test('counts the ranges of several files apart', async () => {
-	const other = 'frontend/src/other.ts'
-	const read = (file: string) => (file === other ? 'export const b = !a' : SOURCE)
+	const counts = await countMutants([`${FILE}:1-3`, `${OTHER}:1-1`], readEither, WITH_DOMAIN)
 
-	const counts = await countMutants([`${FILE}:1-3`, `${other}:1-1`], read, WITH_DOMAIN)
-
-	expect(Object.fromEntries(counts)).toEqual({ [`${FILE}:1-3`]: 5, [`${other}:1-1`]: 1 })
+	expect(Object.fromEntries(counts)).toEqual({ [`${FILE}:1-3`]: 5, [`${OTHER}:1-1`]: 1 })
 })
 
 test('counts a range and the whole of another file in one call', async () => {
-	const other = 'frontend/src/other.ts'
-	const read = (file: string) => (file === other ? 'export const b = !a' : SOURCE)
+	const counts = await countMutants([`${FILE}:1-3`, OTHER], readEither, WITH_DOMAIN)
 
-	const counts = await countMutants([`${FILE}:1-3`, other], read, WITH_DOMAIN)
-
-	expect(Object.fromEntries(counts)).toEqual({ [`${FILE}:1-3`]: 5, [other]: 1 })
+	expect(Object.fromEntries(counts)).toEqual({ [`${FILE}:1-3`]: 5, [OTHER]: 1 })
 })
 
 test('leaves out the mutators the config excludes', async () => {
