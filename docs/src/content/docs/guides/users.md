@@ -27,8 +27,9 @@ An **author** writes and works only its own content and media.
 
 Nothing else changes with the role. Every role signs in the same way
 and sees the same admin, minus the screens its capabilities do not
-open. A role a plugin declares with `manage_themes`, for example,
-sees the Themes screen and none of the other admin screens.
+open. A role a plugin declares with only `manage_themes`, for
+example, sees the Themes screen and none of the other admin screens.
+Each further capability the role carries opens its own screen too.
 
 ## Signing in
 
@@ -48,7 +49,8 @@ badge.
 **Creating a user** asks for email, name, password and role. The
 password must be at least 12 characters, and a taken email says
 so. The role menu offers the roles your own role reaches, and starts
-on Author.
+on Author, or on the narrowest role you may give when Author is not
+one of them.
 
 **Changing a role** starts from **Change role** on the account's
 row, which opens a small dialog. Pick the role and press **Change
