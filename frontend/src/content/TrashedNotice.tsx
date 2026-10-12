@@ -28,7 +28,7 @@ export function TrashedNotice({ postId, title }: { postId: string, title: string
 	const message =
 		restore.error?.message ?? __('This item is in the trash. Restore it first to work on it again.', 'gophenberg')
 	return (
-		<Notice.Root intent={restore.isError ? 'error' : 'warning'} spokenMessage={message}>
+		<Notice.Root intent={restore.isError ? 'error' : 'warning'}>
 			<Notice.Description>{message}</Notice.Description>
 			<Notice.Actions>
 				<Notice.ActionButton loading={restore.isPending} onClick={() => restore.mutate()}>

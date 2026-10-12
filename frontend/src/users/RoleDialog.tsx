@@ -30,7 +30,7 @@ export function ChangeRole({ user, grantable }: { user: User, grantable: string[
 				<Dialog.Popup size="small">
 					<Dialog.Header>
 						<Dialog.Title>{__('Change role', 'gophenberg')}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					{open && <RoleForm user={user} grantable={grantable} close={() => setOpen(false)} />}
 				</Dialog.Popup>

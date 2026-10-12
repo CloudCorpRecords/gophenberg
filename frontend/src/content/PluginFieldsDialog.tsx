@@ -46,7 +46,7 @@ export function PluginFieldsDialog(props: { held: FieldGroup; origin: string }) 
 						<Dialog.Title>
 							{sprintf(__('Fields of %(group)s', 'gophenberg'), { group: props.held.title })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">

@@ -190,7 +190,7 @@ export function RulesDialog(props: {
 						<Dialog.Title>
 							{sprintf(__('Where %(group)s appears', 'gophenberg'), { group: props.held.title })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">

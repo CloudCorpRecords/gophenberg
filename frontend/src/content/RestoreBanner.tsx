@@ -67,7 +67,7 @@ export function RestoreBanner({
 	}
 	const message = __('The browser kept an unsaved version of this post.', 'gophenberg')
 	return (
-		<Notice.Root intent="warning" spokenMessage={message}>
+		<Notice.Root intent="warning">
 			<Notice.Description>{message}</Notice.Description>
 			<Notice.Actions>
 				<Notice.ActionButton

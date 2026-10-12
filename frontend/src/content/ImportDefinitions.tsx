@@ -277,7 +277,7 @@ export function ImportDefinitions() {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{__('Import definitions', 'gophenberg')}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">

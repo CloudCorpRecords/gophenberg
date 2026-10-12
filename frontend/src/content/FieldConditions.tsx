@@ -286,7 +286,7 @@ export function FieldConditions(props: {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<ConditionsBody draft={draft} sources={sources} onDraft={setDraft} />

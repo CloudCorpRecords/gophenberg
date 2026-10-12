@@ -118,7 +118,7 @@ export function MediaLibraryPicker({
 					<Dialog.Popup size="large" className="gophenberg-media-picker">
 						<Dialog.Header>
 							<Dialog.Title>{__('Media Library', 'gophenberg')}</Dialog.Title>
-							<Dialog.CloseIcon />
+							<Dialog.CloseIconButton />
 						</Dialog.Header>
 						<Dialog.Content>
 							{media.isError ? (
