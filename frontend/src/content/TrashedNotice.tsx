@@ -24,20 +24,23 @@ export function TrashedNotice({ postId, title }: { postId: string, title: string
 			await Promise.all([client.invalidateQueries({ queryKey: ['post', postId], exact: true }), refresh()])
 			toaster.show(sprintf(__('"%s" has been restored.', 'gophenberg'), toaster.name(title)))
 		},
-		onError: async (error) => {
-			await client.invalidateQueries({ queryKey: ['post', postId], exact: true })
-			if (client.getQueryData<PostDetail>(['post', postId])?.status === 'trash') {
-				speak(error.message, 'assertive')
-			}
-		},
+		onError: () => client.invalidateQueries({ queryKey: ['post', postId], exact: true }),
 	})
+	const speakFailure = (error: Error) => {
+		if (client.getQueryData<PostDetail>(['post', postId])?.status === 'trash') {
+			speak(error.message, 'assertive')
+		}
+	}
 	const message =
 		restore.error?.message ?? __('This item is in the trash. Restore it first to work on it again.', 'gophenberg')
 	return (
 		<Notice.Root intent={restore.isError ? 'error' : 'warning'}>
 			<Notice.Description>{message}</Notice.Description>
 			<Notice.Actions>
-				<Notice.ActionButton loading={restore.isPending} onClick={() => restore.mutate()}>
+				<Notice.ActionButton
+					loading={restore.isPending}
+					onClick={() => restore.mutate(undefined, { onError: speakFailure })}
+				>
 					{_x('Restore', 'trash', 'gophenberg')}
 				</Notice.ActionButton>
 			</Notice.Actions>
