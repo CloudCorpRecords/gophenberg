@@ -41,9 +41,11 @@ func postgresStores(t *testing.T) contenttest.Stores {
 	t.Helper()
 	pool := migratedPool(t)
 	return contenttest.Stores{
-		Content:   postgres.NewContentStore(pool),
-		Types:     postgres.NewTypeStore(pool),
-		AddAuthor: authorsIn(pool),
+		Content:      postgres.NewContentStore(pool),
+		Types:        postgres.NewTypeStore(pool),
+		SiteSettings: postgres.NewSettingStore(pool),
+		UserSettings: postgres.NewUserSettingStore(pool),
+		AddAuthor:    authorsIn(pool),
 	}
 }
 
@@ -71,4 +73,16 @@ func TestMediaStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	mediatest.Run(t, postgresMediaStores)
+}
+
+func TestSiteSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunSiteSettings(t, postgresStores)
+}
+
+func TestUserSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunUserSettings(t, postgresStores)
 }
