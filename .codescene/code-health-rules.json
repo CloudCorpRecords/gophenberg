@@ -1,0 +1,34 @@
+{
+  "rule_sets": [
+    {
+      "matching_content_path": "**/*_test.go",
+      "rules": [
+        { "name": "Complex Method", "weight": 0.0 },
+        { "name": "Complex Conditional", "weight": 0.0 },
+        { "name": "Overall Code Complexity", "weight": 0.0 },
+        { "name": "Excess Number of Function Arguments", "weight": 0.0 },
+        { "name": "Code Duplication", "weight": 0.0 }
+      ]
+    },
+    {
+      "matching_content_path": "internal/content/contenttest/**",
+      "rules": [
+        { "name": "Complex Method", "weight": 0.0 },
+        { "name": "Complex Conditional", "weight": 0.0 },
+        { "name": "Overall Code Complexity", "weight": 0.0 },
+        { "name": "Excess Number of Function Arguments", "weight": 0.0 },
+        { "name": "Code Duplication", "weight": 0.0 }
+      ]
+    },
+    {
+      "matching_content_path": "internal/media/mediatest/**",
+      "rules": [
+        { "name": "Complex Method", "weight": 0.0 },
+        { "name": "Complex Conditional", "weight": 0.0 },
+        { "name": "Overall Code Complexity", "weight": 0.0 },
+        { "name": "Excess Number of Function Arguments", "weight": 0.0 },
+        { "name": "Code Duplication", "weight": 0.0 }
+      ]
+    }
+  ]
+}
