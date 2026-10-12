@@ -31,12 +31,14 @@ var listCases = []Case{
 	{"ListSearchesWithoutRegardToCaseBeyondASCII", listSearchesWithoutRegardToCaseBeyondASCII},
 }
 
-// mustCreateMediaAt stores an image under the author, added and last modified at the given moments.
-func mustCreateMediaAt(t *testing.T, store media.Store, title string, author uuid.UUID, added, modified time.Time) {
+// mustCreateMediaAt stores an image under the author, added and last modified at the given moments, and returns it.
+func mustCreateMediaAt(
+	t *testing.T, store media.Store, title string, author uuid.UUID, added, modified time.Time,
+) media.Media {
 	t.Helper()
 	item := MustImage(t, "2026/08/"+title+".jpg", title, author)
 	item.CreatedAt, item.UpdatedAt = added, modified
-	MustCreate(t, store, item)
+	return MustCreate(t, store, item)
 }
 
 // listedTitles returns the titles of the rows the filter lists, in the order the store answers them.
@@ -75,8 +77,9 @@ func narrowedTitles(t *testing.T, store media.Store, f media.Filter) []string {
 // listsNewestFirst lists the latest upload first when the filter names no order.
 func listsNewestFirst(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
-	MustCreate(t, s.Media, MustImage(t, "2026/08/older.jpg", "older", author))
-	newest := MustCreate(t, s.Media, MustImage(t, "2026/08/newest.jpg", "newest", author))
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, s.Media, "older", author, day(time.March), day(time.March))
+	newest := mustCreateMediaAt(t, s.Media, "newest", author, day(time.July), day(time.July))
 
 	items, total, err := s.Media.List(t.Context(), media.Filter{Page: 1, PerPage: 10})
 
@@ -127,8 +130,9 @@ func listSortsAsTheFilterNames(t *testing.T, s Stores) {
 func listNarrowsByAuthor(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	second := s.AddAuthor(t, "Second Author")
-	MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author))
-	MustCreate(t, s.Media, MustImage(t, "2026/08/pier.jpg", "pier", second))
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, s.Media, "harbor", author, day(time.March), day(time.March))
+	mustCreateMediaAt(t, s.Media, "pier", second, day(time.July), day(time.July))
 
 	tests := []struct {
 		name   string
@@ -367,14 +371,18 @@ func listSearchesTitleAndFile(t *testing.T, s Stores) {
 // listSearchesCaptionAndDescription finds items by their caption or description and not by their alt text.
 func listSearchesCaptionAndDescription(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
 	captioned := MustImage(t, "2026/08/cliff.jpg", "cliff", author)
 	captioned.Caption = "A lighthouse above the bay"
+	captioned.CreatedAt, captioned.UpdatedAt = day(time.March), day(time.March)
 	MustCreate(t, s.Media, captioned)
 	described := MustImage(t, "2026/08/manual.jpg", "manual", author)
 	described.Description = "Keeping the lighthouse lamp lit"
+	described.CreatedAt, described.UpdatedAt = day(time.May), day(time.May)
 	MustCreate(t, s.Media, described)
 	altered := MustImage(t, "2026/08/harbor.jpg", "harbor", author)
 	altered.AltText = "A lighthouse at dusk"
+	altered.CreatedAt, altered.UpdatedAt = day(time.July), day(time.July)
 	MustCreate(t, s.Media, altered)
 
 	got := narrowedTitles(t, s.Media, media.Filter{Search: "lighthouse"})
