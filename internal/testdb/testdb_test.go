@@ -68,12 +68,16 @@ func TestNewNamesABadMaxAgeAndWhereToSetIt(t *testing.T) {
 	}
 }
 
-func TestNewShowsTheRefusalOfAMalformedAddress(t *testing.T) {
+func TestNewNamesTheSettingOfARefusedAddress(t *testing.T) {
 	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "mysql://postgres@db.example.com/postgres")
 	t.Setenv("GOPHENBERG_TEST_DATABASE_MAX_AGE", "1h")
 
-	if message := fatalOfNew(t); !strings.HasPrefix(message, "dbkit: refused database address") {
-		t.Errorf("New() stopped with %q, want the dbkit refusal of the address", message)
+	message := fatalOfNew(t)
+	if !strings.HasPrefix(message, "testdb: set GOPHENBERG_TEST_DATABASE_URL to an address pgtest takes") {
+		t.Errorf("New() stopped with %q, want the setting of the refused address named first", message)
+	}
+	if !strings.Contains(message, "dbkit: refused database address") {
+		t.Errorf("New() stopped with %q, want the dbkit refusal of the address kept", message)
 	}
 }
 

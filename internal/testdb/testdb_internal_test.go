@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gopherium/framework/dbkit"
 )
 
 const (
@@ -143,6 +145,29 @@ func TestSettingsNameAMissingAddressAndWhereToSetIt(t *testing.T) {
 			_, _, err := settings(lookup(c.environ), fileOf(c.file))
 			if err == nil || !strings.Contains(err.Error(), addressKey) || !strings.Contains(err.Error(), where) {
 				t.Errorf("settings() error = %v, want one naming %s and %q", err, addressKey, where)
+			}
+		})
+	}
+}
+
+func TestSettingsNameARefusedAddressAndWhereToSetIt(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"another scheme":      "mysql://postgres@db.example.com/postgres",
+		"a pool setting":      "postgres://postgres@db.example.com:5432/postgres?pool_max_conns=4",
+		"a user in the query": "postgres://postgres@db.example.com:5432/postgres?user=other",
+	}
+	for name, address := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			file := map[string]string{addressKey: address, maxAgeKey: "1h"}
+			_, _, err := settings(lookup(nil), fileOf(file))
+			if !errors.Is(err, dbkit.ErrAddress) {
+				t.Fatalf("settings() error = %v, want the pgtest refusal of the address", err)
+			}
+			if want := addressKey + " to an address pgtest takes, " + where; !strings.Contains(err.Error(), want) {
+				t.Errorf("settings() error = %v, want one holding %q", err, want)
 			}
 		})
 	}

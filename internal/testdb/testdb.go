@@ -52,12 +52,9 @@ func New(t testing.TB, migrator pgtestdb.Migrator) string {
 func settings(
 	environ func(string) (string, bool), file func() (map[string]string, error),
 ) (string, time.Duration, error) {
-	address, err := value(environ, file, addressKey)
+	address, err := serverAddress(environ, file)
 	if err != nil {
 		return "", 0, err
-	}
-	if address == "" {
-		return "", 0, fmt.Errorf("testdb: set %s %s", addressKey, whereToSet)
 	}
 	text, err := value(environ, file, maxAgeKey)
 	if err != nil {
@@ -69,6 +66,21 @@ func settings(
 			maxAgeKey, whereToSet, text)
 	}
 	return address, maxAge, nil
+}
+
+// serverAddress returns the test server address from environ or file, refused unless pgtest takes it.
+func serverAddress(environ func(string) (string, bool), file func() (map[string]string, error)) (string, error) {
+	address, err := value(environ, file, addressKey)
+	if err != nil {
+		return "", err
+	}
+	if address == "" {
+		return "", fmt.Errorf("testdb: set %s %s", addressKey, whereToSet)
+	}
+	if err := pgtest.CheckAddress(address); err != nil {
+		return "", fmt.Errorf("testdb: set %s to an address pgtest takes, %s: %w", addressKey, whereToSet, err)
+	}
+	return address, nil
 }
 
 // value returns the trimmed value of key from environ, or reads it from file only when environ does not set it.
