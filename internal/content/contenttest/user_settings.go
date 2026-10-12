@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package contenttest
+
+import (
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+// userSettingCases are the cases over reading and writing the values each reader chooses for themselves.
+var userSettingCases = []Case{
+	{"ReadsWhatItWrote", userSettingReadsWhatItWrote},
+	{"CarriesTheLatestWrite", userSettingCarriesTheLatestWrite},
+	{"IsTheReadersAlone", userSettingIsTheReadersAlone},
+	{"AnswersNothingForAKeyItNeverHeld", userSettingAnswersNothingForAKeyItNeverHeld},
+}
+
+// userSettingReadsWhatItWrote reads back as found the value a reader stored under a key.
+func userSettingReadsWhatItWrote(t *testing.T, s Stores) {
+	reader := uuid.New()
+
+	if err := s.UserSettings.Save(t.Context(), reader, "locale", "es-ES"); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	held, found, err := s.UserSettings.Lookup(t.Context(), reader, "locale")
+
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if !found || held != "es-ES" {
+		t.Errorf("Lookup() = %q, %v, want the language the reader chose", held, found)
+	}
+}
+
+// userSettingCarriesTheLatestWrite reads back the value a reader wrote last under a key.
+func userSettingCarriesTheLatestWrite(t *testing.T, s Stores) {
+	reader := uuid.New()
+	if err := s.UserSettings.Save(t.Context(), reader, "locale", "es-ES"); err != nil {
+		t.Fatalf("the first Save() error = %v, want nil", err)
+	}
+
+	if err := s.UserSettings.Save(t.Context(), reader, "locale", "fr-FR"); err != nil {
+		t.Fatalf("the second Save() error = %v, want nil", err)
+	}
+
+	held, _, err := s.UserSettings.Lookup(t.Context(), reader, "locale")
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if held != "fr-FR" {
+		t.Errorf("Lookup() = %q, want the language written last", held)
+	}
+}
+
+// userSettingIsTheReadersAlone answers no other reader the value one reader stored.
+func userSettingIsTheReadersAlone(t *testing.T, s Stores) {
+	mine, theirs := uuid.New(), uuid.New()
+	if err := s.UserSettings.Save(t.Context(), mine, "locale", "es-ES"); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	_, found, err := s.UserSettings.Lookup(t.Context(), theirs, "locale")
+
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if found {
+		t.Error("another reader's choice was answered, want each reader answered its own")
+	}
+}
+
+// userSettingAnswersNothingForAKeyItNeverHeld reads a key no reader stored as unset and empty, without an error.
+func userSettingAnswersNothingForAKeyItNeverHeld(t *testing.T, s Stores) {
+	held, found, err := s.UserSettings.Lookup(t.Context(), uuid.New(), "never-written")
+
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if found || held != "" {
+		t.Errorf("Lookup() = %q, %v, want nothing stored", held, found)
+	}
+}

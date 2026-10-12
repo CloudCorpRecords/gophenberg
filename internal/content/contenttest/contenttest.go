@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package contenttest runs one set of behaviour cases against any content.Store and content.TypeStore.
+// Package contenttest runs one set of behaviour cases against any content, type, site setting or user setting store.
 package contenttest
 
 import (
@@ -12,11 +12,13 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 )
 
-// Stores is one fresh set of stores a case runs against, holding nothing but the built-in post type.
+// Stores is one fresh set of content, type, site setting and user setting stores, holding only the built-in post type.
 type Stores struct {
-	Content   content.Store
-	Types     content.TypeStore
-	AddAuthor func(t *testing.T, name string) uuid.UUID
+	Content      content.Store
+	Types        content.TypeStore
+	SiteSettings content.SiteSettingStore
+	UserSettings content.UserSettingStore
+	AddAuthor    func(t *testing.T, name string) uuid.UUID
 }
 
 // Factory returns fresh stores for one case, skipping the case when its engine is out of reach.
@@ -47,6 +49,16 @@ func TypeCases() []Case {
 	)
 }
 
+// SiteSettingCases returns every site setting store case in a fixed order.
+func SiteSettingCases() []Case {
+	return slices.Clone(siteSettingCases)
+}
+
+// UserSettingCases returns every user setting store case in a fixed order.
+func UserSettingCases() []Case {
+	return slices.Clone(userSettingCases)
+}
+
 // Run runs every content store case in parallel, each on stores of its own.
 func Run(t *testing.T, fresh Factory) {
 	t.Helper()
@@ -57,6 +69,18 @@ func Run(t *testing.T, fresh Factory) {
 func RunTypes(t *testing.T, fresh Factory) {
 	t.Helper()
 	runAll(t, TypeCases(), fresh)
+}
+
+// RunSiteSettings runs every site setting store case in parallel, each on stores of its own.
+func RunSiteSettings(t *testing.T, fresh Factory) {
+	t.Helper()
+	runAll(t, SiteSettingCases(), fresh)
+}
+
+// RunUserSettings runs every user setting store case in parallel, each on stores of its own.
+func RunUserSettings(t *testing.T, fresh Factory) {
+	t.Helper()
+	runAll(t, UserSettingCases(), fresh)
 }
 
 // runAll runs the cases in parallel, each on stores of its own.
