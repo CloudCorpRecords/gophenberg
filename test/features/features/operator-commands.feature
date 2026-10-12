@@ -129,6 +129,13 @@ Feature: Operators run Gophenberg from one command line
     Then the command exits with code 1
     And the error says "needs -since, which it does not declare"
 
+  Scenario: An account becomes a member that never enters the admin
+    Given the administrator "admin@example.com"
+    And the author "author@example.com"
+    When the operator gives "author@example.com" the role "member" acting as "admin@example.com"
+    Then the command succeeds
+    And the account "author@example.com" holds the role "member"
+
   Scenario: An account takes a role a plugin declares
     Given a plugin declaring the role "archivist" with the capability "notes.manage"
     And the administrator "admin@example.com"
@@ -162,8 +169,7 @@ Feature: Operators run Gophenberg from one command line
     And the administrator "admin@example.com" gave "lead@example.com" the role "team_lead"
     When the operator gives "author@example.com" the role "admin" acting as "lead@example.com"
     Then the command exits with code 1
-    And the error says "the role admin carries"
-    And the error says "which the account lead@example.com lacks"
+    And the error says "the role admin carries access_admin, which the account lead@example.com lacks"
     And the account "author@example.com" still holds the role "author"
 
   Scenario: A plugin declaring a capability outside its prefix stops the account commands
