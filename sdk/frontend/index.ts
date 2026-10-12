@@ -62,6 +62,7 @@ export {
 	__experimentalStyleProvider as StyleProvider,
 } from '@wordpress/components'
 export {
+	ACCESS_ADMIN,
 	ADMIN,
 	AUTHOR,
 	CHANGE_OTHERS_WORK,
@@ -70,6 +71,7 @@ export {
 	MANAGE_THEMES,
 	MANAGE_TYPES,
 	MANAGE_USERS,
+	MEMBER,
 	sessionMayChange,
 } from './capabilities'
 export { can, useSession } from '@gopherium/react-auth'
