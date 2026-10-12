@@ -382,13 +382,26 @@ manifest's `frontend` field and export an object called `plugin`:
 export const plugin = {
 	id: 'hello',
 	routes: (parent) => [/* routes, as children of parent */],
-	nav: [{ label: 'Hello', to: '/hello', icon: someIcon }],
+	nav: [{ label: 'Hello', to: '/hello', icon: someIcon, capability: 'hello.manage' }],
 }
 ```
 
 `make generate` wires it in: routes mount inside the admin layout
 and nav rows appear after the built-in ones. No built-in plugin
 uses this path yet, so expect to be the first through it.
+
+A nav row naming a `capability` shows only to an account whose role
+carries it. The screen still opens from a pasted link, so the routes
+your plugin serves must check `session.Can` themselves. A screen
+asks the same question through the SDK's `can`, which reads the
+capabilities the signed-in account carries:
+
+```ts
+import { can, useSession } from '@gophenberg/frontend-sdk'
+
+const session = useSession().data
+const manages = can(session, 'hello.manage')
+```
 
 The frontend SDK, `@gophenberg/frontend-sdk`, passes on a few icons
 from `@wordpress/icons`, each named after the job it does in the
@@ -402,7 +415,10 @@ import { trashIcon } from '@gophenberg/frontend-sdk'
 ```
 
 To confirm an action outside a list, use an `AlertDialog`. The SDK
-passes it on from `@wordpress/ui`, as it does `Dialog`. Give it a
+passes it on from `@wordpress/ui`. Its `Dialog` is the one from
+`@wordpress/ui` too, except that the popup renders where the selects
+inside it list their options, so a screen reader reaches every
+option. Import both from the SDK. Give an `AlertDialog` a
 short question as its `title`, what happens next as its
 `description`, and the words of its two buttons. Cancel has the
 focus when it opens. `onConfirm` may be async: while it runs, the
