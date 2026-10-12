@@ -27,6 +27,8 @@ var listCases = []Case{
 	{"ListSearchesCaptionAndDescription", listSearchesCaptionAndDescription},
 	{"ListTreatsPatternCharactersAsText", listTreatsPatternCharactersAsText},
 	{"ListPaginates", listPaginates},
+	{"ListSortsTitlesAndAuthorsWithoutRegardToCase", listSortsTitlesAndAuthorsWithoutRegardToCase},
+	{"ListSearchesWithoutRegardToCaseBeyondASCII", listSearchesWithoutRegardToCaseBeyondASCII},
 }
 
 // mustCreateMediaAt stores an image under the author, added and last modified at the given moments.
@@ -426,5 +428,46 @@ func listPaginates(t *testing.T, s Stores) {
 	}
 	if len(secondPage) != 1 {
 		t.Errorf("second page holds %d items, want the remainder", len(secondPage))
+	}
+}
+
+// listSortsTitlesAndAuthorsWithoutRegardToCase sorts titles and author names in an order a byte sort gets wrong.
+func listSortsTitlesAndAuthorsWithoutRegardToCase(t *testing.T, s Stores) {
+	author := s.AddAuthor(t, DefaultAuthor)
+	lowerCase := s.AddAuthor(t, "an author in lower case")
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, s.Media, "Banana", lowerCase, day(time.March), day(time.March))
+	mustCreateMediaAt(t, s.Media, "cherry", author, day(time.May), day(time.May))
+	mustCreateMediaAt(t, s.Media, "apricot", author, day(time.July), day(time.July))
+
+	tests := []struct {
+		orderBy media.OrderBy
+		order   media.Order
+		want    []string
+	}{
+		{media.OrderByTitle, media.OrderAsc, []string{"apricot", "Banana", "cherry"}},
+		{media.OrderByTitle, media.OrderDesc, []string{"cherry", "Banana", "apricot"}},
+		{media.OrderByAuthor, media.OrderAsc, []string{"Banana", "apricot", "cherry"}},
+		{media.OrderByAuthor, media.OrderDesc, []string{"apricot", "cherry", "Banana"}},
+	}
+	for _, tt := range tests {
+		got := listedTitles(t, s.Media, media.Filter{OrderBy: tt.orderBy, Order: tt.order})
+
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("List(%q %q) = %q, want %q, so the sort is not case insensitive", tt.orderBy, tt.order, got, tt.want)
+		}
+	}
+}
+
+// listSearchesWithoutRegardToCaseBeyondASCII finds a title by a search that differs from it in the case of an accent.
+func listSearchesWithoutRegardToCaseBeyondASCII(t *testing.T, s Stores) {
+	author := s.AddAuthor(t, DefaultAuthor)
+	MustCreate(t, s.Media, MustImage(t, "2026/08/pier.jpg", "Café at the pier", author))
+	MustCreate(t, s.Media, MustImage(t, "2026/08/cliff.jpg", "Cliff", author))
+
+	got := narrowedTitles(t, s.Media, media.Filter{Search: "CAFÉ"})
+
+	if want := []string{"Café at the pier"}; !slices.Equal(got, want) {
+		t.Errorf("List(CAFÉ) = %q, want %q, so the search folds only ASCII letters", got, want)
 	}
 }
