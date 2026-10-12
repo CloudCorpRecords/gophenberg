@@ -14,6 +14,7 @@ var userSettingCases = []Case{
 	{"CarriesTheLatestWrite", userSettingCarriesTheLatestWrite},
 	{"IsTheReadersAlone", userSettingIsTheReadersAlone},
 	{"AnswersNothingForAKeyItNeverHeld", userSettingAnswersNothingForAKeyItNeverHeld},
+	{"KeepsEachKeyApart", userSettingKeepsEachKeyApart},
 }
 
 // userSettingReadsWhatItWrote reads back as found the value a reader stored under a key.
@@ -80,5 +81,27 @@ func userSettingAnswersNothingForAKeyItNeverHeld(t *testing.T, s Stores) {
 	}
 	if found || held != "" {
 		t.Errorf("Lookup() = %q, %v, want nothing stored", held, found)
+	}
+}
+
+// userSettingKeepsEachKeyApart holds each key of one reader on its own, through an overwrite of one of them.
+func userSettingKeepsEachKeyApart(t *testing.T, s Stores) {
+	reader := uuid.New()
+	for _, write := range []struct{ key, value string }{
+		{"locale", "es-ES"}, {"theme", "aurora"}, {"locale", "fr-FR"},
+	} {
+		if err := s.UserSettings.Save(t.Context(), reader, write.key, write.value); err != nil {
+			t.Fatalf("Save(%q, %q) error = %v, want nil", write.key, write.value, err)
+		}
+	}
+
+	for key, want := range map[string]string{"locale": "fr-FR", "theme": "aurora"} {
+		held, found, err := s.UserSettings.Lookup(t.Context(), reader, key)
+		if err != nil {
+			t.Fatalf("Lookup(%q) error = %v, want nil", key, err)
+		}
+		if !found || held != want {
+			t.Errorf("Lookup(%q) = %q, %v, want %q", key, held, found, want)
+		}
 	}
 }

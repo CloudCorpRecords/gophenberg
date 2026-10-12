@@ -13,6 +13,8 @@ var siteSettingCases = []Case{
 	{"KeepsKeysApart", siteSettingKeepsKeysApart},
 	{"StoresSeveralKeysAsOneWrite", siteSettingStoresSeveralKeysAsOneWrite},
 	{"ClearsAKey", siteSettingClearsAKey},
+	{"MatchesKeysExactly", siteSettingMatchesKeysExactly},
+	{"SavesNothingFromNoValues", siteSettingSavesNothingFromNoValues},
 }
 
 // siteSettingReadsWhatItWrote reads back as found the value it stored under a key.
@@ -142,5 +144,46 @@ func siteSettingClearsAKey(t *testing.T, s Stores) {
 	}
 	if got != "" {
 		t.Errorf("got %q, want the key cleared", got)
+	}
+}
+
+// siteSettingMatchesKeysExactly finds nothing under a key that differs from a stored one in case or a trailing space.
+func siteSettingMatchesKeysExactly(t *testing.T, s Stores) {
+	if err := s.SiteSettings.Save(t.Context(), map[string]string{"theme.active": "aurora"}); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	if _, found, err := s.SiteSettings.Lookup(t.Context(), "theme.active"); err != nil || !found {
+		t.Fatalf("Lookup(%q) = found %v, error %v, want the stored key found", "theme.active", found, err)
+	}
+
+	for _, near := range []string{"Theme.Active", "theme.active "} {
+		got, found, err := s.SiteSettings.Lookup(t.Context(), near)
+		if err != nil {
+			t.Fatalf("Lookup(%q) error = %v, want nil", near, err)
+		}
+		if found || got != "" {
+			t.Errorf("Lookup(%q) = %q, %v, want nothing, as only %q was stored", near, got, found, "theme.active")
+		}
+	}
+}
+
+// siteSettingSavesNothingFromNoValues takes a write of no values without an error and leaves every stored key alone.
+func siteSettingSavesNothingFromNoValues(t *testing.T, s Stores) {
+	if err := s.SiteSettings.Save(t.Context(), map[string]string{"theme.active": "aurora"}); err != nil {
+		t.Fatalf("seeding the active theme: %v", err)
+	}
+
+	for _, empty := range []map[string]string{nil, {}} {
+		if err := s.SiteSettings.Save(t.Context(), empty); err != nil {
+			t.Errorf("Save(%#v) error = %v, want nil", empty, err)
+		}
+	}
+
+	got, found, err := s.SiteSettings.Lookup(t.Context(), "theme.active")
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if !found || got != "aurora" {
+		t.Errorf("Lookup() = %q, %v, want the stored value left alone", got, found)
 	}
 }
