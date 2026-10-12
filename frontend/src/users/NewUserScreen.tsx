@@ -8,12 +8,13 @@ import {
 	createUser,
 	usersQueryKey,
 } from '@gopherium/react-auth/admin'
+import { useSession } from '@gopherium/react-auth'
 import { ErrorNotice, Page } from '@gopherium/godmin'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 
-import { NARROWEST, roleOptions } from './roles'
+import { roleFailureMessage, roleLabel, roleRefusal, startingRole } from './roles'
 
 /**
  * Returns the message shown under the form when a creation fails.
@@ -23,6 +24,9 @@ import { NARROWEST, roleOptions } from './roles'
 export function createFailureMessage(error: unknown): string {
 	if (error instanceof EmailTakenError) {
 		return __('That email is already in use.', 'gophenberg')
+	}
+	if (roleRefusal(error) !== undefined) {
+		return roleFailureMessage(error)
 	}
 	if (error instanceof ValidationError) {
 		return error.message
@@ -37,10 +41,11 @@ export function createFailureMessage(error: unknown): string {
 export function NewUserScreen() {
 	const client = useQueryClient()
 	const navigate = useNavigate()
+	const grantable = useSession().data?.grantable ?? []
 	const [email, setEmail] = useState('')
 	const [name, setName] = useState('')
 	const [password, setPassword] = useState('')
-	const [role, setRole] = useState(NARROWEST)
+	const [role, setRole] = useState(() => startingRole(grantable))
 	const create = useMutation({
 		mutationFn: () => createUser({ email: email.trim(), name: name.trim(), password, role }),
 		onSuccess: async () => {
@@ -49,7 +54,7 @@ export function NewUserScreen() {
 		},
 	})
 	const incomplete = email.trim() === '' || name.trim() === '' || password === ''
-	const roles = roleOptions()
+	const roles = grantable.map((offered) => ({ value: offered, label: roleLabel(offered) }))
 	return (
 		<Page title={__('New user', 'gophenberg')}>
 			<form
