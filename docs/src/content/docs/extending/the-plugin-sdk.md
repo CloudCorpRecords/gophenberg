@@ -292,10 +292,10 @@ covers `Needs` in full.
 ## Roles and capabilities
 
 A capability is one named permission, such as `notes.manage`. A role
-is a set of capabilities an account holds. The core declares three
-roles, `admin`, `editor` and `author`, and five capabilities. A
-plugin adds its own through `RoleProvider`, which returns them as
-data:
+is a set of capabilities an account holds. The core declares four
+roles, `admin`, `editor`, `author` and `member`, and six
+capabilities. A plugin adds its own through `RoleProvider`, which
+returns them as data:
 
 ```go
 // Roles returns the role the notes plugin brings and the capability it adds to editors.
@@ -343,6 +343,15 @@ gophenberg account:role maria@example.com archivist -yes -as admin@example.com
 
 An account whose role nobody declares any more, after its plugin is
 removed, keeps the stored name and carries no capability.
+
+The admin opens only for a role carrying `access_admin`, which the
+core's `admin`, `editor` and `author` carry. The core's `member`
+carries no capability: it signs in and keeps a session, but never
+enters the admin. Your routes see members too, so ask `session.Can` before
+a member acts, the way a forum asks whether it may post. A role you
+declare for the admin needs `access_admin` beside its own
+capabilities, and granting `access_admin` opens the admin's content
+and media to every account holding that role.
 
 ## The signed-in account
 
