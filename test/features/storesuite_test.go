@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path"
 	"regexp"
 	"testing"
 	"time"
@@ -25,11 +24,6 @@ const shortRowsVariable = "GOPHENBERG_SHORT_ROWS"
 
 // reportedCase matches the line the test binary prints for each case of the short rows run.
 var reportedCase = regexp.MustCompile(`(?m)^    --- (PASS|FAIL): \S+/\S+ `)
-
-// mediaGaps names the shared media store cases the in-memory media store does not pass yet.
-var mediaGaps = map[string]bool{
-	"ReadsStampsBackInUTC": true,
-}
 
 // memoryAuthors returns a way to add accounts to the in-memory account store.
 func memoryAuthors(accounts *memoryStore) func(t *testing.T, name string) uuid.UUID {
@@ -101,13 +95,7 @@ func TestTypeStoreSuite(t *testing.T) {
 func TestMediaStoreSuite(t *testing.T) {
 	t.Parallel()
 
-	mediatest.Run(t, func(t *testing.T) mediatest.Stores {
-		t.Helper()
-		if mediaGaps[path.Base(t.Name())] {
-			t.Skip("the in-memory media store does not pass this case yet")
-		}
-		return memoryMediaStores(t)
-	})
+	mediatest.Run(t, memoryMediaStores)
 }
 
 func TestSiteSettingStoreSuite(t *testing.T) {

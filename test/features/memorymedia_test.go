@@ -36,6 +36,7 @@ func (s *memoryMedia) Create(_ context.Context, m media.Media) (media.Media, err
 	}
 	s.next++
 	m.ID = s.next
+	m.CreatedAt, m.UpdatedAt = m.CreatedAt.UTC(), m.UpdatedAt.UTC()
 	s.items[m.ID] = m
 	return m, nil
 }
@@ -194,7 +195,7 @@ func (s *memoryMedia) Update(_ context.Context, m media.Media, expectedUpdatedAt
 	stored.AltText = m.AltText
 	stored.Caption = m.Caption
 	stored.Description = m.Description
-	stored.UpdatedAt = m.UpdatedAt
+	stored.UpdatedAt = m.UpdatedAt.UTC()
 	s.items[m.ID] = stored
 	return stored, nil
 }
