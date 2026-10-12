@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join, matchesGlob } from 'node:path'
 
 import { repositoryRoot } from './config.ts'
+import { RANGE } from './pieces.ts'
 
 /**
  * Returns the changed files a mutation run over the patterns would mutate.
@@ -40,9 +41,6 @@ export function mutateTargets(diff: string, untracked: string[], patterns: strin
 
 /** A shard argument, capturing its index and its count. */
 const SHARD = /^(\d+)\/(\d+)$/
-
-/** A mutate entry naming a range, capturing its first and last line. */
-const RANGE = /:(\d+)-(\d+)$/
 
 /** One shard of a mutation run, as its index counted from 1 and how many shards the run has. */
 interface Shard {

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { repositoryRoot } from './config.ts'
 import { mutateTargets, parseShard, shardTargets, strykerPatterns } from './mutants.ts'
+import { cutTarget, statementStarts, targetFile } from './pieces.ts'
 
 const [base, shardArgument = '1/1'] = process.argv.slice(2)
 if (base === undefined) {
@@ -29,11 +30,26 @@ const root = repositoryRoot()
 const git = (args: string[]): string => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: Infinity })
 
 /**
+ * Returns the text of a file.
+ * @param file - The file, relative to the repository root.
+ * @returns Its text.
+ */
+const sourceOf = (file: string): string => readFileSync(join(root, file), 'utf8')
+
+/**
  * Returns how many lines a file holds.
  * @param file - The file, relative to the repository root.
  * @returns Its line count.
  */
-const fileLines = (file: string): number => readFileSync(join(root, file), 'utf8').split('\n').length
+const fileLines = (file: string): number => sourceOf(file).split('\n').length
+
+/**
+ * Returns a mutate entry cut at the top-level statements that start inside it.
+ * @param target - The mutate entry, as file:start-end or a whole file.
+ * @returns Its pieces.
+ */
+const piecesOf = (target: string): string[] =>
+	cutTarget(target, statementStarts(sourceOf(targetFile(target)), targetFile(target)))
 const roots = ['frontend/src', 'frontend/scripts', 'sdk/frontend', 'plugins']
 const diff = git([
 	'-c',
@@ -52,7 +68,8 @@ const diff = git([
 	...roots,
 ])
 const untracked = git(['ls-files', '-z', '--others', '--exclude-standard', '--', ...roots]).split('\0').filter(Boolean)
-const targets = shardTargets(mutateTargets(diff, untracked, strykerPatterns()), shard, fileLines)
+const pieces = mutateTargets(diff, untracked, strykerPatterns()).flatMap(piecesOf)
+const targets = shardTargets(pieces, shard, fileLines)
 
 if (targets.length === 0) {
 	console.log('no changed source line to mutate')
