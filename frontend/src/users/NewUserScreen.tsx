@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button, InputControl, SelectControl, Stack } from '@gophenberg/frontend-sdk'
+import { Button, InputControl, SelectControl } from '@gophenberg/frontend-sdk'
 import { __, _x } from '@wordpress/i18n'
 import {
 	EmailTakenError,
@@ -58,47 +58,46 @@ export function NewUserScreen() {
 	return (
 		<Page title={__('New user', 'gophenberg')}>
 			<form
+				className="godmin-form"
 				onSubmit={(event) => {
 					event.preventDefault()
 					create.mutate()
 				}}
 			>
-				<Stack direction="column" gap="md">
-					<InputControl
-						label={__('Email', 'gophenberg')}
-						type="email"
-						autoComplete="off"
-						value={email}
-						onValueChange={setEmail}
-					/>
-					<InputControl
-						label={_x('Name', 'person', 'gophenberg')}
-						autoComplete="off"
-						value={name}
-						onValueChange={setName}
-					/>
-					<InputControl
-						label={__('Password', 'gophenberg')}
-						type="password"
-						autoComplete="new-password"
-						value={password}
-						onValueChange={setPassword}
-					/>
-					<SelectControl
-						label={_x('Role', 'account', 'gophenberg')}
-						items={roles}
-						value={roles.find((option) => option.value === role)}
-						onValueChange={(item) => item?.value != null && setRole(item.value)}
-					/>
-					<Button
-						type="submit"
-						disabled={incomplete || create.isPending}
-						loading={create.isPending}
-					>
-						{__('Create user', 'gophenberg')}
-					</Button>
-					{create.isError && <ErrorNotice>{createFailureMessage(create.error)}</ErrorNotice>}
-				</Stack>
+				<InputControl
+					label={__('Email', 'gophenberg')}
+					type="email"
+					autoComplete="off"
+					value={email}
+					onValueChange={setEmail}
+				/>
+				<InputControl
+					label={_x('Name', 'person', 'gophenberg')}
+					autoComplete="off"
+					value={name}
+					onValueChange={setName}
+				/>
+				<InputControl
+					label={__('Password', 'gophenberg')}
+					type="password"
+					autoComplete="new-password"
+					value={password}
+					onValueChange={setPassword}
+				/>
+				<SelectControl
+					label={_x('Role', 'account', 'gophenberg')}
+					items={roles}
+					value={roles.find((option) => option.value === role)}
+					onValueChange={(item) => item?.value != null && setRole(item.value)}
+				/>
+				<Button
+					type="submit"
+					disabled={incomplete || create.isPending}
+					loading={create.isPending}
+				>
+					{__('Create user', 'gophenberg')}
+				</Button>
+				{create.isError && <ErrorNotice>{createFailureMessage(create.error)}</ErrorNotice>}
 			</form>
 		</Page>
 	)
