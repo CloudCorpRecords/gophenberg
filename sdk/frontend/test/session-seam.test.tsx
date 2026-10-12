@@ -18,8 +18,9 @@ function PluginScreen() {
 	return (
 		<ul>
 			<li>{`role:${session?.role ?? 'none'}`}</li>
-			<li>{`changes:${String(can(session?.role, CHANGE_OTHERS_WORK))}`}</li>
-			<li>{`administers:${String(can(session?.role, MANAGE_USERS))}`}</li>
+			<li>{`changes:${String(can(session, CHANGE_OTHERS_WORK))}`}</li>
+			<li>{`administers:${String(can(session, MANAGE_USERS))}`}</li>
+			<li>{`manages events:${String(can(session, 'events.manage'))}`}</li>
 		</ul>
 	)
 }
@@ -45,10 +46,17 @@ test('a plugin screen reads the role the session carries', async () => {
 })
 
 test('a plugin screen asks capabilities rather than comparing roles', async () => {
-	renderAs({ ...defaultUser, role: 'editor' })
+	renderAs({ ...defaultUser, role: 'editor', capabilities: [CHANGE_OTHERS_WORK] })
 
 	expect(await screen.findByText('changes:true')).toBeInTheDocument()
 	expect(screen.getByText('administers:false')).toBeInTheDocument()
+})
+
+test('a plugin screen reads a capability its plugin declares', async () => {
+	renderAs({ ...defaultUser, role: 'moderator', capabilities: ['events.manage'] })
+
+	expect(await screen.findByText('manages events:true')).toBeInTheDocument()
+	expect(screen.getByText('changes:false')).toBeInTheDocument()
 })
 
 test('a plugin screen holds nothing without a session', async () => {

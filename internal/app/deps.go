@@ -3,13 +3,18 @@
 package app
 
 import (
+	"cmp"
 	"context"
+	"errors"
+
+	"github.com/gopherium/framework/goncierge"
 
 	"github.com/gopherium/gophenberg/internal/contentbridge"
+	"github.com/gopherium/gophenberg/internal/role"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
-// compose builds the pool, the stores, the registry, the registered plugins and their database share, starting nothing.
+// compose builds the pool, the stores, the registered plugins, their roles and their database share, starting nothing.
 func compose(ctx context.Context, cfg composeConfig, plugins func(sdk.Deps) ([]sdk.Plugin, error)) (site, error) {
 	lane, err := laneSettingsFrom(cfg.getenv)
 	if err != nil {
@@ -20,12 +25,21 @@ func compose(ctx context.Context, cfg composeConfig, plugins func(sdk.Deps) ([]s
 		return site{}, err
 	}
 	built.lane = &pluginLane{}
+	built.roles = cmp.Or(cfg.roles, goncierge.New())
 	built.registered, built.failed = plugins(pluginDeps(cfg, built))
-	if err := built.lane.open(built.pool, len(built.registered), lane); err != nil {
+	if err := built.ready(lane); err != nil {
 		built.close()
-		return site{}, err
+		return site{}, errors.Join(built.failed, err)
 	}
 	return built, nil
+}
+
+// ready declares the core's and the registered plugins' roles, then opens the plugins' database share.
+func (s site) ready(lane laneSettings) error {
+	if err := declareRoles(s.roles, role.Core(), s.registered); err != nil {
+		return err
+	}
+	return s.lane.open(s.pool, len(s.registered), lane)
 }
 
 // close closes the plugins' database share and then the pool.

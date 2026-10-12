@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/pluginkit"
 	"github.com/gopherium/gouncer/authkit"
 	"github.com/gopherium/gouncer/authkit/ratelimit"
@@ -76,6 +77,16 @@ type Config struct {
 	Declarations definitions.Walked
 	// Lists is what the admin lists read once. A zero value serves its default.
 	Lists ListSettings
+	// Roles holds the roles accounts take and the capabilities each carries. Nil holds the core's roles alone.
+	Roles *goncierge.Registry
+}
+
+// rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
+func rolesOf(cfg Config) *goncierge.Registry {
+	if cfg.Roles != nil {
+		return cfg.Roles
+	}
+	return role.Registry()
 }
 
 // registryOf returns the registry the configuration hands over, or one built over its type store.
@@ -98,10 +109,12 @@ func loggerOf(cfg Config) *slog.Logger {
 // requires a login session except login, logout, and each plugin's
 // declared public paths.
 func NewServer(cfg Config) http.Handler {
+	roles := rolesOf(cfg)
+	privileged := roles.HoldersOf(string(role.ManageUsers))
 	auth := authkit.New(authkit.Config{
-		Store: cfg.Users, CookieName: sessionCookieName, Privileged: role.Privileged(),
+		Store: cfg.Users, CookieName: sessionCookieName, Privileged: privileged, Capabilities: roles,
 	})
-	admin := authkit.NewAdmin(authkit.AdminConfig{Store: cfg.Users, Privileged: role.Privileged()})
+	admin := authkit.NewAdmin(authkit.AdminConfig{Store: cfg.Users, Privileged: privileged, Roles: roles})
 	s := &server{
 		auth: auth, users: cfg.Users, content: cfg.Content, themes: cfg.Themes,
 		media: cfg.Media, mediaStore: cfg.MediaStore, version: cfg.Version,
@@ -138,7 +151,11 @@ func NewServer(cfg Config) http.Handler {
 	})
 	router.Group(func(privileged chi.Router) {
 		privileged.Use(readerOnly, auth.RequireSession, auth.RequirePrivilege)
-		s.mountAdmin(privileged, admin, cfg)
+		mountAccounts(privileged, admin)
+	})
+	router.Group(func(gated chi.Router) {
+		gated.Use(readerOnly, auth.RequireSession)
+		s.mountAdmin(gated, auth, cfg)
 	})
 	for id, handler := range cfg.Plugins {
 		prefix := "/api/plugins/" + id
@@ -193,44 +210,58 @@ func (s *server) mountOpen(r chi.Router, cfg Config) {
 	}
 }
 
-// mountAdmin registers the routes only a privileged role reaches.
-func (s *server) mountAdmin(r chi.Router, admin *authkit.AdminHandlers, cfg Config) {
+// mountAdmin registers the administration routes, each area behind the capability it asks for.
+func (s *server) mountAdmin(r chi.Router, auth *authkit.Handlers, cfg Config) {
+	if cfg.Types != nil {
+		r.With(auth.RequireCapability(string(role.ManageTypes))).Group(s.mountModel)
+	}
+	if cfg.Settings != nil {
+		r.With(auth.RequireCapability(string(role.ManageSettings))).Patch("/api/settings", s.handleSettingsPatch())
+	}
+	if cfg.Themes != nil {
+		r.With(auth.RequireCapability(string(role.ManageThemes))).Group(s.mountThemes)
+	}
+}
+
+// mountAccounts registers the account routes only a privileged role reaches.
+func mountAccounts(r chi.Router, admin *authkit.AdminHandlers) {
 	r.Get("/api/users", admin.List)
 	r.Post("/api/users", admin.Create)
 	r.Patch("/api/users/{id}", admin.SetDisabled)
 	r.Put("/api/users/{id}/role", admin.SetRole)
-	if cfg.Types != nil {
-		r.Post("/api/types", s.handleTypeCreate())
-		r.Patch("/api/types/{key}", s.handleTypePatch())
-		r.Delete("/api/types/{key}", s.handleTypeDelete())
-		r.Post("/api/groups", s.handleGroupCreate())
-		r.Put("/api/groups/order", s.handleGroupOrder())
-		r.Patch("/api/groups/{id}", s.handleGroupPatch())
-		r.Delete("/api/groups/{id}", s.handleGroupDelete())
-		r.Post("/api/groups/{id}/fields", s.handleGroupFieldCreate())
-		r.Put("/api/groups/{id}/fields/order", s.handleGroupFieldOrder())
-		r.Patch("/api/groups/{id}/fields/{fieldKey}", s.handleGroupFieldPatch())
-		r.Delete("/api/groups/{id}/fields/{fieldKey}", s.handleGroupFieldDelete())
-		r.Post("/api/groups/{id}/fields/{fieldPath}/move", s.handleGroupFieldMove())
-		r.Post("/api/groups/{id}/fields/{fieldPath}", s.handleSubFieldCreate())
-		r.Delete("/api/groups/{id}/inside/{fieldPath}", s.handleSubFieldDelete())
-		r.Put("/api/groups/{id}/inside/{fieldPath}/order", s.handleSubFieldOrder())
-		r.Get("/api/definitions", s.handleDefinitionsExport())
-		r.Post("/api/definitions/plan", s.handleDefinitionsPlan())
-		r.Post("/api/definitions/apply", s.handleDefinitionsApply())
-		r.Get("/api/definitions/drift", s.handleDefinitionsDrift())
-		r.Post("/api/definitions/adopt", s.handleDefinitionsAdopt())
-	}
-	if cfg.Settings != nil {
-		r.Patch("/api/settings", s.handleSettingsPatch())
-	}
-	if cfg.Themes != nil {
-		r.Get("/api/themes", s.handleThemeList())
-		r.Post("/api/themes", s.handleThemeUpload())
-		r.Post("/api/themes/active", s.handleThemeActivate())
-		r.Delete("/api/themes/active", s.handleThemeDeactivate())
-		r.Post("/api/themes/rollback", s.handleThemeRollback())
-	}
+}
+
+// mountModel registers the routes that reshape the content model.
+func (s *server) mountModel(r chi.Router) {
+	r.Post("/api/types", s.handleTypeCreate())
+	r.Patch("/api/types/{key}", s.handleTypePatch())
+	r.Delete("/api/types/{key}", s.handleTypeDelete())
+	r.Post("/api/groups", s.handleGroupCreate())
+	r.Put("/api/groups/order", s.handleGroupOrder())
+	r.Patch("/api/groups/{id}", s.handleGroupPatch())
+	r.Delete("/api/groups/{id}", s.handleGroupDelete())
+	r.Post("/api/groups/{id}/fields", s.handleGroupFieldCreate())
+	r.Put("/api/groups/{id}/fields/order", s.handleGroupFieldOrder())
+	r.Patch("/api/groups/{id}/fields/{fieldKey}", s.handleGroupFieldPatch())
+	r.Delete("/api/groups/{id}/fields/{fieldKey}", s.handleGroupFieldDelete())
+	r.Post("/api/groups/{id}/fields/{fieldPath}/move", s.handleGroupFieldMove())
+	r.Post("/api/groups/{id}/fields/{fieldPath}", s.handleSubFieldCreate())
+	r.Delete("/api/groups/{id}/inside/{fieldPath}", s.handleSubFieldDelete())
+	r.Put("/api/groups/{id}/inside/{fieldPath}/order", s.handleSubFieldOrder())
+	r.Get("/api/definitions", s.handleDefinitionsExport())
+	r.Post("/api/definitions/plan", s.handleDefinitionsPlan())
+	r.Post("/api/definitions/apply", s.handleDefinitionsApply())
+	r.Get("/api/definitions/drift", s.handleDefinitionsDrift())
+	r.Post("/api/definitions/adopt", s.handleDefinitionsAdopt())
+}
+
+// mountThemes registers the routes that install and switch themes.
+func (s *server) mountThemes(r chi.Router) {
+	r.Get("/api/themes", s.handleThemeList())
+	r.Post("/api/themes", s.handleThemeUpload())
+	r.Post("/api/themes/active", s.handleThemeActivate())
+	r.Delete("/api/themes/active", s.handleThemeDeactivate())
+	r.Post("/api/themes/rollback", s.handleThemeRollback())
 }
 
 type server struct {

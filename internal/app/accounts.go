@@ -4,8 +4,10 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 
@@ -18,22 +20,31 @@ const recordTimeout = 5 * time.Second
 // recordsLimit is how many records account:records lists when COMMAND_RECORDS_LIMIT names no other.
 const recordsLimit = 50
 
-// accountConfig returns the configuration of the account commands and of the check on the acting account.
-func accountConfig() accounts.Config {
+// accountConfig returns the configuration of the account commands and of the check on the acting account over registry.
+func accountConfig(registry *goncierge.Registry) accounts.Config {
 	return accounts.Config{
-		Roles:         fixedRoles,
+		Roles:         declaredRoles(registry),
 		Capability:    string(role.ManageUsers),
 		RecordTimeout: recordTimeout,
 		RecordsLimit:  recordsLimit,
 	}
 }
 
-// fixedRoles answers the role table every Gophenberg account takes its role from.
-func fixedRoles(context.Context, gonsole.Call) (accounts.Roles, error) {
-	known := role.Known()
-	capabilities := make(map[string][]string, len(known))
-	for _, name := range known {
-		capabilities[name] = role.CapabilitiesOf(name)
+// declaredRoles returns the hook answering the roles the core and the call's plugins declared into registry.
+func declaredRoles(registry *goncierge.Registry) func(context.Context, gonsole.Call) (accounts.Roles, error) {
+	return func(ctx context.Context, call gonsole.Call) (accounts.Roles, error) {
+		loaded, err := call.Plugins(ctx)
+		if err != nil {
+			return accounts.Roles{}, err
+		}
+		if loaded.Failed != nil {
+			return accounts.Roles{}, fmt.Errorf("register plugins: %w", loaded.Failed)
+		}
+		return accountRoles(registry), nil
 	}
-	return accounts.Roles{Known: known, Privileged: role.Privileged(), Capabilities: capabilities}, nil
+}
+
+// accountRoles returns the roles registry holds, privileged where they carry manage_users.
+func accountRoles(registry *goncierge.Registry) accounts.Roles {
+	return accounts.RolesFrom(registry, registry.HoldersOf(string(role.ManageUsers)))
 }

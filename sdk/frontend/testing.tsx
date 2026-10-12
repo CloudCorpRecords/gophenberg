@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 import { installTestEnvironment as installGodminTestEnvironment } from '@gopherium/godmin/testing'
-import { installTestEnvironment as installAuthTestEnvironment } from '@gopherium/react-auth/testing'
+import { installTestEnvironment as installAuthTestEnvironment, seedSession } from '@gopherium/react-auth/testing'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
 	Link,
@@ -16,7 +16,7 @@ import {
 } from '@tanstack/react-router'
 import { render } from '@testing-library/react'
 
-import type { FrontendPlugin } from './index'
+import type { FrontendPlugin, Session } from './index'
 
 export { HttpResponse, http, server } from '@gopherium/react-auth/testing'
 
@@ -29,11 +29,12 @@ export function installTestEnvironment() {
 }
 
 /**
- * Renders the given frontend plugin mounted at a specific route path.
+ * Renders the given frontend plugin mounted at a specific route path, with the signed in account the test seeds.
  * @param plugin - The frontend plugin whose nav and routes are mounted.
  * @param path - The initial router path to render at.
+ * @param options - The account the plugin's screens read, null for none, left out to ask the server.
  */
-export function renderPluginAt(plugin: FrontendPlugin, path: string) {
+export function renderPluginAt(plugin: FrontendPlugin, path: string, options: { session?: Session | null } = {}) {
 	const rootRoute = createRootRoute({
 		component: function TestHost() {
 			const matches = useRouterState({ select: (state) => state.matches })
@@ -77,6 +78,9 @@ export function renderPluginAt(plugin: FrontendPlugin, path: string) {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	})
+	if (options.session !== undefined) {
+		seedSession(client, options.session)
+	}
 	render(
 		<QueryClientProvider client={client}>
 			<RouterProvider router={router} />

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Button, CHANGE_OTHERS_WORK, can, postIcon } from '@gophenberg/frontend-sdk'
+import type { Session } from '@gophenberg/frontend-sdk'
 import { DataViews } from '@gophenberg/frontend-sdk/dataviews'
 import type { Action, Field, View } from '@gophenberg/frontend-sdk/dataviews'
 import { __, sprintf } from '@wordpress/i18n'
@@ -83,12 +84,17 @@ function useListRun(
  * @param status - The status the list shows.
  * @param page - The page the list shows, absent until it arrives.
  * @param held - How many items the trash of the type holds, 0 until the count arrives.
- * @param role - The role the session carries.
+ * @param session - The signed in account, or nothing.
  * @returns Whether the empty trash control shows, which takes a page showing rows, as WordPress offers it, and a
  *   count for its confirm to name.
  */
-function offersEmptyTrash(status: string, page: PostPage | undefined, held: number, role: string | undefined): boolean {
-	return status === 'trash' && (page?.items.length ?? 0) > 0 && held > 0 && can(role, CHANGE_OTHERS_WORK)
+function offersEmptyTrash(
+	status: string,
+	page: PostPage | undefined,
+	held: number,
+	session: Session | null | undefined,
+): boolean {
+	return status === 'trash' && (page?.items.length ?? 0) > 0 && held > 0 && can(session, CHANGE_OTHERS_WORK)
 }
 
 /**
@@ -361,7 +367,7 @@ export function PostsScreen() {
 			subtitle={waiting ? undefined : subtitleOf(listed)}
 			actions={
 				<>
-					{offersEmptyTrash(status, posts.data, held, session?.role) ? (
+					{offersEmptyTrash(status, posts.data, held, session) ? (
 						<EmptyTrash type={listed.key} count={held} list={run} />
 					) : null}
 					<HeaderAddNew listed={listed} run={run} />

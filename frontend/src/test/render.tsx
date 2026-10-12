@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import {
+	CHANGE_OTHERS_WORK,
+	MANAGE_SETTINGS,
+	MANAGE_THEMES,
+	MANAGE_TYPES,
+	MANAGE_USERS,
+} from '@gophenberg/frontend-sdk'
 import { createAuthQueryClient } from '@gopherium/react-auth'
 import type { User } from '@gopherium/react-auth'
 import { defaultUser, seedSession } from '@gopherium/react-auth/testing'
@@ -13,8 +20,16 @@ import { SiteFormatGate } from '../settings/SiteFormatGate'
 import { AdminToaster } from '../toasts'
 import { versionQueryKey } from '../version'
 
+/** The capabilities the administrator carries. */
+export const adminCapabilities = [MANAGE_USERS, MANAGE_THEMES, MANAGE_TYPES, MANAGE_SETTINGS, CHANGE_OTHERS_WORK]
+
 /** The account tests render as, an administrator unless a test names another role. */
-export const adminUser: User = { ...defaultUser, role: 'admin' }
+export const adminUser: User = {
+	...defaultUser,
+	role: 'admin',
+	capabilities: adminCapabilities,
+	grantable: ['admin', 'editor', 'author'],
+}
 
 /** Renders the application at an app-relative path with a seeded session. */
 export function renderAt(

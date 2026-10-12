@@ -537,3 +537,17 @@ export function errorTemplates(): Record<string, string> {
 		upload_theme_required: __('No theme arrived with this upload. Choose a zip file and try again.', DOMAIN),
 	}
 }
+
+/**
+ * Returns the message each code the authentication brick answers with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function authTemplates(): Record<string, string> {
+	return {
+		capability_missing: __('Your role does not allow %(capability)s.', DOMAIN),
+		last_privileged_refused: __('Somebody must be able to manage users.', DOMAIN),
+		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
+		role_unknown: __('Nothing declares that role.', DOMAIN),
+		self_role_refused: __('You cannot change your own role.', DOMAIN),
+	}
+}

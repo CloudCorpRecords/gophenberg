@@ -11,7 +11,9 @@ that.
 
 ## Roles
 
-There are three roles.
+Gophenberg comes with three roles, and a plugin may declare more.
+A role carries capabilities, such as `manage_users` or
+`manage_themes`, and each one opens a part of the site.
 
 An **admin** runs the site. It manages accounts, installs and
 switches themes, reshapes the content model, writes the
@@ -24,7 +26,10 @@ or settings.
 An **author** writes and works only its own content and media.
 
 Nothing else changes with the role. Every role signs in the same way
-and sees the same admin, minus the screens its role cannot use.
+and sees the same admin, minus the screens its capabilities do not
+open. A role a plugin declares with only `manage_themes`, for
+example, sees the Themes screen and none of the other admin screens.
+Each further capability the role carries opens its own screen too.
 
 ## Signing in
 
@@ -41,26 +46,38 @@ control, and the running version at the bottom.
 The Users screen lists every account with an Active or Disabled
 badge.
 
-**Creating a user** asks for email, name, and password. The
+**Creating a user** asks for email, name, password and role. The
 password must be at least 12 characters, and a taken email says
-so.
+so. The role menu offers the roles your own role reaches, and starts
+on Author, or on the narrowest role you may give when Author is not
+one of them.
+
+**Changing a role** starts from **Change role** on the account's
+row, which opens a small dialog. Pick the role and press **Change
+role**, and the screen says *Role changed.* The menu offers only the
+roles your own role reaches, so a role carrying a capability yours
+lacks is not there. Your own row has no Change role at all. When the
+server turns a change down, the dialog says why, such as *That role
+holds more than your own.* or *Somebody must be able to manage
+users.*
 
 **Disabling a user** blocks them from signing in and ends their
 existing sessions immediately, so they are signed out everywhere.
-You cannot disable your own account, which keeps the last
-administrator from locking everyone out.
+You cannot disable your own account, which keeps the last account
+that manages users from locking everyone out.
 
 Changing a password is not something the admin offers.
 
 **Managing accounts from a shell** works too. `account:role` sets
 one account's role, and `account:disable` and `account:enable`
 switch one account off and back on. Each one names your own account
-with `-as`, and that account must be an enabled admin, or the
-command refuses before changing anything. Each one only says what it
-would change until you add `-yes`. `account:role` and
-`account:disable` refuse to act on your own account, so the site
-always keeps an enabled admin. Ask another admin to change your role
-or disable your account.
+with `-as`, and that account must be enabled and hold a role carrying
+`manage_users`, or the command refuses before changing anything.
+Each one only says what it would change until you add `-yes`.
+`account:role` and `account:disable` refuse to act on your own
+account, and the last enabled account whose role carries
+`manage_users` always stays. Ask another account holding
+`manage_users` to change your role or disable your account.
 With the Docker setup from [Install](/self-hosting/install/), this
 makes an author an editor:
 

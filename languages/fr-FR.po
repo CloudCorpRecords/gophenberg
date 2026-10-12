@@ -1793,10 +1793,6 @@ msgctxt "account"
 msgid "Role"
 msgstr "Rôle"
 
-msgctxt "account"
-msgid "Role of %(name)s"
-msgstr "Rôle de %(name)s"
-
 #, fuzzy
 msgctxt "account"
 msgid "Status"
@@ -2821,3 +2817,42 @@ msgstr[2] "Les %(count)s éléments de la corbeille sont supprimés définitivem
 #, fuzzy
 msgid "Empty trash"
 msgstr "Vider la corbeille"
+
+#, fuzzy
+msgid "Change role"
+msgstr "Changer le rôle"
+
+#, fuzzy
+msgid "Change the role of %(name)s"
+msgstr "Changer le rôle de %(name)s"
+
+#, fuzzy
+msgid "Choose the role of %(name)s."
+msgstr "Choisissez le rôle de %(name)s."
+
+msgid "Nothing declares that role."
+msgstr "Rien ne déclare ce rôle."
+
+#, fuzzy
+msgid "Role changed."
+msgstr "Rôle modifié."
+
+#, fuzzy
+msgid "Somebody must be able to manage users."
+msgstr "Quelqu'un doit pouvoir gérer les utilisateurs."
+
+#, fuzzy
+msgid "That role holds more than your own."
+msgstr "Ce rôle va au-delà du vôtre."
+
+#, fuzzy
+msgid "The role could not be changed."
+msgstr "Le rôle n'a pas pu être modifié."
+
+#, fuzzy
+msgid "You cannot change your own role."
+msgstr "Vous ne pouvez pas changer votre propre rôle."
+
+#, fuzzy
+msgid "Your role does not allow %(capability)s."
+msgstr "Votre rôle ne permet pas %(capability)s."

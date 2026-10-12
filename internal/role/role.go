@@ -7,9 +7,11 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-
-	"github.com/gopherium/gouncer"
+	"github.com/gopherium/framework/goncierge"
 )
+
+// Source is the source the core grants its roles under in a registry.
+const Source = "core"
 
 // Admin is the role holding every authority over the site.
 const Admin = "admin"
@@ -51,53 +53,27 @@ var carried = []grant{
 	{Author, nil},
 }
 
-// Known returns every role an account may hold, in declaration order.
-func Known() []string {
-	known := make([]string, 0, len(carried))
+// Core returns the core's roles with the capabilities each carries, for a registry to grant.
+func Core() []goncierge.Role {
+	roles := make([]goncierge.Role, 0, len(carried))
 	for _, entry := range carried {
-		known = append(known, entry.role)
-	}
-	return known
-}
-
-// Can reports whether a role holds the capability, an unknown role holding none.
-func Can(role string, capability Capability) bool {
-	return slices.Contains(capabilitiesOf(role), capability)
-}
-
-// CapabilitiesOf returns the capabilities a role carries, named for a caller outside this package.
-func CapabilitiesOf(role string) []string {
-	own := capabilitiesOf(role)
-	held := make([]string, 0, len(own))
-	for _, capability := range own {
-		held = append(held, string(capability))
-	}
-	return held
-}
-
-// capabilitiesOf returns the capabilities the table gives role, none for an unknown role.
-func capabilitiesOf(role string) []Capability {
-	for _, entry := range carried {
-		if entry.role == role {
-			return entry.capabilities
+		held := make([]string, 0, len(entry.capabilities))
+		for _, capability := range entry.capabilities {
+			held = append(held, string(capability))
 		}
+		roles = append(roles, goncierge.Role{Name: entry.role, Capabilities: held})
 	}
-	return nil
-}
-
-// Privileged returns the roles that administer accounts.
-func Privileged() gouncer.Roles {
-	var roles gouncer.Roles
-	for _, entry := range carried {
-		if slices.Contains(entry.capabilities, ManageUsers) {
-			roles = append(roles, entry.role)
-		}
-	}
-	slices.Sort(roles)
 	return roles
 }
 
-// MayChange reports whether an account of the given role may change work the author owns.
-func MayChange(role string, actor, author uuid.UUID) bool {
-	return Can(role, ChangeOthersWork) || actor == author
+// Registry returns a registry holding the core's roles alone.
+func Registry() *goncierge.Registry {
+	registry := goncierge.New()
+	_ = registry.Replace(Source, Core())
+	return registry
+}
+
+// MayChange reports whether an account carrying the capabilities may change work the author owns.
+func MayChange(capabilities []string, actor, author uuid.UUID) bool {
+	return slices.Contains(capabilities, string(ChangeOthersWork)) || actor == author
 }

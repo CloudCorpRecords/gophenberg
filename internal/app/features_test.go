@@ -30,6 +30,7 @@ type operatorScenario struct {
 	result  testkit.Result
 	plugins []sdk.Plugin
 	offered *commanding
+	notes   *noting
 }
 
 // initializeOperatorCommands returns the binding of the operator command steps, t holding their databases.
@@ -65,7 +66,41 @@ func initializeOperatorCommands(t *testing.T) func(*godog.ScenarioContext) {
 		sc.Given(`^a plugin offering "([^"]*)", which needs -since but declares no flags$`, s.offerNeedingUndeclared)
 		sc.When(`^the operator runs "([^"]*)" with -since holding only spaces$`, s.runWithBlankSince)
 		sc.Then(`^the plugin command never ran$`, s.neverRan)
+		sc.Given(`^a plugin declaring the role "([^"]*)" with the capability "([^"]*)"$`, s.declareRole)
+		sc.Given(`^a plugin offering "([^"]*)", which asks for "([^"]*)"$`, s.offerAsking)
+		sc.Given(`^the administrator "([^"]*)" gave "([^"]*)" the role "([^"]*)"$`, s.gaveRole)
 	}
+}
+
+// declareRole has the notes plugin declare the role name carrying the capability.
+func (s *operatorScenario) declareRole(name, capability string) {
+	held := s.notesPlugin()
+	held.roles = append(held.roles, sdk.RoleDeclaration{Name: name, Capabilities: []string{capability}})
+}
+
+// offerAsking has the notes plugin offer a writing command called name that asks for the capability.
+func (s *operatorScenario) offerAsking(name, capability string) {
+	s.offered = &commanding{}
+	s.offered.command = sdk.Command{
+		Name: name, Summary: "purge every archived note", Writes: true, Capability: capability,
+		Run: s.offered.noteCall(nil),
+	}
+	s.notesPlugin().offered = s.offered
+}
+
+// gaveRole gives the account at email the role acting as actor, failing unless the change is applied.
+func (s *operatorScenario) gaveRole(actor, email, role string) error {
+	s.giveRole(email, role, actor)
+	return s.succeeds()
+}
+
+// notesPlugin returns the scenario's notes plugin, offering it the first time it is asked for.
+func (s *operatorScenario) notesPlugin() *noting {
+	if s.notes == nil {
+		s.notes = &noting{}
+		s.plugins = []sdk.Plugin{s.notes}
+	}
+	return s.notes
 }
 
 // offerNeedingSince offers a plugin whose command called name declares and needs -since.
@@ -85,17 +120,41 @@ func (s *operatorScenario) offer(name string, flags func(*flag.FlagSet)) {
 		Name: name, Summary: "bring back what was archived", Flags: flags, Needs: []string{"since"},
 		Run: s.offered.noteCall(nil),
 	}
-	s.plugins = []sdk.Plugin{noting{s.offered}}
+	s.notesPlugin().offered = s.offered
 }
 
-// noting is a commanding plugin under the id notes.
+// noting is a plugin under the id notes offering the command it was given and declaring the roles it holds.
 type noting struct {
-	*commanding
+	offered *commanding
+	roles   []sdk.RoleDeclaration
 }
 
 // ID returns the plugin's identifier.
-func (noting) ID() string {
+func (*noting) ID() string {
 	return "notes"
+}
+
+// Start readies nothing.
+func (*noting) Start(context.Context) error {
+	return nil
+}
+
+// Stop stops nothing.
+func (*noting) Stop(context.Context) error {
+	return nil
+}
+
+// Commands returns the command the plugin was given, none before one is.
+func (n *noting) Commands() []sdk.Command {
+	if n.offered == nil {
+		return nil
+	}
+	return n.offered.Commands()
+}
+
+// Roles returns the roles the plugin declares.
+func (n *noting) Roles() []sdk.RoleDeclaration {
+	return n.roles
 }
 
 // runWithBlankSince runs the command called name with -since holding only spaces.

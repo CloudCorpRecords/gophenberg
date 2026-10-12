@@ -18,6 +18,7 @@ export interface NavItem {
 	label: string
 	to: string
 	icon: ReactElement<ComponentProps<'svg'>>
+	capability?: Capability
 }
 
 export interface FrontendPlugin {
@@ -30,7 +31,6 @@ export {
 	AlertDialog,
 	Badge,
 	Button,
-	Dialog,
 	Icon,
 	IconButton,
 	InputControl,
@@ -53,6 +53,7 @@ export {
 	undo as undoIcon,
 	chevronUp as upIcon,
 } from '@wordpress/icons'
+export { Dialog } from './dialog'
 export { TextareaControl } from './TextareaControl'
 export {
 	CheckboxControl,
@@ -69,8 +70,7 @@ export {
 	MANAGE_THEMES,
 	MANAGE_TYPES,
 	MANAGE_USERS,
-	can,
 	sessionMayChange,
 } from './capabilities'
-export { useSession } from '@gopherium/react-auth'
+export { can, useSession } from '@gopherium/react-auth'
 export type { User as Session } from '@gopherium/react-auth'

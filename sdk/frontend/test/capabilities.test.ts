@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { defaultUser } from '@gopherium/react-auth/testing'
 import { expect, test } from 'vitest'
 
+import { mayChange } from '../capabilities'
 import {
 	CHANGE_OTHERS_WORK,
 	MANAGE_SETTINGS,
@@ -9,46 +11,39 @@ import {
 	MANAGE_TYPES,
 	MANAGE_USERS,
 	can,
-	mayChange,
 	sessionMayChange,
-} from '../capabilities'
+} from '../index'
 
-test('an admin holds every capability the screens ask for', () => {
-	for (const capability of [MANAGE_USERS, MANAGE_THEMES, MANAGE_TYPES, MANAGE_SETTINGS]) {
-		expect(can('admin', capability)).toBe(true)
+test('a session holds exactly the capabilities it lists, a plugin capability included', () => {
+	const session = { ...defaultUser, role: 'designer', capabilities: [MANAGE_THEMES, 'events.manage'] }
+
+	expect(can(session, MANAGE_THEMES)).toBe(true)
+	expect(can(session, 'events.manage')).toBe(true)
+	for (const capability of [MANAGE_USERS, MANAGE_TYPES, MANAGE_SETTINGS, CHANGE_OTHERS_WORK]) {
+		expect(can(session, capability)).toBe(false)
 	}
 })
 
-test('an editor and an author hold none of the administration capabilities', () => {
-	for (const role of ['editor', 'author']) {
-		for (const capability of [MANAGE_USERS, MANAGE_THEMES, MANAGE_TYPES, MANAGE_SETTINGS]) {
-			expect(can(role, capability)).toBe(false)
-		}
-	}
+test('a role name alone holds nothing', () => {
+	expect(can({ ...defaultUser, role: 'admin', capabilities: [] }, MANAGE_USERS)).toBe(false)
+	expect(can({ ...defaultUser, role: 'admin', capabilities: undefined }, MANAGE_USERS)).toBe(false)
 })
 
-test('a role the table does not know holds nothing', () => {
-	expect(can('archivist', MANAGE_USERS)).toBe(false)
-	expect(can('', MANAGE_SETTINGS)).toBe(false)
+test('no session holds nothing', () => {
+	expect(can(null, MANAGE_SETTINGS)).toBe(false)
 	expect(can(undefined, MANAGE_THEMES)).toBe(false)
-})
-
-test('an admin and an editor change work another account wrote, an author does not', () => {
-	expect(can('admin', CHANGE_OTHERS_WORK)).toBe(true)
-	expect(can('editor', CHANGE_OTHERS_WORK)).toBe(true)
-	expect(can('author', CHANGE_OTHERS_WORK)).toBe(false)
 })
 
 test('no session changes nothing, and a session follows mayChange', () => {
 	expect(sessionMayChange(undefined, 'account-a')).toBe(false)
-	expect(sessionMayChange({ role: 'author', id: 'account-a' }, 'account-a')).toBe(true)
-	expect(sessionMayChange({ role: 'editor', id: 'account-a' }, 'account-b')).toBe(true)
+	expect(sessionMayChange({ id: 'account-a', capabilities: [] }, 'account-a')).toBe(true)
+	expect(sessionMayChange({ id: 'account-a', capabilities: [CHANGE_OTHERS_WORK] }, 'account-b')).toBe(true)
+	expect(sessionMayChange({ id: 'account-a', capabilities: [] }, 'account-b')).toBe(false)
 })
 
 test('mayChange follows the capability or the authorship', () => {
-	expect(mayChange('editor', 'account-a', 'account-b')).toBe(true)
-	expect(mayChange('author', 'account-a', 'account-a')).toBe(true)
-	expect(mayChange('author', 'account-a', 'account-b')).toBe(false)
-	expect(mayChange('archivist', 'account-a', 'account-a')).toBe(true)
+	expect(mayChange([CHANGE_OTHERS_WORK], 'account-a', 'account-b')).toBe(true)
+	expect(mayChange([], 'account-a', 'account-a')).toBe(true)
+	expect(mayChange([], 'account-a', 'account-b')).toBe(false)
 	expect(mayChange(undefined, 'account-a', 'account-b')).toBe(false)
 })

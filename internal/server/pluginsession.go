@@ -7,7 +7,6 @@ import (
 
 	"github.com/gopherium/gouncer/authkit"
 
-	"github.com/gopherium/gophenberg/internal/role"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -23,8 +22,7 @@ func fileSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		identity := authkit.IdentityFromContext(r.Context())
 		filed := sdk.NewSession(
-			sdk.ID(identity.ID), identity.Email, identity.Name, identity.Role,
-			role.CapabilitiesOf(identity.Role),
+			sdk.ID(identity.ID), identity.Email, identity.Name, identity.Role, identity.Capabilities,
 		)
 		next.ServeHTTP(w, r.WithContext(sdk.WithSession(r.Context(), filed)))
 	})

@@ -101,7 +101,7 @@ test('reports a refused site default rather than failing quietly', async () => {
 })
 
 test('keeps the site default in an administrator s hands alone', async () => {
-	renderAt(PATH, { ...adminUser, role: 'author' })
+	renderAt(PATH, { ...adminUser, role: 'author', capabilities: [] })
 
 	expect(await screen.findByLabelText('Your language')).toBeInTheDocument()
 	expect(screen.queryByLabelText('The site default')).toBeNull()

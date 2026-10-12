@@ -5,14 +5,15 @@ package app
 import (
 	"context"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 
 	"github.com/gopherium/gophenberg/sdk"
 )
 
-// loadPlugins returns the registration the command line runs the compiled plugins through, starting none.
+// loadPlugins returns the registration the command line runs the plugins through, declaring their roles into roles.
 func loadPlugins(
-	plugins func(sdk.Deps) ([]sdk.Plugin, error),
+	plugins func(sdk.Deps) ([]sdk.Plugin, error), roles *goncierge.Registry,
 ) func(context.Context, gonsole.Call) (gonsole.Loaded, error) {
 	return func(ctx context.Context, call gonsole.Call) (gonsole.Loaded, error) {
 		grace, err := call.Env.Duration("SHUTDOWN_STOP_GRACE", servingDefaults.StopGrace)
@@ -29,6 +30,7 @@ func loadPlugins(
 		}
 		cfg := composeConfig{
 			databaseURL: databaseURL, fieldDepth: depth, mediaDir: call.Env.Value("MEDIA_DIR"), getenv: call.Env.Getenv,
+			roles: roles,
 		}
 		built, err := compose(ctx, cfg, plugins)
 		if err != nil {

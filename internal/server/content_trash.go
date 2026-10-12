@@ -4,6 +4,7 @@ package server
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -44,7 +45,7 @@ func (s *server) handleTrashEmpty() http.HandlerFunc {
 // trashOwner returns the account whose trash the session may empty, none when it may empty every account's.
 func trashOwner(r *http.Request) *uuid.UUID {
 	identity := authkit.IdentityFromContext(r.Context())
-	if role.Can(identity.Role, role.ChangeOthersWork) {
+	if slices.Contains(identity.Capabilities, string(role.ChangeOthersWork)) {
 		return nil
 	}
 	return &identity.ID

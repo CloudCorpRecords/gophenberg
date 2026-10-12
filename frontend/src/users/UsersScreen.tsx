@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Badge, Button, SelectControl, Stack, Text } from '@gophenberg/frontend-sdk'
+import { Badge, Button, Stack, Text } from '@gophenberg/frontend-sdk'
 import { __, _x, sprintf } from '@wordpress/i18n'
-import { fetchUsers, setUserDisabled, setUserRole, usersQueryKey } from '@gopherium/react-auth/admin'
+import { fetchUsers, setUserDisabled, usersQueryKey } from '@gopherium/react-auth/admin'
 import type { User } from '@gopherium/react-auth/admin'
 import { useSession } from '@gopherium/react-auth'
 import { ErrorNotice, LoadingRows, Page } from '@gopherium/godmin'
@@ -10,14 +10,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
-import { roleLabel, roleOptions } from './roles'
+import { ChangeRole } from './RoleDialog'
+import { roleLabel } from './roles'
 
 /**
  * Renders the account administration screen.
  * @returns The users screen element.
  */
 export function UsersScreen() {
-	const currentUserId = useSession().data?.id
+	const session = useSession().data
 	const users = useQuery({
 		queryKey: usersQueryKey,
 		queryFn: ({ signal }) => fetchUsers(signal),
@@ -29,24 +30,31 @@ export function UsersScreen() {
 				<Button render={<Link to="/users/new" />}>{__('New user', 'gophenberg')}</Button>
 			}
 		>
-			<UsersBody users={users.data} failed={users.isError} currentUserId={currentUserId} />
+			<UsersBody
+				users={users.data}
+				failed={users.isError}
+				currentUserId={session?.id}
+				grantable={session?.grantable ?? []}
+			/>
 		</Page>
 	)
 }
 
 /**
  * Renders the account list, or the state standing in for it.
- * @param props - The accounts, whether the read failed, and the signed-in account.
+ * @param props - The accounts, whether the read failed, the signed-in account, and the roles it may give.
  * @returns The list element, or the state element.
  */
 function UsersBody({
 	users,
 	failed,
 	currentUserId,
+	grantable,
 }: {
 	users: User[] | undefined
 	failed: boolean
 	currentUserId: string | undefined
+	grantable: string[]
 }): ReactNode {
 	if (failed) {
 		return <ErrorNotice>{__('Users could not be loaded.', 'gophenberg')}</ErrorNotice>
@@ -75,7 +83,7 @@ function UsersBody({
 				</thead>
 				<tbody>
 					{users.map((user) => (
-						<UserRow key={user.id} user={user} isSelf={user.id === currentUserId} />
+						<UserRow key={user.id} user={user} isSelf={user.id === currentUserId} grantable={grantable} />
 					))}
 				</tbody>
 			</table>
@@ -84,50 +92,28 @@ function UsersBody({
 }
 
 /**
- * Renders one account with its status and the control letting it in or out.
- * @param props - The account and whether it is the signed-in one.
+ * Renders one account with its status, and for another account the controls changing its role and letting it in or out.
+ * @param props - The account, whether it is the signed-in one, and the roles the reader may give.
  * @returns The table row element.
  */
-function UserRow({ user, isSelf }: { user: User, isSelf: boolean }) {
+function UserRow({ user, isSelf, grantable }: { user: User, isSelf: boolean, grantable: string[] }) {
 	return (
 		<tr>
 			<td>{user.name}</td>
 			<td>{user.email}</td>
-			<td>{isSelf ? roleLabel(user.role) : <UserRole user={user} />}</td>
+			<td>{roleLabel(user.role)}</td>
 			<td>
 				<UserStatus disabled={user.disabled} />
 			</td>
-			<td className="godmin-table__actions">{isSelf ? null : <UserToggle user={user} />}</td>
+			<td className="godmin-table__actions">
+				{isSelf ? null : (
+					<div className="gophenberg-users__actions">
+						<ChangeRole user={user} grantable={grantable} />
+						<UserToggle user={user} />
+					</div>
+				)}
+			</td>
 		</tr>
-	)
-}
-
-/**
- * Renders the control writing the role an account holds.
- * @param props - The account the control acts on.
- * @returns The role control element.
- */
-function UserRole({ user }: { user: User }) {
-	const client = useQueryClient()
-	const write = useMutation({
-		mutationFn: (role: string) => setUserRole(user.id, role),
-		onSuccess: () => client.invalidateQueries({ queryKey: usersQueryKey }),
-	})
-	const options = roleOptions()
-	const held = options.find((option) => option.value === user.role)
-	return (
-		<Stack direction="column" gap="xs">
-			{!held && <Text>{roleLabel(user.role)}</Text>}
-			<SelectControl
-				label={sprintf(_x('Role of %(name)s', 'account', 'gophenberg'), { name: user.name })}
-				hideLabelFromVision
-				size="compact"
-				items={options}
-				value={held}
-				onValueChange={(item) => item?.value != null && write.mutate(item.value)}
-			/>
-			{write.isError && <Text role="alert">{__('Update failed.', 'gophenberg')}</Text>}
-		</Stack>
 	)
 }
 

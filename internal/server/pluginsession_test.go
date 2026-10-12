@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gopherium/framework/goncierge"
+
 	"github.com/gopherium/gophenberg/internal/role"
 	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/sdk"
@@ -20,6 +22,7 @@ type seenSession struct {
 	Role         string `json:"role"`
 	ChangesWork  bool   `json:"changes_work"`
 	ManagesUsers bool   `json:"manages_users"`
+	ManagesNotes bool   `json:"manages_notes"`
 }
 
 // sessionReporter answers what the sdk seam carries on the request.
@@ -32,12 +35,19 @@ func sessionReporter() http.Handler {
 			Role:         held.Role,
 			ChangesWork:  held.Can(string(role.ChangeOthersWork)),
 			ManagesUsers: held.Can(string(role.ManageUsers)),
+			ManagesNotes: held.Can("notes.manage"),
 		})
 	})
 }
 
-// pluginServerFor returns a server mounting the reporter, and a cookie for the given role.
+// pluginServerFor returns a server mounting the reporter over the core's roles, and a cookie for the given role.
 func pluginServerFor(t *testing.T, role string) (http.Handler, *http.Cookie) {
+	t.Helper()
+	return pluginServerOver(t, nil, role)
+}
+
+// pluginServerOver returns a server mounting the reporter over roles, and a cookie for the given role.
+func pluginServerOver(t *testing.T, roles *goncierge.Registry, role string) (http.Handler, *http.Cookie) {
 	t.Helper()
 	users := newFakeUserStore()
 	addWithRole(t, users, "maria@example.com", "Maria Perez", role)
@@ -45,6 +55,7 @@ func pluginServerFor(t *testing.T, role string) (http.Handler, *http.Cookie) {
 		Users:             users,
 		Plugins:           map[string]http.Handler{"reporter": sessionReporter()},
 		PluginPublicPaths: map[string][]string{"reporter": {"/open"}},
+		Roles:             roles,
 	})
 	recorder := doLogin(t, handler, `{"email":"maria@example.com","password":"correct horse battery"}`)
 	if recorder.Code != http.StatusOK {
@@ -66,6 +77,23 @@ func askReporter(t *testing.T, handler http.Handler, cookie *http.Cookie, path s
 		t.Fatalf("%s status = %d, want %d", path, recorder.Code, http.StatusOK)
 	}
 	return decodeBody[seenSession](t, recorder)
+}
+
+func TestAPluginReadsTheCapabilitiesTheRegistryGrantsAPluginRole(t *testing.T) {
+	t.Parallel()
+
+	roles := role.Registry()
+	if err := roles.Grant("notes", "archivist", "notes.manage", string(role.ChangeOthersWork)); err != nil {
+		t.Fatalf("Grant() = %v, want the plugin role granted", err)
+	}
+	handler, cookie := pluginServerOver(t, roles, "archivist")
+
+	seen := askReporter(t, handler, cookie, "/api/plugins/reporter/anything")
+	carried := [3]bool{seen.ManagesNotes, seen.ChangesWork, seen.ManagesUsers}
+
+	if seen.Role != "archivist" || carried != [3]bool{true, true, false} {
+		t.Errorf("the plugin saw %+v, want archivist carrying notes.manage and change_others_work alone", seen)
+	}
 }
 
 func TestAPluginReadsTheSessionTheHostFiled(t *testing.T) {

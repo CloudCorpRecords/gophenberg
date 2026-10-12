@@ -36,7 +36,7 @@ function optionsOf(supported: string[]): { label: string, value: string }[] {
  */
 export function LanguageScreen() {
 	const client = useQueryClient()
-	const role = useSession().data?.role
+	const session = useSession().data
 	const [notice, setNotice] = useState('')
 	const answered = useQuery({ queryKey: localeQueryKey, queryFn: fetchLocale })
 	const site = useQuery({ queryKey: siteLocaleQueryKey, queryFn: fetchSiteLocale })
@@ -77,7 +77,7 @@ export function LanguageScreen() {
 				<Text variant="body-sm">
 					{__('A reload shows the admin in the language you chose.', 'gophenberg')}
 				</Text>
-				{can(role, MANAGE_SETTINGS) && (
+				{can(session, MANAGE_SETTINGS) && (
 					<SelectControl
 						label={__('The site default', 'gophenberg')}
 						items={siteOptions}

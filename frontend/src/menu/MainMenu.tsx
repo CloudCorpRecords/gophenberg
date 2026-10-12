@@ -61,18 +61,20 @@ function MenuItem({ item }: { item: NavItem }) {
 
 /**
  * Renders the top-level navigation menu: the core sections first, then one
- * row per plugin nav entry.
+ * row per plugin nav entry, each row shown when the session carries the
+ * capability it names and the one its route asks for.
  * @returns The navigation landmark containing the menu rows.
  */
 export function MainMenu() {
 	const contentNav = useContentNav()
-	const role = useSession().data?.role
+	const session = useSession().data
 	const routesByPath: Record<string, AnyRoute | undefined> = useRouter().routesByPath
 	const reachable = (items: NavItem[]) =>
-		items.filter((item) => {
-			const asked = routesByPath[item.to]?.options.staticData?.capability
-			return asked === undefined || can(role, asked)
-		})
+		items.filter((item) =>
+			[item.capability, routesByPath[item.to]?.options.staticData?.capability].every(
+				(asked) => asked === undefined || can(session, asked),
+			),
+		)
 	return (
 		<Stack direction="column" gap="xs">
 			{reachable(contentNav).map((item) => (

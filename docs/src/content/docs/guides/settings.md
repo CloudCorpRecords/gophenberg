@@ -4,7 +4,8 @@ description: The page size and the picture quality the whole site follows.
 ---
 
 Two settings decide how the site serves what you publish. Both live
-on the **Settings** screen, which only an admin reaches.
+on the **Settings** screen, which only a role carrying
+`manage_settings` reaches, such as admin.
 
 ## Posts per page
 

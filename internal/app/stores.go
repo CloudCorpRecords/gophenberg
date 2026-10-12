@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
@@ -23,6 +24,7 @@ type composeConfig struct {
 	fieldDepth  int
 	mediaDir    string
 	getenv      func(string) string
+	roles       *goncierge.Registry
 }
 
 // site is what compose builds over one pool.
@@ -39,6 +41,7 @@ type site struct {
 	registered []sdk.Plugin
 	failed     error
 	lane       *pluginLane
+	roles      *goncierge.Registry
 }
 
 // composeOf returns the values compose reads out of the server settings.

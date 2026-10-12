@@ -58,8 +58,9 @@ Every command is described at https://docs.gophenberg.org/self-hosting/commands/
   plugin offers. They are named after the plugin's id.
 - A `Not loaded:` part at the end names each plugin that failed to
   register, and why, such as a bad `GOPHENBERG_FEED_ITEMS`. The
-  listing still exits with code 0, but `serve`, `check`, `migrate`
-  and `seed -yes` fail until the setting is fixed.
+  listing still exits with code 0, but `serve`, `check`, `migrate`,
+  `seed -yes` and every account command except `account:list` and
+  `account:records` fail until the setting is fixed.
 
 Every command answers `-h`. `gophenberg account:role -h` and
 `gophenberg help account:role` print the same page, and neither needs
@@ -123,9 +124,10 @@ once.
 `account:grant-role`, `account:role`, `account:disable` and
 `account:enable` need `-as` with the email address of the person
 running the command. That account must exist, be enabled and
-activated, and hold a role that may manage users, which only `admin`
-does. The check runs before anything changes, on a dry run too. When
-it fails, the command exits with code 1 and says why:
+activated, and hold a role carrying `manage_users`. `admin` carries
+it, and so does any role a plugin gives it. The check runs before
+anything changes, on a dry run too. When it fails, the command exits
+with code 1 and says why:
 
 ```text
 gophenberg: the account editor@example.com holds the role editor, which lacks manage_users
@@ -150,8 +152,25 @@ gophenberg: the account admin@example.com cannot disable itself
 `the account admin@example.com cannot change its own role` instead.
 Name another admin in `-as` to make that change.
 
-The last enabled admin always stays. If two changes run at the same
-time and would together leave no enabled admin, one of them fails with
+An account may hand out only a role whose capabilities its own role
+carries, and may change only an account whose role it covers that
+way. So a role a plugin gives only `manage_users` can make authors,
+but never an admin. Going past that exits with code 1:
+
+```text
+gophenberg: the role admin carries change_others_work, which the account lead@example.com lacks
+```
+
+A role is one of the core's, `admin`, `editor` and `author`, or one
+a plugin declares. Every account command except `account:list` and
+`account:records` registers the plugins before it runs, so
+`account:role` and `-role` take a plugin's roles too.
+Naming a role nobody declares exits with code 2 and lists the roles
+there are.
+
+The last enabled account whose role carries `manage_users` always
+stays. If two changes run at the same time and would together leave
+no such account, one of them fails with
 `<address> is the last enabled privileged account`.
 
 `-as` asks for no password. It names who answers for the change.
@@ -292,11 +311,11 @@ gophenberg account:create-admin [flags]
 ```
 
 Creates one account with the address in `-email`, the display name in
-`-name`, and the role in `-role`, which is `admin`, `editor` or
-`author`. It reads the password from standard input, keeping it out of
-your shell history, and applies the `accounts`, `records` and `core`
-schema steps first. It needs no `-as`, since it is how a site gets its
-first admin:
+`-name`, and the role in `-role`, which is `admin`, `editor`,
+`author` or a role a plugin declares. It reads the password from
+standard input, keeping it out of your shell history, and applies the
+`accounts`, `records` and `core` schema steps first. It needs no
+`-as`, since it is how a site gets its first admin:
 
 ```sh
 docker compose run --rm -T gophenberg \
@@ -310,7 +329,8 @@ gophenberg account:disable [flags] <email>
 ```
 
 Disables one account, so it can no longer sign in. It refuses to
-disable the account named in `-as`, and the last enabled admin.
+disable the account named in `-as`, and the last enabled account
+holding `manage_users`.
 
 ### account:enable
 
@@ -365,6 +385,7 @@ answers one document instead.
 gophenberg account:role [flags] <email> <role>
 ```
 
-Sets the role of one account to `admin`, `editor` or `author`. It
-refuses to change the role of the account named in `-as`, and to take
-the admin role from the last enabled admin.
+Sets the role of one account to `admin`, `editor`, `author` or a role
+a plugin declares. It refuses to change the role of the account named
+in `-as`, to hand out a role beyond the reach of that account, and to
+take `manage_users` from the last enabled account holding it.
