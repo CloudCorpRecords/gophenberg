@@ -89,8 +89,9 @@ func TestAPluginReadsTheCapabilitiesTheRegistryGrantsAPluginRole(t *testing.T) {
 	handler, cookie := pluginServerOver(t, roles, "archivist")
 
 	seen := askReporter(t, handler, cookie, "/api/plugins/reporter/anything")
+	carried := [3]bool{seen.ManagesNotes, seen.ChangesWork, seen.ManagesUsers}
 
-	if seen.Role != "archivist" || !seen.ManagesNotes || !seen.ChangesWork || seen.ManagesUsers {
+	if seen.Role != "archivist" || carried != [3]bool{true, true, false} {
 		t.Errorf("the plugin saw %+v, want archivist carrying notes.manage and change_others_work alone", seen)
 	}
 }

@@ -93,10 +93,12 @@ func TestEachAdminRouteRefusesAnEditorWithWhatItAsksFor(t *testing.T) {
 		if asked == "" {
 			want = "role_insufficient"
 		}
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("%s %s answered %d for an editor, want 403", gated.method, gated.pattern, recorder.Code)
+		}
 		got := refusalOf(t, recorder)
-		if recorder.Code != http.StatusForbidden || got.Code != want || (asked != "" && got.Meta["capability"] != asked) {
-			t.Errorf("%s %s answered %d %+v for an editor, want 403 %s naming %q",
-				gated.method, gated.pattern, recorder.Code, got, want, asked)
+		if named, _ := got.Meta["capability"].(string); got.Code != want || named != asked {
+			t.Errorf("%s %s refused an editor with %+v, want %s naming %q", gated.method, gated.pattern, got, want, asked)
 		}
 	}
 }
