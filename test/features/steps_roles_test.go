@@ -138,18 +138,39 @@ type sessionAnswer struct {
 	Grantable    []string `json:"grantable"`
 }
 
-// sessionHolds fails unless the list pick reads from the last session answer holds want.
-func sessionHolds(ctx context.Context, pick func(sessionAnswer) []string, want string) error {
+// lastSession returns what the last session answer carries.
+func lastSession(ctx context.Context) (sessionAnswer, error) {
 	w, err := worldOf(ctx)
 	if err != nil {
-		return err
+		return sessionAnswer{}, err
 	}
 	var held sessionAnswer
 	if err := w.answer.decode(&held); err != nil {
+		return sessionAnswer{}, err
+	}
+	return held, nil
+}
+
+// sessionHolds fails unless the list pick reads from the last session answer holds want.
+func sessionHolds(ctx context.Context, pick func(sessionAnswer) []string, want string) error {
+	held, err := lastSession(ctx)
+	if err != nil {
 		return err
 	}
 	if listed := pick(held); !slices.Contains(listed, want) {
 		return fmt.Errorf("the session lists %v, want %q among them", listed, want)
+	}
+	return nil
+}
+
+// theSessionLacksTheCapability fails when the session answer carries the capability.
+func theSessionLacksTheCapability(ctx context.Context, capability string) error {
+	held, err := lastSession(ctx)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(held.Capabilities, capability) {
+		return fmt.Errorf("the session carries %v, want %q left out", held.Capabilities, capability)
 	}
 	return nil
 }
@@ -205,6 +226,9 @@ func initializeRouteGate(sc *godog.ScenarioContext) {
 	sc.When(`^the account disables "([^"]*)"$`, theAccountDisables)
 	sc.Then(`^the session carries the capability "([^"]*)"$`, theSessionCarriesTheCapability)
 	sc.Then(`^the session may give the role "([^"]*)"$`, theSessionMayGiveTheRole)
+	sc.Then(`^the session lacks the capability "([^"]*)"$`, theSessionLacksTheCapability)
+	sc.When(`^the account sets its locale to "([^"]*)"$`, theAdministratorSetsTheirLocaleTo)
+	sc.Then(`^the error names "([^"]*)" under "([^"]*)"$`, theErrorNamesUnder)
 	sc.When(`^the account asks for the user list$`, theAccountAsksForTheUserList)
 	sc.When(`^the account asks for the theme list$`, theAccountAsksForTheThemeList)
 	sc.When(`^the account asks for the content list$`, theAccountAsksForTheContentList)

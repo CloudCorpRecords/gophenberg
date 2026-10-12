@@ -1,8 +1,9 @@
 Feature: A role decides which routes an account reaches
   A site owner hands out accounts that write without handing over the
-  keys to the site. Each administration area answers only a role
-  carrying its capability, while the content routes stay open to every
-  role that can sign in.
+  keys to the site, and accounts for members who never enter the admin.
+  Each administration area answers only a role carrying its capability,
+  the content routes answer every role carrying access_admin, and a
+  member keeps only its own session and language.
 
   Background:
     Given a running Gophenberg with an empty managed themes directory
@@ -46,6 +47,45 @@ Feature: A role decides which routes an account reaches
     Given a signed in author
     When the account asks for the content types
     Then the request is answered
+
+  Scenario: A member reads its own session, which holds no way into the admin
+    Given a signed in "member"
+    When the account reads its session
+    Then the request is answered
+    And the session lacks the capability "access_admin"
+
+  Scenario: A member keeps its own language
+    Given a signed in "member"
+    When the account sets its locale to "es-ES"
+    Then the request is answered
+
+  Scenario: A member is refused the content list
+    Given a signed in "member"
+    When the account asks for the content list
+    Then the request is refused with the code "capability_missing"
+    And the error names "access_admin" under "capability"
+
+  Scenario: A member is refused the content types
+    Given a signed in "member"
+    When the account asks for the content types
+    Then the request is refused with the code "capability_missing"
+    And the error names "access_admin" under "capability"
+
+  Scenario: A member is refused the themes
+    Given a signed in "member"
+    When the account asks for the theme list
+    Then the request is refused with the code "capability_missing"
+
+  Scenario: A member is refused the account list
+    Given a signed in "member"
+    When the account asks for the user list
+    Then the request is refused with the code "role_insufficient"
+
+  Scenario: The administrator's session opens the admin and may give the member role
+    Given a signed in administrator
+    When the account reads its session
+    Then the session carries the capability "access_admin"
+    And the session may give the role "member"
 
   Scenario: An answer to a signed in account is kept out of shared caches
     Given a signed in author
