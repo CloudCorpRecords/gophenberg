@@ -4,6 +4,7 @@ package server_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -101,5 +102,23 @@ func TestContentAPIRefusesTermPagingItCannotRead(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestContentAPIAnswersNotFoundForAnAddressNoStoreCanHold(t *testing.T) {
+	t.Parallel()
+
+	store := newFakePostStore()
+	store.publishedErr = errors.New("pq: invalid byte sequence for encoding \"UTF8\"")
+	handler := contentServerOver(store)
+
+	for name, query := range map[string]string{
+		"a NUL byte":    "%00",
+		"invalid UTF-8": "%E9",
+	} {
+		recorder := getContent(t, handler, "/api/content/v1/resolve?path=/"+query)
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("%s status = %d, want %d", name, recorder.Code, http.StatusNotFound)
+		}
 	}
 }

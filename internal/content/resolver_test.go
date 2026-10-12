@@ -246,3 +246,24 @@ func TestResolveCarriesAFailedRegistryOutward(t *testing.T) {
 		t.Fatalf("Resolve error = %v, want %v", err, errStoreDown)
 	}
 }
+
+func TestResolveAnswersAnAddressNoStoreCanHoldAsNotFound(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeAddresses()
+	store.err = errStoreDown
+	resolver := newResolver(t, store)
+
+	for name, raw := range map[string]string{
+		"a NUL byte":    "/pages/\x00/team",
+		"invalid UTF-8": "/broken/\xe9",
+	} {
+		_, err := resolver.Resolve(t.Context(), raw)
+		if !errors.Is(err, content.ErrNotFound) {
+			t.Errorf("%s error = %v, want %v", name, err, content.ErrNotFound)
+		}
+	}
+	if store.lookups != 0 {
+		t.Errorf("lookups = %d, want none for an address no store can hold", store.lookups)
+	}
+}

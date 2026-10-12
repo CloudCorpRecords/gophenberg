@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // PageWord is the segment a numbered listing hides behind.
@@ -56,6 +57,9 @@ func NewResolver(store AddressReader, registry TypeReader) *Resolver {
 // Resolve returns what the address holds, or [ErrNotFound].
 func (r *Resolver) Resolve(ctx context.Context, raw string) (Address, error) {
 	address := tidy(raw)
+	if !storableAddress(address) {
+		return Address{}, ErrNotFound
+	}
 	item, err := r.content.PublishedByPath(ctx, address)
 	if err == nil {
 		return r.itemAt(ctx, item, 1)
@@ -90,6 +94,12 @@ func (r *Resolver) itemAt(ctx context.Context, item Content, page int) (Address,
 // tidy returns the address a request carries without its surrounding slashes.
 func tidy(raw string) string {
 	return strings.Trim(path.Clean("/"+raw), "/")
+}
+
+// storableAddress reports whether an address can name stored content,
+// which never holds a NUL byte or invalid UTF-8.
+func storableAddress(address string) bool {
+	return !strings.ContainsRune(address, '\x00') && utf8.ValidString(address)
 }
 
 // archiveAt returns the listing the address names, or [ErrNotFound].
