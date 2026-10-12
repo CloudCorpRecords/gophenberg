@@ -82,8 +82,8 @@ test('offers exactly the roles the session may give', async ({ page, request }) 
 	await page.getByRole('button', { name: `Change the role of ${offered.name}` }).click()
 	await page.getByRole('dialog', { name: 'Change role' }).getByRole('combobox', { name: 'Role' }).click()
 
-	expect(session.grantable).toEqual(['admin', 'editor', 'author'])
-	await expect(page.getByRole('option')).toHaveText(['Administrator', 'Editor', 'Author'])
+	expect(session.grantable).toEqual(['admin', 'editor', 'author', 'member'])
+	await expect(page.getByRole('option')).toHaveText(['Administrator', 'Editor', 'Author', 'Member'])
 })
 
 test('explains a role write refused after the reader lost the right to give roles', async ({ browser, request }) => {

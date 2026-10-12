@@ -2,7 +2,7 @@
 
 import { expect, test as setup } from '@playwright/test'
 
-import { authorAuthFile, editorAuthFile, seededRoles } from '../env'
+import { authorAuthFile, editorAuthFile, memberAuthFile, seededRoles } from '../env'
 
 setup('logs in as the seeded editor and stores the session', async ({ page }) => {
 	await page.goto('/admin/')
@@ -24,4 +24,15 @@ setup('logs in as the seeded author and stores the session', async ({ page }) =>
 
 	await expect(page.getByText('Welcome to Gophenberg.')).toBeVisible()
 	await page.context().storageState({ path: authorAuthFile })
+})
+
+setup('logs in as the seeded member and stores the session', async ({ page }) => {
+	await page.goto('/admin/')
+
+	await page.getByLabel('Email').fill(seededRoles.member.email)
+	await page.getByLabel('Password').fill(seededRoles.member.password)
+	await page.getByRole('button', { name: 'Log in' }).click()
+
+	await expect(page.getByText('Sorry, you are not allowed to access this page.')).toBeVisible()
+	await page.context().storageState({ path: memberAuthFile })
 })
