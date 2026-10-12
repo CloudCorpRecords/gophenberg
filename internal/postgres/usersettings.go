@@ -11,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres/db"
 )
+
+var _ content.UserSettingStore = (*UserSettingStore)(nil)
 
 // UserSettingStore persists one reader's own preferences in the core schema.
 type UserSettingStore struct {

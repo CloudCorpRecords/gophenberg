@@ -11,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres/db"
 )
+
+var _ content.SiteSettingStore = (*SettingStore)(nil)
 
 // lockedKeys returns the keys of a write in ascending order.
 func lockedKeys(values map[string]string) []string {
