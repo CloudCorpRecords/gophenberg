@@ -26,6 +26,8 @@ const (
 	EditorName    = "Editor"
 	AuthorEmail   = "author@example.com"
 	AuthorName    = "Author"
+	MemberEmail   = "member@example.com"
+	MemberName    = "Member"
 )
 
 // demoPost is one scripted post of the demo data set.
