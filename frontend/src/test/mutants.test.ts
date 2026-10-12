@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { expect, test } from 'vitest'
 
+import { repositoryRoot } from '../../scripts/config.ts'
 import { mutateTargets, mutatedFiles, parseShard, shardTargets, strykerPatterns } from '../../scripts/mutants.ts'
 
 const PATTERNS = ['frontend/src/**/*.{ts,tsx}', '!**/*.test.{ts,tsx}', '!frontend/src/main.tsx']
@@ -184,6 +188,14 @@ test('reads the patterns the mutation config holds', () => {
 	const changed = ['frontend/src/users/screen.tsx', 'frontend/src/test/users.test.tsx', 'frontend/src/i18n/catalog.ts']
 
 	expect(mutatedFiles(changed, strykerPatterns())).toEqual(['frontend/src/users/screen.tsx'])
+})
+
+test('gives the initial test run longer than a mutation job may take', () => {
+	const config = JSON.parse(readFileSync(join(repositoryRoot(), 'frontend', 'stryker.config.json'), 'utf8')) as {
+		dryRunTimeoutMinutes?: number
+	}
+
+	expect(config.dryRunTimeoutMinutes).toBeGreaterThan(15)
 })
 
 test('reads a shard named as its index over the shard count', () => {
