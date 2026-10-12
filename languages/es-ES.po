@@ -1486,10 +1486,6 @@ msgctxt "account"
 msgid "Role"
 msgstr "Rol"
 
-msgctxt "account"
-msgid "Role of %(name)s"
-msgstr "Rol de %(name)s"
-
 msgctxt "admin section"
 msgid "Media"
 msgstr "Medios"
@@ -2433,3 +2429,42 @@ msgstr[2] "Los %(count)s elementos de la papelera se borran permanentemente. Est
 #, fuzzy
 msgid "Empty trash"
 msgstr "Vaciar papelera"
+
+#, fuzzy
+msgid "Change role"
+msgstr "Cambiar el rol"
+
+#, fuzzy
+msgid "Change the role of %(name)s"
+msgstr "Cambiar el rol de %(name)s"
+
+#, fuzzy
+msgid "Choose the role of %(name)s."
+msgstr "Elige el rol de %(name)s."
+
+msgid "Nothing declares that role."
+msgstr "Nada declara ese rol."
+
+#, fuzzy
+msgid "Role changed."
+msgstr "Rol cambiado."
+
+#, fuzzy
+msgid "Somebody must be able to manage users."
+msgstr "Alguien tiene que poder gestionar los usuarios."
+
+#, fuzzy
+msgid "That role holds more than your own."
+msgstr "Ese rol abarca más que el tuyo."
+
+#, fuzzy
+msgid "The role could not be changed."
+msgstr "No se ha podido cambiar el rol."
+
+#, fuzzy
+msgid "You cannot change your own role."
+msgstr "No puedes cambiar tu propio rol."
+
+#, fuzzy
+msgid "Your role does not allow %(capability)s."
+msgstr "Tu rol no permite %(capability)s."

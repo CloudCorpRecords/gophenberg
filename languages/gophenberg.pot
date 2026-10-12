@@ -458,7 +458,13 @@ msgstr ""
 msgid "Change address"
 msgstr ""
 
+msgid "Change role"
+msgstr ""
+
 msgid "Change the address of %(type)s"
+msgstr ""
+
+msgid "Change the role of %(name)s"
 msgstr ""
 
 msgid "Checkbox group"
@@ -474,6 +480,9 @@ msgid "Choose how the site serves its content."
 msgstr ""
 
 msgid "Choose the language the admin reads in."
+msgstr ""
+
+msgid "Choose the role of %(name)s."
 msgstr ""
 
 msgid "Clear %(field)s"
@@ -1021,6 +1030,9 @@ msgstr ""
 msgid "Not serving"
 msgstr ""
 
+msgid "Nothing declares that role."
+msgstr ""
+
 msgid "Nothing points here yet."
 msgstr ""
 
@@ -1189,6 +1201,9 @@ msgstr ""
 msgid "Restore"
 msgstr ""
 
+msgid "Role changed."
+msgstr ""
+
 msgid "Roll back to %(theme)s"
 msgstr ""
 
@@ -1285,6 +1300,9 @@ msgstr ""
 msgid "Slug"
 msgstr ""
 
+msgid "Somebody must be able to manage users."
+msgstr ""
+
 msgid "Someone else changed this media item while you were editing it. Reload the page and make your change again."
 msgstr ""
 
@@ -1334,6 +1352,9 @@ msgid "That field is not on this content type any more. Reload the page to see t
 msgstr ""
 
 msgid "That revision does not exist, and older ones drop off once a type holds more than it keeps. Open the item to see which revisions are left."
+msgstr ""
+
+msgid "That role holds more than your own."
 msgstr ""
 
 msgid "That web address does not name a media item Gophenberg can look up. Open the media library and pick the item from there."
@@ -1480,6 +1501,9 @@ msgid "The number of revisions to keep has to be a whole number, and it cannot b
 msgstr ""
 
 msgid "The registry could not be reached."
+msgstr ""
+
+msgid "The role could not be changed."
 msgstr ""
 
 msgid "The rule on %(source)s names nothing to match. Pick a value, or remove the rule."
@@ -1800,7 +1824,13 @@ msgstr ""
 msgid "Yes or no"
 msgstr ""
 
+msgid "You cannot change your own role."
+msgstr ""
+
 msgid "Your language"
+msgstr ""
+
+msgid "Your role does not allow %(capability)s."
 msgstr ""
 
 msgid "Your server pins the site to the theme %(name)s, so themes cannot be changed here. Ask whoever looks after your site to remove the pin."
@@ -1896,10 +1926,6 @@ msgstr ""
 
 msgctxt "account"
 msgid "Role"
-msgstr ""
-
-msgctxt "account"
-msgid "Role of %(name)s"
 msgstr ""
 
 msgctxt "account"
