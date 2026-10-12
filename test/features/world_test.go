@@ -49,6 +49,11 @@ type memorySettings struct {
 	values map[string]string
 }
 
+// newMemorySettings returns an empty in-memory site setting store.
+func newMemorySettings() *memorySettings {
+	return &memorySettings{values: make(map[string]string)}
+}
+
 // Lookup returns the value stored under key and whether the key is set at all.
 func (m *memorySettings) Lookup(_ context.Context, key string) (string, bool, error) {
 	m.mu.Lock()
@@ -62,6 +67,11 @@ type memoryReaders struct {
 	mu     sync.Mutex
 	values map[string]string
 	fails  error
+}
+
+// newMemoryReaders returns an empty in-memory reader setting store that never fails.
+func newMemoryReaders() *memoryReaders {
+	return &memoryReaders{values: make(map[string]string)}
 }
 
 // Lookup returns the value the reader stored under key, and whether it is set at all.
@@ -166,14 +176,14 @@ func provisionWorld(ctx context.Context, _ *godog.Scenario) (context.Context, er
 		return ctx, errors.Join(err, os.RemoveAll(themes), os.RemoveAll(gates))
 	}
 	items, types, accounts := newMemoryStores()
-	settings := &memorySettings{values: make(map[string]string)}
+	settings := newMemorySettings()
 	return context.WithValue(ctx, worldKey{}, &world{
 		themesDir:    themes,
 		gateDir:      gates,
 		mediaDir:     uploads,
 		library:      themehost.NewLibrary(themes),
 		settings:     settings,
-		readers:      &memoryReaders{values: make(map[string]string)},
+		readers:      newMemoryReaders(),
 		readStamps:   make(map[string]string),
 		users:        accounts,
 		contentItems: items,

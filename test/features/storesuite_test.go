@@ -50,9 +50,11 @@ func memoryStores(t *testing.T) contenttest.Stores {
 	t.Helper()
 	items, types, accounts := newMemoryStores()
 	return contenttest.Stores{
-		Content:   items,
-		Types:     types,
-		AddAuthor: memoryAuthors(accounts),
+		Content:      items,
+		Types:        types,
+		SiteSettings: newMemorySettings(),
+		UserSettings: newMemoryReaders(),
+		AddAuthor:    memoryAuthors(accounts),
 	}
 }
 
@@ -107,6 +109,18 @@ func TestMediaStoreSuite(t *testing.T) {
 		}
 		return memoryMediaStores(t)
 	})
+}
+
+func TestSiteSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunSiteSettings(t, memoryStores)
+}
+
+func TestUserSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunUserSettings(t, memoryStores)
 }
 
 // shortRowsRuns reruns the named test under each keep rule and fails on a panic or a case that never reported.
