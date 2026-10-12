@@ -96,6 +96,18 @@ func TestAPluginReadsTheCapabilitiesTheRegistryGrantsAPluginRole(t *testing.T) {
 	}
 }
 
+func TestAMemberReachesAPluginRouteWithItsOwnSession(t *testing.T) {
+	t.Parallel()
+
+	handler, cookie := pluginServerFor(t, role.Member)
+
+	seen := askReporter(t, handler, cookie, "/api/plugins/reporter/anything")
+
+	if seen.Role != role.Member || !seen.Filed {
+		t.Errorf("the plugin saw %+v, want the member's own session filed", seen)
+	}
+}
+
 func TestAPluginReadsTheSessionTheHostFiled(t *testing.T) {
 	t.Parallel()
 

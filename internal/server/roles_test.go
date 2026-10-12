@@ -142,20 +142,20 @@ func TestTheSessionCarriesWhatAnAdministratorMayDoAndGive(t *testing.T) {
 		t.Fatalf("decoding the session %q: %v", recorder.Body.String(), err)
 	}
 	every := []string{
-		string(role.ChangeOthersWork), string(role.ManageSettings), string(role.ManageThemes),
-		string(role.ManageTypes), string(role.ManageUsers),
+		string(role.AccessAdmin), string(role.ChangeOthersWork), string(role.ManageSettings),
+		string(role.ManageThemes), string(role.ManageTypes), string(role.ManageUsers),
 	}
-	widestFirst := []string{role.Admin, role.Editor, role.Author}
+	widestFirst := []string{role.Admin, role.Editor, role.Author, role.Member}
 	if !slices.Equal(held.Capabilities, every) || !slices.Equal(held.Grantable, widestFirst) {
-		t.Errorf("the session carries %v and may give %v, want every core capability and the three core roles widest first",
+		t.Errorf("the session carries %v and may give %v, want every core capability and the four core roles widest first",
 			held.Capabilities, held.Grantable)
 	}
 }
 
-func TestTheSessionOfAnAuthorCarriesAnEmptyListOfCapabilities(t *testing.T) {
+func TestTheSessionOfAMemberCarriesAnEmptyListOfCapabilities(t *testing.T) {
 	t.Parallel()
 
-	handler, cookie, _ := signedInAs(t, nil, role.Author)
+	handler, cookie, _ := signedInAs(t, nil, role.Member)
 
 	recorder := ask(handler, cookie, call{http.MethodGet, "/api/auth/session", ""})
 
