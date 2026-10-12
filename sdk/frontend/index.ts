@@ -34,6 +34,7 @@ export {
 	Icon,
 	IconButton,
 	InputControl,
+	Link,
 	Notice,
 	SelectControl,
 	Skeleton,
