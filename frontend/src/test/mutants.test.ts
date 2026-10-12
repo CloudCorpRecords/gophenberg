@@ -9,7 +9,6 @@ import {
 	shardCount,
 	shardTargets,
 	strykerConfig,
-	strykerPatterns,
 	wholeSetting,
 } from '../../scripts/mutants.ts'
 
@@ -194,7 +193,7 @@ test('keeps the changed order of the files it keeps', () => {
 test('reads the patterns the mutation config holds', () => {
 	const changed = ['frontend/src/users/screen.tsx', 'frontend/src/test/users.test.tsx', 'frontend/src/i18n/catalog.ts']
 
-	expect(mutatedFiles(changed, strykerPatterns())).toEqual(['frontend/src/users/screen.tsx'])
+	expect(mutatedFiles(changed, strykerConfig().mutate)).toEqual(['frontend/src/users/screen.tsx'])
 })
 
 test('gives the initial test run longer than a mutation job may take', () => {

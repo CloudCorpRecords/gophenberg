@@ -157,11 +157,3 @@ interface StrykerConfig extends MutationConfig {
 export function strykerConfig(): StrykerConfig {
 	return JSON.parse(readFileSync(join(repositoryRoot(), 'frontend', 'stryker.config.json'), 'utf8')) as StrykerConfig
 }
-
-/**
- * Returns the mutate patterns the Stryker config holds.
- * @returns The patterns, in the order the config lists them.
- */
-export function strykerPatterns(): string[] {
-	return strykerConfig().mutate
-}
