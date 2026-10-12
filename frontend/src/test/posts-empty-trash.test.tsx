@@ -148,7 +148,7 @@ test('offers to empty the trash only in the trash view', async () => {
 })
 
 test('offers no empty trash to a role that may change only its own work', async () => {
-	renderAt('/content/post', { ...adminUser, role: 'author' })
+	renderAt('/content/post', { ...adminUser, role: 'author', capabilities: [] })
 
 	await openTrashView()
 
