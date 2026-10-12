@@ -118,7 +118,7 @@ func NewServer(cfg Config) http.Handler {
 	s := &server{
 		auth: auth, users: cfg.Users, content: cfg.Content, themes: cfg.Themes,
 		media: cfg.Media, mediaStore: cfg.MediaStore, version: cfg.Version,
-		settings: cfg.Settings, readers: cfg.Readers,
+		settings: cfg.Settings, readers: cfg.Readers, staff: roles.HoldersOf(string(role.AccessAdmin)),
 		types:          registryOf(cfg),
 		definitionsCap: definitionsCapOf(cfg),
 		uploadTimeout:  uploadTimeoutOf(cfg),
@@ -284,6 +284,7 @@ type server struct {
 	settings   SiteSettings
 	readers    ReaderSettings
 	version    string
+	staff      []string
 
 	definitionsCap int64
 	uploadTimeout  time.Duration
