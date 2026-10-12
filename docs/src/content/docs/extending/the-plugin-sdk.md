@@ -391,10 +391,12 @@ and nav rows appear after the built-in ones. No built-in plugin
 uses this path yet, so expect to be the first through it.
 
 A nav row naming a `capability` shows only to an account whose role
-carries it. The screen still opens from a pasted link, so the routes
-your plugin serves must check `session.Can` themselves. A screen
-asks the same question through the SDK's `can`, which reads the
-capabilities the signed-in account carries:
+carries it. The screen still opens from a pasted link, so the Go
+routes your plugin serves must check `session.Can` themselves, as
+[the signed-in account](#the-signed-in-account) shows. In the
+browser, a screen asks the same question through the frontend SDK's
+`can(session, capability)`, which reads the capabilities the
+signed-in account carries:
 
 ```ts
 import { can, useSession } from '@gophenberg/frontend-sdk'
