@@ -268,6 +268,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.102.8
         version: 5.104.1(react@19.3.0)
+      '@wordpress/a11y':
+        specifier: 4.57.0
+        version: 4.57.0
       '@wordpress/api-fetch':
         specifier: 7.57.0
         version: 7.57.0

@@ -62,6 +62,7 @@ export {
 	RangeControl,
 	__experimentalStyleProvider as StyleProvider,
 } from '@wordpress/components'
+export { speak } from '@wordpress/a11y'
 export {
 	ACCESS_ADMIN,
 	ADMIN,
