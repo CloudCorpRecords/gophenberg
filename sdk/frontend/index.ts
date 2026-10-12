@@ -31,7 +31,6 @@ export {
 	AlertDialog,
 	Badge,
 	Button,
-	Dialog,
 	Icon,
 	IconButton,
 	InputControl,
@@ -54,6 +53,7 @@ export {
 	undo as undoIcon,
 	chevronUp as upIcon,
 } from '@wordpress/icons'
+export { Dialog } from './dialog'
 export { TextareaControl } from './TextareaControl'
 export {
 	CheckboxControl,
