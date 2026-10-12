@@ -343,6 +343,18 @@ func listFiltersByContentTypePrefix(t *testing.T, s Stores) {
 		t.Errorf("List(video, video/mp4) = %d items with total %d, want the video counted once",
 			len(overlapping), overlappingTotal)
 	}
+
+	inner, innerTotal, err := s.Media.List(
+		t.Context(), media.Filter{Mimes: []string{"mp4"}, Page: 1, PerPage: 10},
+	)
+
+	if err != nil {
+		t.Fatalf("List(mp4) error = %v, want nil", err)
+	}
+	if innerTotal != 0 || len(inner) != 0 {
+		t.Errorf("List(mp4) = %d items with total %d, want nothing, as a prefix matches from the start of the type",
+			len(inner), innerTotal)
+	}
 }
 
 // listSearchesTitleAndFile finds an item by a word of its title or a part of its file name.
