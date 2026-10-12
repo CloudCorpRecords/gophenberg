@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { repositoryRoot } from './config.ts'
 import { countMutants, instrumenterOptions } from './mutantCount.ts'
-import { mutateTargets, parseShard, shardTargets, strykerConfig } from './mutants.ts'
+import { mutateTargets, parseShard, shardCount, shardTargets, strykerConfig, wholeSetting } from './mutants.ts'
 import { cutTarget, statementStarts, targetFile } from './pieces.ts'
 
 const [base, shardArgument = '1/1'] = process.argv.slice(2)
@@ -15,9 +15,9 @@ if (base === undefined) {
 	process.exit(1)
 }
 
-const shard = parseShard(shardArgument)
+const shard = shardArgument === 'count' ? 'count' : parseShard(shardArgument)
 if (shard === undefined) {
-	console.error('name the shard as an index up to the count, as in pnpm run mutate:changed origin/main 2/6')
+	console.error('name the shard as index/count, as in pnpm run mutate:changed origin/main 2/6, or pass the word count')
 	process.exit(1)
 }
 
@@ -74,15 +74,23 @@ const counts = await countMutants(pieces, sourceOf, instrumenterOptions(config))
 const weight = (piece: string): number => counts.get(piece) ?? 0
 const weighed = pieces.filter((piece) => weight(piece) > 0)
 const total = weighed.reduce((sum, piece) => sum + weight(piece), 0)
-const targets = shardTargets(weighed, shard, weight)
-const held = targets.reduce((sum, piece) => sum + weight(piece), 0)
-console.log(`shard ${shardArgument}: ${targets.length} of ${weighed.length} pieces, ${held} of ${total} mutants`)
 
-if (targets.length === 0) {
-	console.log('no changed source line to mutate')
+if (shard === 'count') {
+	const perShard = wholeSetting(process.env, 'MUTANTS_PER_SHARD')
+	const most = wholeSetting(process.env, 'MAX_SHARDS')
+	const count = shardCount(weighed.map(weight), perShard, most)
+	console.error(`${total} mutants in ${weighed.length} pieces, ${count} shards of ${perShard}, at most ${most}`)
+	console.log(`shards=${JSON.stringify(Array.from({ length: count }, (_, place) => place + 1))}`)
 } else {
-	execFileSync('stryker', ['run', 'frontend/stryker.config.json', '--ignoreStatic', '--mutate', targets.join(',')], {
-		cwd: root,
-		stdio: 'inherit',
-	})
+	const targets = shardTargets(weighed, shard, weight)
+	const held = targets.reduce((sum, piece) => sum + weight(piece), 0)
+	console.log(`shard ${shardArgument}: ${targets.length} of ${weighed.length} pieces, ${held} of ${total} mutants`)
+	if (targets.length === 0) {
+		console.log('no changed source line to mutate')
+	} else {
+		execFileSync('stryker', ['run', 'frontend/stryker.config.json', '--ignoreStatic', '--mutate', targets.join(',')], {
+			cwd: root,
+			stdio: 'inherit',
+		})
+	}
 }

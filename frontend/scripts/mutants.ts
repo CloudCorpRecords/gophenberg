@@ -82,6 +82,32 @@ export function shardTargets(targets: string[], shard: Shard, weight: (target: s
 }
 
 /**
+ * Returns how many shards a run needs, one for every perShard mutants and never more than its pieces.
+ * @param weights - The mutants each piece of the run holds.
+ * @param perShard - How many mutants one shard should test.
+ * @param most - The most shards a run may use.
+ * @returns The shard count, at least 1.
+ */
+export function shardCount(weights: number[], perShard: number, most: number): number {
+	const mutants = weights.reduce((sum, weight) => sum + weight, 0)
+	return Math.max(1, Math.min(most, weights.length, Math.ceil(mutants / perShard)))
+}
+
+/**
+ * Returns the whole number, 1 or more, that an environment setting holds.
+ * @param env - The environment to read.
+ * @param name - The setting.
+ * @returns Its value.
+ */
+export function wholeSetting(env: Record<string, string | undefined>, name: string): number {
+	const value = Number(env[name] ?? '')
+	if (!Number.isInteger(value) || value < 1) {
+		throw new Error(`set ${name} to a whole number of at least 1`)
+	}
+	return value
+}
+
+/**
  * Returns the line ranges a diff with no context adds or changes, by file.
  * @param diff - The output of git diff --unified=0 with a/ and b/ prefixes.
  * @returns Each file with its changed ranges, as start-end.

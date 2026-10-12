@@ -6,9 +6,11 @@ import {
 	mutateTargets,
 	mutatedFiles,
 	parseShard,
+	shardCount,
 	shardTargets,
 	strykerConfig,
 	strykerPatterns,
+	wholeSetting,
 } from '../../scripts/mutants.ts'
 
 const PATTERNS = ['frontend/src/**/*.{ts,tsx}', '!**/*.test.{ts,tsx}', '!frontend/src/main.tsx']
@@ -225,6 +227,34 @@ test.each(['', '2', '2/', '/6', 'a/6', 'x2/6', '2/6x', '2/6/1', '-1/6', '1.5/6',
 		expect(parseShard(text)).toBeUndefined()
 	},
 )
+
+test('gives one shard for every so many mutants, rounding up', () => {
+	expect(shardCount([30, 30, 31], 45, 20)).toBe(3)
+})
+
+test('gives one shard to a run holding fewer mutants than a shard tests', () => {
+	expect(shardCount([1], 45, 20)).toBe(1)
+})
+
+test('gives one shard to a run holding no mutant', () => {
+	expect(shardCount([], 45, 20)).toBe(1)
+})
+
+test('gives no more shards than a run may use', () => {
+	expect(shardCount(Array.from({ length: 100 }, () => 50), 45, 20)).toBe(20)
+})
+
+test('gives no more shards than there are pieces to deal', () => {
+	expect(shardCount([96], 45, 20)).toBe(1)
+})
+
+test('reads a whole number setting the workflow sets', () => {
+	expect(wholeSetting({ MAX_SHARDS: '20' }, 'MAX_SHARDS')).toBe(20)
+})
+
+test.each([undefined, '', '0', '-3', '1.5', 'x'])('refuses the setting %j, not a whole number from 1', (value) => {
+	expect(() => wholeSetting({ MAX_SHARDS: value }, 'MAX_SHARDS')).toThrow('MAX_SHARDS')
+})
 
 test.each([1, 2, 3, 4, 6, 8])('gives every target to exactly one shard of a run in %i shards', (count) => {
 	expect(sharesOf(RANGES, count).flat().toSorted()).toEqual(RANGES)
