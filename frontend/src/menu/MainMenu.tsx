@@ -66,12 +66,12 @@ function MenuItem({ item }: { item: NavItem }) {
  */
 export function MainMenu() {
 	const contentNav = useContentNav()
-	const role = useSession().data?.role
+	const session = useSession().data
 	const routesByPath: Record<string, AnyRoute | undefined> = useRouter().routesByPath
 	const reachable = (items: NavItem[]) =>
 		items.filter((item) => {
 			const asked = routesByPath[item.to]?.options.staticData?.capability
-			return asked === undefined || can(role, asked)
+			return asked === undefined || can(session, asked)
 		})
 	return (
 		<Stack direction="column" gap="xs">
