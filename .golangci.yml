@@ -31,6 +31,23 @@ linters:
             - "**/sdk/*.go"
           allow:
             - $gostd
+        content-steps-engine-free:
+          list-mode: lax
+          files:
+            - "**/internal/content/typestore/*.go"
+          deny:
+            - pkg: github.com/jackc/pgx/v5
+              desc: the store steps reach a database only through the backend
+            - pkg: modernc.org/sqlite
+              desc: the store steps reach a database only through the backend
+            - pkg: github.com/gopherium/gophenberg/internal/postgres
+              desc: the store steps reach a database only through the backend
+            - pkg: github.com/gopherium/gophenberg/internal/sqlite
+              desc: the store steps reach a database only through the backend
+            - pkg: github.com/gopherium/framework/dbkit/postgres
+              desc: the store steps reach a database only through the backend
+            - pkg: github.com/gopherium/framework/dbkit/sqlite
+              desc: the store steps reach a database only through the backend
         plugins-import-only-the-sdk:
           list-mode: lax
           files:
