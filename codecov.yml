@@ -20,6 +20,7 @@ ignore:
   - internal/postgres/db
   - internal/testdb
   - internal/content/contenttest
+  - internal/media/mediatest
   - "**/*_gen.go"
 
 comment:
