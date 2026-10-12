@@ -18,6 +18,9 @@ Gophenberg:
 go get github.com/gopherium/gophenberg/sdk@latest
 ```
 
+[Versions](#versions), at the end of this page, says what changed in
+each version and how to move your plugin to it.
+
 ## Deps
 
 `Register` receives one value:
@@ -455,3 +458,120 @@ list's own modal with the header hidden. Give the row action
 `hideModalHeader: true` and render godmin's `ConfirmBody` with the
 question as its child, a **Cancel** button and a button named after
 the action.
+
+## Versions
+
+Each version below says what it adds and what it changes. When a
+change stops a plugin from compiling, **To move** lists the steps.
+To take a version, pass its number to `go get`, such as
+`github.com/gopherium/gophenberg/sdk@v0.4.0`.
+
+Your plugin compiles into Gophenberg, so it builds against the SDK
+inside the Gophenberg you build. Build with one that holds the
+version your plugin requires, or a later one.
+
+### v0.4.0
+
+Tagged 2026-10-12. A plugin can declare roles and capabilities.
+
+- New: the `RoleProvider` interface. A plugin with a `Roles` method
+  returning `[]sdk.RoleDeclaration` brings new roles, or adds
+  capabilities to roles the site already has. See
+  [roles and capabilities](#roles-and-capabilities).
+- New: the `RoleDeclaration` type, a role's `Name` and the
+  `Capabilities` it carries.
+- A command's `Capability` can now name a capability your plugin
+  declares, such as `notes.manage`. Before, only the core's
+  capabilities worked.
+- In the frontend SDK, which ships inside Gophenberg with no versions
+  of its own, `can` takes the signed-in session instead of its role,
+  and a nav row can name the `capability` it needs.
+- Gophenberg built after this version opens the admin only for a role
+  carrying `access_admin`. Before, every role entered it.
+
+**To move:**
+
+1. If a screen calls `can`, pass it the session, as in
+   `can(session, 'hello.manage')`, where you passed `session.role`.
+2. If a role your plugin declares should work in the admin, add
+   `access_admin` to its `Capabilities`.
+
+### v0.3.0
+
+Tagged 2026-10-10. A command can name the flags every run must set.
+
+- New: the `Needs` field on `sdk.Command`, the names of the flags
+  every run must set. The command line refuses a run that leaves one
+  out before `Run` starts. See
+  [flags a run must set](#flags-a-run-must-set).
+- Nothing breaks. A command that looks for a missing flag inside
+  `Run` can name the flag in `Needs` and drop that check.
+
+### v0.2.0
+
+Tagged 2026-10-09. Each plugin gets a capped share of the site's
+database.
+
+- New: the `DB` field on `Deps`, the plugin's share of the site's one
+  database pool. See [the database](#the-database).
+- New types for it: `DB`, `Tx`, `Querier`, `Rows`, `Row`, and
+  `Engine` with the values `Postgres` and `SQLite`. The site reports
+  `Postgres` today.
+- New: the `HostOnly` type, which the site embeds in the share it
+  lends.
+- Nothing breaks. `DatabaseURL` stays, so a plugin that opens its own
+  connection keeps working. To use the share instead, keep `deps.DB`
+  in `Register`, use it from `Start` on, and stop opening a pool of
+  your own.
+
+### v0.1.0
+
+Tagged 2026-10-08. The SDK becomes a Go module of its own.
+
+Before this version, the `sdk` package lived inside the Gophenberg
+module, and its last release there was Gophenberg v0.18.1. The import
+path stays `github.com/gopherium/gophenberg/sdk`, so your `import`
+lines do not change. What changes is the module your plugin requires,
+and the SDK now names only its own types and the standard library's.
+Compared with Gophenberg v0.18.1:
+
+- The SDK is the module `github.com/gopherium/gophenberg/sdk`. Its
+  versions come from tags such as `sdk/v0.1.0`.
+- `Item.ID` and `Session.ID` are an `sdk.ID`, no longer a `uuid.UUID`
+  from `github.com/google/uuid`. `NewSession` takes an `sdk.ID` too.
+  Text and JSON show the same 36 characters as before, and reading
+  one from text accepts only that form.
+- `Plugin`, `Migrator`, `RouteProvider`, `PublicPathProvider`,
+  `Command`, `Call`, `CommandProvider` and `Env` are the SDK's own
+  types now, no longer other names for pluginkit's and gonsole's. The
+  lifecycle interfaces keep their methods, so a plugin that implements
+  them needs no change.
+- `Call` loses `Env`, `Describe`, `DatabaseURL()` and `Plugins()`.
+  `Command` loses `Migrates`.
+- `Env.Duration` and `Env.Count` take no bounds any more, and
+  `Env.Timeouts` is gone. `Env.Counts` is new.
+- `Misuse` is a function now, and `ErrMisused` is new, so
+  `errors.Is(err, sdk.ErrMisused)` spots a misused command line.
+- New: the `Description` field on `TypeDeclaration`.
+
+**To move:**
+
+1. Swap the module your plugin requires:
+
+   ```sh
+   go mod edit -droprequire=github.com/gopherium/gophenberg
+   go get github.com/gopherium/gophenberg/sdk@v0.1.0
+   go mod tidy
+   ```
+
+   Keep no requirement on Gophenberg v0.18.1 or earlier. It holds the
+   `sdk` package too, so Go stops the build with `ambiguous import`.
+2. Where you still need a `uuid.UUID`, convert it. Both are sixteen
+   bytes, so `uuid.UUID(item.ID)` and `sdk.ID(someUUID)` work.
+3. A command reads its settings and the database address from the
+   `Deps` it kept at `Register`, `deps.Env` and `deps.DatabaseURL`,
+   not from the `Call`.
+4. Drop `Migrates` from your commands. Check a limit such as a highest
+   count yourself, after `Env` reads the value.
+5. Compare with `sdk.ErrMisused` where you compared with
+   `gonsole.ErrMisused`.
