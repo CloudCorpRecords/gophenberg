@@ -2,28 +2,38 @@
 
 import { expect, test } from 'vitest'
 
-import { mutateTargets, mutatedFiles, parseShard, shardTargets, strykerPatterns } from '../../scripts/mutants.ts'
+import {
+	mutateTargets,
+	mutatedFiles,
+	parseShard,
+	shardCount,
+	shardTargets,
+	strykerConfig,
+	wholeSetting,
+} from '../../scripts/mutants.ts'
 
 const PATTERNS = ['frontend/src/**/*.{ts,tsx}', '!**/*.test.{ts,tsx}', '!frontend/src/main.tsx']
 
-const RANGES = [
-	'frontend/src/a.ts:12-13',
-	'frontend/src/b.ts:41-50',
-	'frontend/src/c.ts:30-30',
-	'frontend/src/d.ts:3-9',
-	'frontend/src/e.ts:7-9',
-	'frontend/src/f.ts:100-104',
-]
+const MUTANTS = new Map([
+	['frontend/src/a.ts:12-13', 2],
+	['frontend/src/b.ts:41-50', 10],
+	['frontend/src/c.ts:30-30', 1],
+	['frontend/src/d.ts:3-9', 7],
+	['frontend/src/e.ts:7-9', 3],
+	['frontend/src/f.ts:100-104', 5],
+])
+
+const RANGES = [...MUTANTS.keys()]
 
 /**
  * Returns the share of every shard of a run split into the given number of shards.
  * @param targets - The mutate entries to split.
  * @param count - How many shards the run has.
- * @param fileLines - Counts the lines of a whole file.
+ * @param weight - Weighs a mutate entry, one for any entry the mutant table does not name.
  * @returns The share of each shard, the first shard first.
  */
-function sharesOf(targets: string[], count: number, fileLines: (file: string) => number = () => 0): string[][] {
-	return Array.from({ length: count }, (_, place) => shardTargets(targets, { index: place + 1, count }, fileLines))
+function sharesOf(targets: string[], count: number, weight = (target: string) => MUTANTS.get(target) ?? 1): string[][] {
+	return Array.from({ length: count }, (_, place) => shardTargets(targets, { index: place + 1, count }, weight))
 }
 
 /**
@@ -183,7 +193,11 @@ test('keeps the changed order of the files it keeps', () => {
 test('reads the patterns the mutation config holds', () => {
 	const changed = ['frontend/src/users/screen.tsx', 'frontend/src/test/users.test.tsx', 'frontend/src/i18n/catalog.ts']
 
-	expect(mutatedFiles(changed, strykerPatterns())).toEqual(['frontend/src/users/screen.tsx'])
+	expect(mutatedFiles(changed, strykerConfig().mutate)).toEqual(['frontend/src/users/screen.tsx'])
+})
+
+test('gives the initial test run longer than a mutation job may take', () => {
+	expect(strykerConfig().dryRunTimeoutMinutes).toBeGreaterThan(15)
 })
 
 test('reads a shard named as its index over the shard count', () => {
@@ -213,18 +227,46 @@ test.each(['', '2', '2/', '/6', 'a/6', 'x2/6', '2/6x', '2/6/1', '-1/6', '1.5/6',
 	},
 )
 
+test('gives one shard for every so many mutants, rounding up', () => {
+	expect(shardCount([30, 30, 31], 45, 20)).toBe(3)
+})
+
+test('gives one shard to a run holding fewer mutants than a shard tests', () => {
+	expect(shardCount([1], 45, 20)).toBe(1)
+})
+
+test('gives one shard to a run holding no mutant', () => {
+	expect(shardCount([], 45, 20)).toBe(1)
+})
+
+test('gives no more shards than a run may use', () => {
+	expect(shardCount(Array.from({ length: 100 }, () => 50), 45, 20)).toBe(20)
+})
+
+test('gives no more shards than there are pieces to deal', () => {
+	expect(shardCount([96], 45, 20)).toBe(1)
+})
+
+test('reads a whole number setting the workflow sets', () => {
+	expect(wholeSetting({ MAX_SHARDS: '20' }, 'MAX_SHARDS')).toBe(20)
+})
+
+test.each([undefined, '', '0', '-3', '1.5', 'x'])('refuses the setting %j, not a whole number from 1', (value) => {
+	expect(() => wholeSetting({ MAX_SHARDS: value }, 'MAX_SHARDS')).toThrow('MAX_SHARDS')
+})
+
 test.each([1, 2, 3, 4, 6, 8])('gives every target to exactly one shard of a run in %i shards', (count) => {
 	expect(sharesOf(RANGES, count).flat().toSorted()).toEqual(RANGES)
 })
 
-test('spreads the changed lines evenly over two shards', () => {
+test('spreads the mutants evenly over two shards', () => {
 	expect(sharesOf(RANGES, 2)).toEqual([
 		['frontend/src/b.ts:41-50', 'frontend/src/c.ts:30-30', 'frontend/src/e.ts:7-9'],
 		['frontend/src/a.ts:12-13', 'frontend/src/d.ts:3-9', 'frontend/src/f.ts:100-104'],
 	])
 })
 
-test('spreads the changed lines evenly over three shards', () => {
+test('spreads the mutants evenly over three shards', () => {
 	expect(sharesOf(RANGES, 3)).toEqual([
 		['frontend/src/b.ts:41-50'],
 		['frontend/src/a.ts:12-13', 'frontend/src/d.ts:3-9'],
@@ -232,33 +274,29 @@ test('spreads the changed lines evenly over three shards', () => {
 	])
 })
 
-test('counts both the first and the last line of a range', () => {
-	const targets = ['frontend/src/a.ts:1-4', 'frontend/src/b.ts:1-2', 'frontend/src/c.ts:5-6', 'frontend/src/d.ts:9-9']
+test.each<{ name: string; weights: [string, number][]; shares: string[][] }>([
+	{
+		name: 'a long range holding few mutants below a short range holding many',
+		weights: [
+			['frontend/src/long.ts:1-90', 2],
+			['frontend/src/short.ts:1-3', 9],
+			['frontend/src/mid.ts:1-20', 8],
+		],
+		shares: [['frontend/src/short.ts:1-3'], ['frontend/src/long.ts:1-90', 'frontend/src/mid.ts:1-20']],
+	},
+	{
+		name: 'a whole file by the mutants it holds',
+		weights: [
+			['frontend/src/a.ts:1-3', 3],
+			['frontend/src/b.ts:1-3', 3],
+			['frontend/src/new.tsx', 6],
+		],
+		shares: [['frontend/src/new.tsx'], ['frontend/src/a.ts:1-3', 'frontend/src/b.ts:1-3']],
+	},
+])('weighs $name', ({ weights, shares }) => {
+	const table = new Map(weights)
 
-	expect(sharesOf(targets, 2)).toEqual([
-		['frontend/src/a.ts:1-4', 'frontend/src/d.ts:9-9'],
-		['frontend/src/b.ts:1-2', 'frontend/src/c.ts:5-6'],
-	])
-})
-
-test('counts a whole file by the lines it holds', () => {
-	const targets = ['frontend/src/a.ts:1-3', 'frontend/src/b.ts:1-3', 'frontend/src/new.tsx']
-	const fileLines = (file: string) => (file === 'frontend/src/new.tsx' ? 6 : 0)
-
-	expect(sharesOf(targets, 2, fileLines)).toEqual([
-		['frontend/src/new.tsx'],
-		['frontend/src/a.ts:1-3', 'frontend/src/b.ts:1-3'],
-	])
-})
-
-test('counts a whole file named like a range by the lines it holds', () => {
-	const targets = ['frontend/src/a.ts:1-3', 'frontend/src/b.ts:1-3', 'frontend/src/c:1-2.ts']
-	const fileLines = (file: string) => (file === 'frontend/src/c:1-2.ts' ? 6 : 0)
-
-	expect(sharesOf(targets, 2, fileLines)).toEqual([
-		['frontend/src/c:1-2.ts'],
-		['frontend/src/a.ts:1-3', 'frontend/src/b.ts:1-3'],
-	])
+	expect(sharesOf([...table.keys()], 2, (target) => table.get(target) ?? 0)).toEqual(shares)
 })
 
 test('puts targets of the same size in name order', () => {
