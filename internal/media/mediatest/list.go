@@ -409,9 +409,20 @@ func listTreatsPatternCharactersAsText(t *testing.T, s Stores) {
 		t.Errorf("List(mime %%) = %d items with total %d, want the wildcard read as text",
 			len(wildcard), wildcardTotal)
 	}
+
+	plain, plainTotal, err := s.Media.List(
+		t.Context(), media.Filter{Search: "h", Mimes: []string{"image/"}, Page: 1, PerPage: 10},
+	)
+
+	if err != nil {
+		t.Fatalf("List(h, image/) error = %v, want nil", err)
+	}
+	if plainTotal != 1 || len(plain) != 1 {
+		t.Errorf("List(h, image/) = %d items with total %d, want the stored image found", len(plain), plainTotal)
+	}
 }
 
-// listPaginates counts every item across pages and lists the remainder on the last page.
+// listPaginates fills a page to its size, counts every item across pages and lists the remainder on the last page.
 func listPaginates(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	for _, file := range []string{"2026/08/one.jpg", "2026/08/two.jpg", "2026/08/three.jpg"} {
@@ -428,6 +439,14 @@ func listPaginates(t *testing.T, s Stores) {
 	}
 	if len(secondPage) != 1 {
 		t.Errorf("second page holds %d items, want the remainder", len(secondPage))
+	}
+
+	firstPage, _, err := s.Media.List(t.Context(), media.Filter{Page: 1, PerPage: 2})
+	if err != nil {
+		t.Fatalf("List(first page) error = %v, want nil", err)
+	}
+	if len(firstPage) != 2 {
+		t.Errorf("first page holds %d items, want a full page of 2", len(firstPage))
 	}
 }
 

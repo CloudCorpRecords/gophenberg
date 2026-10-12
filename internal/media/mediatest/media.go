@@ -101,7 +101,7 @@ func byIDReportsAMissingItem(t *testing.T, s Stores) {
 	}
 }
 
-// updateEditsDescriptions stores edited descriptions and a later stamp and leaves the stored file alone.
+// updateEditsDescriptions stores edited descriptions and a later stamp and keeps the file, renditions and upload date.
 func updateEditsDescriptions(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	created := MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author))
@@ -111,6 +111,8 @@ func updateEditsDescriptions(t *testing.T, s Stores) {
 	edited.Caption = "The harbor before the market opens"
 	edited.Description = "Taken from the eastern pier"
 	edited.UpdatedAt = created.UpdatedAt.Add(time.Second)
+	edited.File, edited.Sizes = "2026/08/other.jpg", media.RenditionMap{}
+	edited.CreatedAt = created.CreatedAt.Add(-time.Hour)
 
 	updated, err := s.Media.Update(t.Context(), edited, created.UpdatedAt)
 
@@ -128,6 +130,9 @@ func updateEditsDescriptions(t *testing.T, s Stores) {
 	}
 	if updated.File != created.File || !maps.Equal(updated.Sizes, created.Sizes) {
 		t.Errorf("Update() = %+v, want the stored file untouched", updated)
+	}
+	if !updated.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("CreatedAt = %v, want the upload date %v untouched", updated.CreatedAt, created.CreatedAt)
 	}
 }
 
@@ -204,12 +209,13 @@ func deleteReportsAMissingItem(t *testing.T, s Stores) {
 	}
 }
 
-// savedNamesOnlyTheFilesAStoredItemHolds names the asked files a stored item holds and leaves out the rest.
+// savedNamesOnlyTheFilesAStoredItemHolds names the asked files a stored item holds as its own and leaves out the rest.
 func savedNamesOnlyTheFilesAStoredItemHolds(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author))
+	MustCreate(t, s.Media, MustImage(t, "2026/08/pier.jpg", "pier", author))
 
-	saved, err := s.Saved(t.Context(), []string{"2026/08/harbor.jpg", "2026/08/cliff.jpg"})
+	saved, err := s.Saved(t.Context(), []string{"2026/08/harbor.jpg", "harbor-150x150.jpg", "2026/08/cliff.jpg"})
 
 	if err != nil {
 		t.Fatalf("Saved() error = %v, want nil", err)
