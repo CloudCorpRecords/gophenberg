@@ -133,6 +133,9 @@ func siteSettingClearsAKey(t *testing.T, s Stores) {
 	if err := s.SiteSettings.Save(t.Context(), map[string]string{"theme.active": "aurora"}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
+	if got, found, err := s.SiteSettings.Lookup(t.Context(), "theme.active"); err != nil || !found || got != "aurora" {
+		t.Fatalf("Lookup() = %q, %v, error %v, want the seeded value before the clear", got, found, err)
+	}
 
 	if err := s.SiteSettings.Save(t.Context(), map[string]string{"theme.active": ""}); err != nil {
 		t.Fatalf("clear: %v", err)

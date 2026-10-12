@@ -55,7 +55,7 @@ func userSettingCarriesTheLatestWrite(t *testing.T, s Stores) {
 	}
 }
 
-// userSettingIsTheReadersAlone answers no other reader the value one reader stored.
+// userSettingIsTheReadersAlone answers the value one reader stored to that reader alone.
 func userSettingIsTheReadersAlone(t *testing.T, s Stores) {
 	mine, theirs := uuid.New(), uuid.New()
 	if err := s.UserSettings.Save(t.Context(), mine, "locale", "es-ES"); err != nil {
@@ -69,6 +69,9 @@ func userSettingIsTheReadersAlone(t *testing.T, s Stores) {
 	}
 	if found {
 		t.Error("another reader's choice was answered, want each reader answered its own")
+	}
+	if held, found, err := s.UserSettings.Lookup(t.Context(), mine, "locale"); err != nil || !found || held != "es-ES" {
+		t.Errorf("Lookup(mine) = %q, %v, error %v, want the reader's own choice", held, found, err)
 	}
 }
 
