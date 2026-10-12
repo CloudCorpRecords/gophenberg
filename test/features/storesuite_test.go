@@ -28,8 +28,7 @@ var reportedCase = regexp.MustCompile(`(?m)^    --- (PASS|FAIL): \S+/\S+ `)
 
 // mediaGaps names the shared media store cases the in-memory media store does not pass yet.
 var mediaGaps = map[string]bool{
-	"SavedNamesOnlyTheFilesAStoredItemHolds": true,
-	"ReadsStampsBackInUTC":                   true,
+	"ReadsStampsBackInUTC": true,
 }
 
 // memoryAuthors returns a way to add accounts to the in-memory account store.

@@ -64,9 +64,17 @@ func (s *memoryMedia) ByIDs(_ context.Context, ids []int64) ([]media.Media, erro
 	return listed, nil
 }
 
-// Saved names none of the asked files as held by a stored item.
-func (s *memoryMedia) Saved(_ context.Context, _ []string) (map[string]bool, error) {
-	return map[string]bool{}, nil
+// Saved reports which of the files a stored item holds as its own file.
+func (s *memoryMedia) Saved(_ context.Context, files []string) (map[string]bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saved := make(map[string]bool)
+	for _, m := range s.items {
+		if slices.Contains(files, m.File) {
+			saved[m.File] = true
+		}
+	}
+	return saved, nil
 }
 
 // List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
