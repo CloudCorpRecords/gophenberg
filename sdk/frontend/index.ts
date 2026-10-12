@@ -69,8 +69,7 @@ export {
 	MANAGE_THEMES,
 	MANAGE_TYPES,
 	MANAGE_USERS,
-	can,
 	sessionMayChange,
 } from './capabilities'
-export { useSession } from '@gopherium/react-auth'
+export { can, useSession } from '@gopherium/react-auth'
 export type { User as Session } from '@gopherium/react-auth'
