@@ -36,8 +36,8 @@ type site struct {
 	registry   *content.Registry
 	media      *postgres.MediaStore
 	library    media.Store
-	settings   *postgres.SettingStore
-	readers    *postgres.UserSettingStore
+	settings   content.SiteSettingStore
+	readers    content.UserSettingStore
 	registered []sdk.Plugin
 	failed     error
 	lane       *pluginLane
