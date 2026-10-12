@@ -2,7 +2,7 @@
 
 import { __, sprintf } from '@wordpress/i18n'
 
-import { errorTemplates } from './errorTemplates'
+import { authTemplates, errorTemplates } from './errorTemplates'
 import { everyDecimal } from './numbers'
 
 /** What the server answers when it turns a request away. */
@@ -56,7 +56,7 @@ function writtenMeta(meta: Record<string, unknown>): Record<string, unknown> {
  */
 export function errorText(refused: Refused): string {
 	const spoken = refused.error === '' ? unexplained() : refused.error
-	const template = refused.code === undefined ? undefined : errorTemplates()[refused.code]
+	const template = refused.code === undefined ? undefined : { ...errorTemplates(), ...authTemplates() }[refused.code]
 	if (template === undefined || !filled(template, refused.meta ?? {})) {
 		return spoken
 	}

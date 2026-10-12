@@ -9,7 +9,7 @@ import {
 } from '@gopherium/react-auth/admin'
 import { __, _x } from '@wordpress/i18n'
 
-import { errorTemplates } from '../i18n/errorTemplates'
+import { authTemplates } from '../i18n/errorTemplates'
 
 /** The error code each turned down role write answers with, by the error it raises. */
 const refusals: [new (...args: never[]) => Error, string][] = [
@@ -66,6 +66,6 @@ export function roleRefusal(error: unknown): string | undefined {
  */
 export function roleFailureMessage(error: unknown): string {
 	const code = roleRefusal(error)
-	const template = code === undefined ? undefined : errorTemplates()[code]
+	const template = code === undefined ? undefined : authTemplates()[code]
 	return template ?? __('The role could not be changed.', 'gophenberg')
 }

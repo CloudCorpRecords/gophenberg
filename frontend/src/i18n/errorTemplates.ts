@@ -45,7 +45,6 @@ export function errorTemplates(): Record<string, string> {
 			'This request carried %(attribute)s, which fields do not take. Reload the page so the admin and the server agree again.',
 			DOMAIN,
 		),
-		capability_missing: __('Your role does not allow %(capability)s.', DOMAIN),
 		client_assets_missing: __(
 			'The theme %(name)s does not carry %(path)s as a folder, so its styles and scripts are missing. Package the built theme rather than its source.',
 			DOMAIN,
@@ -279,7 +278,6 @@ export function errorTemplates(): Record<string, string> {
 			'The theme %(name)s was built on theme kit %(declared)s, and this site serves %(served)s. Build the theme again against a kit this site serves, then install it.',
 			DOMAIN,
 		),
-		last_privileged_refused: __('Somebody must be able to manage users.', DOMAIN),
 		list_parameters_invalid: __(
 			'One of the filters on this list is not one Gophenberg understands. Clear the filters and try again.',
 			DOMAIN,
@@ -379,8 +377,6 @@ export function errorTemplates(): Record<string, string> {
 			'That revision does not exist, and older ones drop off once a type holds more than it keeps. Open the item to see which revisions are left.',
 			DOMAIN,
 		),
-		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
-		role_unknown: __('Nothing declares that role.', DOMAIN),
 		rollback_unavailable: __(
 			'There is nothing to roll back to, because your site has not been through a theme change yet. Install a theme first, then a rollback has somewhere to go.',
 			DOMAIN,
@@ -427,7 +423,6 @@ export function errorTemplates(): Record<string, string> {
 			DOMAIN,
 		),
 		route_word_taken: __('Another content type already answers under this route word. Pick a different word.', DOMAIN),
-		self_role_refused: __('You cannot change your own role.', DOMAIN),
 		server_entry_missing: __(
 			'The theme %(name)s does not carry %(path)s as a file, so there is nothing to run. Package the built theme rather than its source.',
 			DOMAIN,
@@ -540,5 +535,19 @@ export function errorTemplates(): Record<string, string> {
 		),
 		upload_file_required: __('No file arrived with this upload. Choose a file and try again.', DOMAIN),
 		upload_theme_required: __('No theme arrived with this upload. Choose a zip file and try again.', DOMAIN),
+	}
+}
+
+/**
+ * Returns the message each code the authentication brick answers with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function authTemplates(): Record<string, string> {
+	return {
+		capability_missing: __('Your role does not allow %(capability)s.', DOMAIN),
+		last_privileged_refused: __('Somebody must be able to manage users.', DOMAIN),
+		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
+		role_unknown: __('Nothing declares that role.', DOMAIN),
+		self_role_refused: __('You cannot change your own role.', DOMAIN),
 	}
 }
