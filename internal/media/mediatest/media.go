@@ -28,6 +28,7 @@ var mediaCases = []Case{
 	{"ReadsSeveralByTheirIdentities", readsSeveralByTheirIdentities},
 	{"ReadsFewerWhenAnIdentityIsGone", readsFewerWhenAnIdentityIsGone},
 	{"ReadsNothingFromNoIdentities", readsNothingFromNoIdentities},
+	{"ReadsStampsBackInUTC", readsStampsBackInUTC},
 }
 
 // createAndReadBack reads a created item back with its descriptions, measurements, renditions and author.
@@ -268,5 +269,47 @@ func readsNothingFromNoIdentities(t *testing.T, s Stores) {
 	}
 	if len(listed) != 0 {
 		t.Errorf("ByIDs() = %+v, want nothing", listed)
+	}
+}
+
+// readsStampsBackInUTC hands back stamps given in another zone as the same moments in UTC on every read.
+func readsStampsBackInUTC(t *testing.T, s Stores) {
+	author := s.AddAuthor(t, DefaultAuthor)
+	added := time.Date(2026, time.July, 10, 9, 30, 0, 0, time.FixedZone("UTC-5", -5*60*60))
+	edited := added.Add(time.Hour)
+	item := MustImage(t, "2026/07/harbor.jpg", "harbor", author)
+	item.CreatedAt, item.UpdatedAt = added, added
+
+	created := MustCreate(t, s.Media, item)
+	read, err := s.Media.ByID(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("ByID() error = %v, want nil", err)
+	}
+	listed, _, err := s.Media.List(t.Context(), media.Filter{Page: 1, PerPage: 10})
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("List() = %d items, want the stored item", len(listed))
+	}
+	change := read
+	change.Title, change.UpdatedAt = "Harbor at dawn", edited
+	updated, err := s.Media.Update(t.Context(), change, read.UpdatedAt)
+	if err != nil {
+		t.Fatalf("Update() error = %v, want nil", err)
+	}
+
+	for _, stamp := range []struct {
+		name      string
+		got, want time.Time
+	}{
+		{"Create() added", created.CreatedAt, added}, {"Create() modified", created.UpdatedAt, added},
+		{"ByID() added", read.CreatedAt, added}, {"ByID() modified", read.UpdatedAt, added},
+		{"List() added", listed[0].CreatedAt, added}, {"List() modified", listed[0].UpdatedAt, added},
+		{"Update() added", updated.CreatedAt, added}, {"Update() modified", updated.UpdatedAt, edited},
+	} {
+		if stamp.got.Location() != time.UTC || !stamp.got.Equal(stamp.want) {
+			t.Errorf("%s = %v, want %v in UTC", stamp.name, stamp.got, stamp.want.UTC())
+		}
 	}
 }
