@@ -2856,3 +2856,16 @@ msgstr "Vous ne pouvez pas changer votre propre rôle."
 #, fuzzy
 msgid "Your role does not allow %(capability)s."
 msgstr "Votre rôle ne permet pas %(capability)s."
+
+#, fuzzy
+msgctxt "role"
+msgid "Member"
+msgstr "Membre"
+
+#, fuzzy
+msgid "Sorry, you are not allowed to access this page."
+msgstr "Désolé, vous n’avez pas l’autorisation d’accéder à cette page."
+
+#, fuzzy
+msgid "Visit Site"
+msgstr "Aller sur le site"
