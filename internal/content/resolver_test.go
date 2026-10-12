@@ -255,8 +255,10 @@ func TestResolveAnswersAnAddressNoStoreCanHoldAsNotFound(t *testing.T) {
 	resolver := newResolver(t, store)
 
 	for name, raw := range map[string]string{
-		"a NUL byte":    "/pages/\x00/team",
-		"invalid UTF-8": "/broken/\xe9",
+		"a NUL byte":                            "/pages/\x00/team",
+		"invalid UTF-8":                         "/broken/\xe9",
+		"a NUL byte before a parent segment":    "/broken\x00/../a-post",
+		"invalid UTF-8 before a parent segment": "/broken\xe9/../a-post",
 	} {
 		_, err := resolver.Resolve(t.Context(), raw)
 		if !errors.Is(err, content.ErrNotFound) {

@@ -57,7 +57,7 @@ func NewResolver(store AddressReader, registry TypeReader) *Resolver {
 // Resolve returns what the address holds, or [ErrNotFound].
 func (r *Resolver) Resolve(ctx context.Context, raw string) (Address, error) {
 	address := tidy(raw)
-	if !storableAddress(address) {
+	if !storableAddress(raw) || !storableAddress(address) {
 		return Address{}, ErrNotFound
 	}
 	item, err := r.content.PublishedByPath(ctx, address)
