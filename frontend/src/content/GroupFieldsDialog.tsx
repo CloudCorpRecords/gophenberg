@@ -129,7 +129,7 @@ export function GroupFieldsDialog(props: {
 						<Dialog.Title>
 							{sprintf(__('Fields of %(group)s', 'gophenberg'), { group: props.held.title })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -590,7 +590,7 @@ function FieldSettings(props: Inside) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -819,7 +819,7 @@ function RenameField(props: Inside) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -970,7 +970,7 @@ function CarryDialog(props: Inside & { at: string; landings: Landing[]; first: L
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -1172,7 +1172,7 @@ function SubFields(props: Inside & { types: ContentType[]; path: string }) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<AddField
@@ -1228,7 +1228,7 @@ function DeleteField(props: Inside) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{asking}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Text>{warning}</Text>

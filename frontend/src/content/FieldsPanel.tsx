@@ -396,17 +396,19 @@ function checkboxesEdit(
 				{described.description !== undefined && (
 					<Text variant="body-sm">{described.description}</Text>
 				)}
-				{offered.map((pair) => (
-					<CheckboxControl
-						__nextHasNoMarginBottom
-						key={pair.value}
-						label={pair.label}
-						checked={held.includes(pair.value)}
-						onChange={(next) =>
-							carry(next ? [...held, pair.value] : held.filter((one) => one !== pair.value))
-						}
-					/>
-				))}
+				<Stack direction="column" gap="sm">
+					{offered.map((pair) => (
+						<CheckboxControl
+							__nextHasNoMarginBottom
+							key={pair.value}
+							label={pair.label}
+							checked={held.includes(pair.value)}
+							onChange={(next) =>
+								carry(next ? [...held, pair.value] : held.filter((one) => one !== pair.value))
+							}
+						/>
+					))}
+				</Stack>
 				{taking && <OtherAdder onAdd={(word) => carry(held.includes(word) ? held : [...held, word])} />}
 				<Complaint validity={validity} />
 			</Stack>

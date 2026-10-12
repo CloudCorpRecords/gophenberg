@@ -461,6 +461,38 @@ test('offers every checkbox unticked when the item holds no answer yet', async (
 	expect(screen.getByRole('checkbox', { name: 'Stout' })).not.toBeChecked()
 })
 
+test('spaces the answers of a checkbox group as the WordPress checkbox group spaces them', async () => {
+	declaring({
+		key: 'styles',
+		label: 'Styles',
+		kind: 'choice',
+		many: false,
+		required: false,
+		settings: {
+			presentation: 'checkbox',
+			multiple: true,
+			instructions: 'Tick every one that fits.',
+			choices: [
+				{ value: 'ipa', label: 'IPA' },
+				{ value: 'stout', label: 'Stout' },
+			],
+		},
+	})
+	renderAt(EDITOR_PATH)
+
+	const group = await screen.findByRole('group', { name: 'Styles' })
+	const ipa = within(group).getByRole('checkbox', { name: 'IPA' })
+	const stout = within(group).getByRole('checkbox', { name: 'Stout' })
+	const answers = [group, ...group.querySelectorAll<HTMLElement>('*')]
+		.filter((one) => one.contains(ipa) && one.contains(stout))
+		.at(-1)
+
+	expect(group.style.gap).toMatch(/^var\(--wpds-dimension-gap-xs[,)]/)
+	expect(within(group).getByText('Styles').parentElement).toBe(group)
+	expect(within(group).getByText('Tick every one that fits.').parentElement).toBe(group)
+	expect(answers?.style.gap).toMatch(/^var\(--wpds-dimension-gap-sm[,)]/)
+})
+
 test('shows one control per sub field a section declares', async () => {
 	declaring({
 		key: 'author',

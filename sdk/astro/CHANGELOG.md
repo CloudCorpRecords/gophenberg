@@ -15,7 +15,7 @@ through 0.8.0 shipped in step with Gophenberg under its `vX.Y.Z` tags.
 
 ### Changed
 
-- The kit parses blocks with `@wordpress/block-serialization-default-parser` 5.56.0.
+- The kit parses blocks with `@wordpress/block-serialization-default-parser` 5.57.0.
 
 ### Fixed
 

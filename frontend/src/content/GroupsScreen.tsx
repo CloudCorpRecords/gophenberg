@@ -276,11 +276,7 @@ export function GroupsScreen() {
 				{overlaps.map((held) => {
 					const said = shadowingSentence(held)
 					return (
-						<Notice.Root
-							key={`${held.key}:${held.winner}:${held.loserID}`}
-							intent="warning"
-							spokenMessage={said}
-						>
+						<Notice.Root key={`${held.key}:${held.winner}:${held.loserID}`} intent="warning">
 							<Notice.Description>{said}</Notice.Description>
 						</Notice.Root>
 					)
@@ -507,7 +503,7 @@ function RemoveGroup(props: Reporter & { held: FieldGroup }) {
 						<Dialog.Title>
 							{sprintf(__('Delete %(group)s', 'gophenberg'), { group: props.held.title })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Text>
@@ -572,7 +568,7 @@ function AddGroup(props: Reporter & { types: ContentType[] }) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{__('Create a field group', 'gophenberg')}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">

@@ -386,7 +386,7 @@ function HandOverRoot(props: {
 						<Dialog.Title>
 							{sprintf(__('Hand the root to %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -443,7 +443,7 @@ function DescribeType(props: Reporter & { registered: ContentType }) {
 						<Dialog.Title>
 							{sprintf(__('Describe %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<InputControl
@@ -486,7 +486,7 @@ function ChangeAddress(props: Reporter & { registered: ContentType }) {
 						<Dialog.Title>
 							{sprintf(__('Change the address of %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
 						</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
@@ -585,7 +585,7 @@ function AddType(props: Reporter) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{__('Register a content type', 'gophenberg')}</Dialog.Title>
-						<Dialog.CloseIcon />
+						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">

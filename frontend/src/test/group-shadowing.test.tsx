@@ -6,6 +6,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 
 import { shadowings } from '../content/GroupsScreen'
 import { typesQueryKey } from '../content/nav'
+import { listenAt } from './announcements'
 import { renderAt } from './render'
 import type { Location } from '../content/groups'
 
@@ -84,6 +85,18 @@ test('warns which group serves a key another group also holds', async () => {
 	expect(
 		screen.getByText('subtitle is served by Article details, so Extras does not show it on Posts.'),
 	).toBeInTheDocument()
+})
+
+test('warns of an overlap without speaking it, as WordPress leaves a static notice silent', async () => {
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	listing([DETAILS, EXTRAS])
+	renderAt('/field-groups')
+
+	await screen.findByText('subtitle is served by Article details, so Extras does not show it on Posts.')
+
+	expect(polite()).toEqual([])
+	expect(assertive()).toEqual([])
 })
 
 test('marks the losing group and leaves the winning one alone', async () => {

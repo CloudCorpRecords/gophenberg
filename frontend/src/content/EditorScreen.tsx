@@ -67,7 +67,7 @@ export function EditorScreen() {
 	}
 	const mine = sessionMayChange(session, post.data.authorId)
 	if (!mine || post.data.status === 'trash') {
-		return <PostReadView stored={post.data} mine={mine} />
+		return <PostReadView key={postId} stored={post.data} mine={mine} />
 	}
 	return <Editor key={postId} postId={postId} stored={post.data} />
 }
