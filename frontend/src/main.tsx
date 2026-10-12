@@ -13,6 +13,7 @@ import { createRoot } from 'react-dom/client'
 import '@gopherium/godmin/base.css'
 import '@gopherium/react-auth/wpds/style.css'
 import './index.css'
+import { AdminGate } from './AdminGate'
 import { BootLoading } from './boot'
 import { startLocale } from './i18n/start'
 import { createAppRouter } from './router'
@@ -43,11 +44,13 @@ createRoot(document.getElementById('root')!).render(
 					loading={<BootLoading />}
 					error={<BootError />}
 				>
-					<AdminToaster>
-						<SiteFormatGate loading={<BootLoading />}>
-							<RouterProvider router={router} />
-						</SiteFormatGate>
-					</AdminToaster>
+					<AdminGate>
+						<AdminToaster>
+							<SiteFormatGate loading={<BootLoading />}>
+								<RouterProvider router={router} />
+							</SiteFormatGate>
+						</AdminToaster>
+					</AdminGate>
 				</AuthGate>
 			</AdminRoot>
 		</QueryClientProvider>

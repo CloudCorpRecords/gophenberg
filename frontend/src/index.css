@@ -144,3 +144,23 @@
 	}
 }
 
+.gophenberg-no-access {
+	box-sizing: border-box;
+	max-width: min(var(--wpds-dimension-surface-width-lg), calc(100% - 2 * var(--wpds-dimension-padding-lg)));
+	margin: 50px auto;
+	padding: var(--wpds-dimension-padding-2xl);
+	background: var(--wpds-color-background-surface-neutral-strong);
+	border: 1px solid var(--wpds-color-stroke-surface-neutral);
+	border-radius: var(--wpds-border-radius-lg);
+}
+
+body:has(.gophenberg-no-access) {
+	background: var(--wpds-color-background-surface-neutral-weak);
+}
+
+.gophenberg-no-access__account {
+	align-items: flex-start;
+	padding-top: var(--wpds-dimension-padding-lg);
+	border-top: 1px solid var(--wpds-color-stroke-surface-neutral);
+}
+
