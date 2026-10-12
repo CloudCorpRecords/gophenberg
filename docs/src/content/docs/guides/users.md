@@ -26,7 +26,9 @@ or settings.
 An **author** writes and works only its own content and media.
 
 Nothing else changes with the role. Every role signs in the same way
-and sees the same admin, minus the screens its role cannot use.
+and sees the same admin, minus the screens its capabilities do not
+open. A role a plugin declares with `manage_themes`, for example,
+sees the Themes screen and none of the other admin screens.
 
 ## Signing in
 
@@ -43,14 +45,24 @@ control, and the running version at the bottom.
 The Users screen lists every account with an Active or Disabled
 badge.
 
-**Creating a user** asks for email, name, and password. The
+**Creating a user** asks for email, name, password and role. The
 password must be at least 12 characters, and a taken email says
-so.
+so. The role menu offers the roles your own role reaches, and starts
+on Author.
+
+**Changing a role** starts from **Change role** on the account's
+row, which opens a small dialog. Pick the role and press **Change
+role**, and the screen says *Role changed.* The menu offers only the
+roles your own role reaches, so a role carrying a capability yours
+lacks is not there. Your own row has no Change role at all. When the
+server turns a change down, the dialog says why, such as *That role
+holds more than your own.* or *Somebody must be able to manage
+users.*
 
 **Disabling a user** blocks them from signing in and ends their
 existing sessions immediately, so they are signed out everywhere.
-You cannot disable your own account, which keeps the last
-administrator from locking everyone out.
+You cannot disable your own account, which keeps the last account
+that manages users from locking everyone out.
 
 Changing a password is not something the admin offers.
 
