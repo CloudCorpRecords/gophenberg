@@ -22,32 +22,38 @@ const editorEmail = "editor@example.com"
 // authorEmail is the account the role scenarios sign in as to work only its own content.
 const authorEmail = "author@example.com"
 
-// aSignedInRole gives the scenario a client signed in under the given role.
-func aSignedInRole(ctx context.Context, email, name, role string) error {
+// signedIn is the account a scenario's client signs in as.
+type signedIn struct {
+	email, name, role string
+}
+
+// aSignedInRole gives the scenario a client signed in as the account.
+func aSignedInRole(ctx context.Context, account signedIn) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := authkit.EnsureAdmin(ctx, w.users, email, name, adminPassword, role); err != nil {
-		return fmt.Errorf("creating the %s: %w", role, err)
+	if _, err := authkit.EnsureAdmin(ctx, w.users, account.email, account.name, adminPassword, account.role); err != nil {
+		return fmt.Errorf("creating the %s: %w", account.role, err)
 	}
-	if err := w.postJSON("/api/auth/login", fmt.Sprintf(`{"email":%q,"password":%q}`, email, adminPassword)); err != nil {
+	login := fmt.Sprintf(`{"email":%q,"password":%q}`, account.email, adminPassword)
+	if err := w.postJSON("/api/auth/login", login); err != nil {
 		return err
 	}
 	if err := w.expect(http.StatusOK); err != nil {
-		return fmt.Errorf("signing in the %s: %w", role, err)
+		return fmt.Errorf("signing in the %s: %w", account.role, err)
 	}
 	return nil
 }
 
 // aSignedInEditor gives the scenario a client holding the editor role.
 func aSignedInEditor(ctx context.Context) error {
-	return aSignedInRole(ctx, editorEmail, "Grace Hopper", role.Editor)
+	return aSignedInRole(ctx, signedIn{editorEmail, "Grace Hopper", role.Editor})
 }
 
 // aSignedInAuthor gives the scenario a client holding the author role.
 func aSignedInAuthor(ctx context.Context) error {
-	return aSignedInRole(ctx, authorEmail, "Ada Lovelace", role.Author)
+	return aSignedInRole(ctx, signedIn{authorEmail, "Ada Lovelace", role.Author})
 }
 
 // theAccountAsksFor asks the API for the given path.
@@ -106,7 +112,7 @@ func thePluginDeclaringTheRole(ctx context.Context, plugin, name, capability str
 
 // aSignedInHolder gives the scenario a client signed in under the named role.
 func aSignedInHolder(ctx context.Context, held string) error {
-	return aSignedInRole(ctx, held+"@example.com", "Maria Perez", held)
+	return aSignedInRole(ctx, signedIn{held + "@example.com", "Maria Perez", held})
 }
 
 // theAccountHoldingTheRole stores an account at email holding the role.
