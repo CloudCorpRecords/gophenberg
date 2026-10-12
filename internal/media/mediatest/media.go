@@ -29,6 +29,7 @@ var mediaCases = []Case{
 	{"ReadsFewerWhenAnIdentityIsGone", readsFewerWhenAnIdentityIsGone},
 	{"ReadsNothingFromNoIdentities", readsNothingFromNoIdentities},
 	{"ReadsStampsBackInUTC", readsStampsBackInUTC},
+	{"TouchesOnlyTheNamedItem", touchesOnlyTheNamedItem},
 }
 
 // createAndReadBack reads a created item back with its descriptions, measurements, renditions and author.
@@ -316,6 +317,42 @@ func readsStampsBackInUTC(t *testing.T, s Stores) {
 	} {
 		if stamp.got.Location() != time.UTC || !stamp.got.Equal(stamp.want) {
 			t.Errorf("%s = %v, want %v in UTC", stamp.name, stamp.got, stamp.want.UTC())
+		}
+	}
+}
+
+// touchesOnlyTheNamedItem reads, edits and deletes the item its identity names and leaves the others alone.
+func touchesOnlyTheNamedItem(t *testing.T, s Stores) {
+	author := s.AddAuthor(t, DefaultAuthor)
+	held := []media.Media{
+		MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author)),
+		MustCreate(t, s.Media, MustImage(t, "2026/08/cliff.jpg", "cliff", author)),
+		MustCreate(t, s.Media, MustImage(t, "2026/08/pier.jpg", "pier", author)),
+	}
+	for _, item := range held {
+		if got, err := s.Media.ByID(t.Context(), item.ID); err != nil || got.File != item.File {
+			t.Fatalf("ByID(%d) = %q, error %v, want %q", item.ID, got.File, err, item.File)
+		}
+	}
+	if listed, err := s.Media.ByIDs(t.Context(), nil); err != nil || len(listed) != 0 {
+		t.Fatalf("ByIDs(nil) = %d items, error %v, want none", len(listed), err)
+	}
+	middle := held[1]
+	edited := middle
+	edited.Title, edited.UpdatedAt = "Cliff at dusk", middle.UpdatedAt.Add(time.Second)
+
+	updated, err := s.Media.Update(t.Context(), edited, middle.UpdatedAt)
+	if err != nil || updated.ID != middle.ID {
+		t.Fatalf("Update(%d) = item %d, error %v, want the named item edited", middle.ID, updated.ID, err)
+	}
+	if deleted, err := s.Media.Delete(t.Context(), middle.ID); err != nil || deleted.File != middle.File {
+		t.Fatalf("Delete(%d) = %q, error %v, want %q", middle.ID, deleted.File, err, middle.File)
+	}
+
+	for _, item := range []media.Media{held[0], held[2]} {
+		got, err := s.Media.ByID(t.Context(), item.ID)
+		if err != nil || got.Title != item.Title {
+			t.Errorf("ByID(%d) = %q, error %v, want %q left alone", item.ID, got.Title, err, item.Title)
 		}
 	}
 }
