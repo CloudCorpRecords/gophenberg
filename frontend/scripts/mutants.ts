@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join, matchesGlob } from 'node:path'
 
 import { repositoryRoot } from './config.ts'
-import { RANGE } from './pieces.ts'
+import type { MutationConfig } from './mutantCount.ts'
 
 /**
  * Returns the changed files a mutation run over the patterns would mutate.
@@ -63,33 +63,22 @@ export function parseShard(text: string): Shard | undefined {
 }
 
 /**
- * Returns the mutate entries one shard runs, every shard holding about the same number of lines.
+ * Returns the mutate entries one shard runs, every shard holding about the same weight.
  * @param targets - The mutate entries, as file:start-end or a whole file.
  * @param shard - The shard to return the entries of.
- * @param fileLines - Counts the lines of a whole file.
+ * @param weight - Weighs a mutate entry, as the mutants it holds.
  * @returns The entries of the shard, in their given order.
  */
-export function shardTargets(targets: string[], shard: Shard, fileLines: (file: string) => number): string[] {
+export function shardTargets(targets: string[], shard: Shard, weight: (target: string) => number): string[] {
 	const loads = Array.from({ length: shard.count }, () => 0)
 	const owners = new Map<string, number>()
-	const sized = targets.toSorted().map((target) => ({ target, lines: targetLines(target, fileLines) }))
-	for (const { target, lines } of sized.toSorted((left, right) => right.lines - left.lines)) {
-		const lightest = loads.reduce((least, load, place) => (load < loads[least] ? place : least), 0)
-		loads[lightest] += lines
+	const weighed = targets.toSorted().map((target) => ({ target, load: weight(target) }))
+	for (const { target, load } of weighed.toSorted((left, right) => right.load - left.load)) {
+		const lightest = loads.reduce((least, held, place) => (held < loads[least] ? place : least), 0)
+		loads[lightest] += load
 		owners.set(target, lightest + 1)
 	}
 	return targets.filter((target) => owners.get(target) === shard.index)
-}
-
-/**
- * Returns how many lines a mutate entry covers.
- * @param target - The mutate entry, as file:start-end or a whole file.
- * @param fileLines - Counts the lines of a whole file.
- * @returns The lines of its range, or of the whole file.
- */
-function targetLines(target: string, fileLines: (file: string) => number): number {
-	const range = RANGE.exec(target)
-	return range === null ? fileLines(target) : Number(range[2]) - Number(range[1]) + 1
 }
 
 /**
@@ -129,13 +118,24 @@ function addRange(ranges: Map<string, string[]>, file: string, start: number, co
 	}
 }
 
+/** The part of the Stryker config the mutation scripts read. */
+interface StrykerConfig extends MutationConfig {
+	mutate: string[]
+	dryRunTimeoutMinutes?: number
+}
+
+/**
+ * Returns the Stryker config the mutation runs use.
+ * @returns The parsed config.
+ */
+export function strykerConfig(): StrykerConfig {
+	return JSON.parse(readFileSync(join(repositoryRoot(), 'frontend', 'stryker.config.json'), 'utf8')) as StrykerConfig
+}
+
 /**
  * Returns the mutate patterns the Stryker config holds.
  * @returns The patterns, in the order the config lists them.
  */
 export function strykerPatterns(): string[] {
-	const config = JSON.parse(readFileSync(join(repositoryRoot(), 'frontend', 'stryker.config.json'), 'utf8')) as {
-		mutate: string[]
-	}
-	return config.mutate
+	return strykerConfig().mutate
 }

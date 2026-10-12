@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { repositoryRoot } from './config.ts'
-import { mutateTargets, parseShard, shardTargets, strykerPatterns } from './mutants.ts'
+import { countMutants, instrumenterOptions } from './mutantCount.ts'
+import { mutateTargets, parseShard, shardTargets, strykerConfig } from './mutants.ts'
 import { cutTarget, statementStarts, targetFile } from './pieces.ts'
 
 const [base, shardArgument = '1/1'] = process.argv.slice(2)
@@ -37,13 +38,6 @@ const git = (args: string[]): string => execFileSync('git', args, { cwd: root, e
 const sourceOf = (file: string): string => readFileSync(join(root, file), 'utf8')
 
 /**
- * Returns how many lines a file holds.
- * @param file - The file, relative to the repository root.
- * @returns Its line count.
- */
-const fileLines = (file: string): number => sourceOf(file).split('\n').length
-
-/**
  * Returns a mutate entry cut at the top-level statements that start inside it.
  * @param target - The mutate entry, as file:start-end or a whole file.
  * @returns Its pieces.
@@ -68,8 +62,21 @@ const diff = git([
 	...roots,
 ])
 const untracked = git(['ls-files', '-z', '--others', '--exclude-standard', '--', ...roots]).split('\0').filter(Boolean)
-const pieces = mutateTargets(diff, untracked, strykerPatterns()).flatMap(piecesOf)
-const targets = shardTargets(pieces, shard, fileLines)
+const config = strykerConfig()
+const pieces = mutateTargets(diff, untracked, config.mutate).flatMap(piecesOf)
+const counts = await countMutants(pieces, sourceOf, instrumenterOptions(config))
+
+/**
+ * Returns how many mutants Stryker tests in a piece.
+ * @param piece - The piece, as file:start-end or a whole file.
+ * @returns Its mutant count.
+ */
+const weight = (piece: string): number => counts.get(piece) ?? 0
+const weighed = pieces.filter((piece) => weight(piece) > 0)
+const total = weighed.reduce((sum, piece) => sum + weight(piece), 0)
+const targets = shardTargets(weighed, shard, weight)
+const held = targets.reduce((sum, piece) => sum + weight(piece), 0)
+console.log(`shard ${shardArgument}: ${targets.length} of ${weighed.length} pieces, ${held} of ${total} mutants`)
 
 if (targets.length === 0) {
 	console.log('no changed source line to mutate')
