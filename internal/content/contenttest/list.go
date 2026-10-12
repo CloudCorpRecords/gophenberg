@@ -559,8 +559,8 @@ func listCarriesTheTitleOfEachParent(t *testing.T, s Stores) {
 // listSortsTitlesCaseInsensitively sorts titles without regard to their case.
 func listSortsTitlesCaseInsensitively(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
-	MustCreate(t, s.Content, "banana", author)
-	MustCreate(t, s.Content, "Apricot", author)
+	MustCreate(t, s.Content, "Banana", author)
+	MustCreate(t, s.Content, "apricot", author)
 	MustCreate(t, s.Content, "cherry", author)
 
 	posts, _, err := s.Content.List(t.Context(), content.Filter{
@@ -570,7 +570,7 @@ func listSortsTitlesCaseInsensitively(t *testing.T, s Stores) {
 	if err != nil {
 		t.Fatalf("List() error = %v, want nil", err)
 	}
-	want := []string{"Apricot", "banana", "cherry"}
+	want := []string{"apricot", "Banana", "cherry"}
 	if got := TitlesOf(posts); !slices.Equal(got, want) {
 		t.Fatalf("titles = %v, want %v, so the database collation is not case insensitive", got, want)
 	}
