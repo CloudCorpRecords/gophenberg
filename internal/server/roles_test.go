@@ -47,9 +47,14 @@ func signedInAs(t *testing.T, roles *goncierge.Registry, held string) (http.Hand
 	return handler, sessionCookie(t, recorder), users
 }
 
-// ask sends method to path with the JSON body and the cookie, answering the recorded reply.
-func ask(handler http.Handler, cookie *http.Cookie, method, path, body string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(method, path, strings.NewReader(body))
+// call is one request a test sends, its method, path and JSON body.
+type call struct {
+	method, path, body string
+}
+
+// ask sends the call with the cookie, answering the recorded reply.
+func ask(handler http.Handler, cookie *http.Cookie, sent call) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(sent.method, sent.path, strings.NewReader(sent.body))
 	request.Header.Set("Content-Type", "application/json")
 	request.AddCookie(cookie)
 	recorder := httptest.NewRecorder()
@@ -87,7 +92,7 @@ func TestEachAdminRouteRefusesAnEditorWithWhatItAsksFor(t *testing.T) {
 	handler, cookie, _ := signedInAs(t, nil, role.Editor)
 
 	for _, gated := range adminRoutes {
-		recorder := ask(handler, cookie, gated.method, concrete(gated.pattern), "{}")
+		recorder := ask(handler, cookie, call{gated.method, concrete(gated.pattern), "{}"})
 
 		asked, want := capabilityOf(gated), "capability_missing"
 		if asked == "" {
@@ -113,7 +118,7 @@ func TestARoleCarryingTheThemesCapabilityReachesTheThemesAlone(t *testing.T) {
 	handler, cookie, _ := signedInAs(t, roles, "designer")
 
 	for _, gated := range adminRoutes {
-		refused := ask(handler, cookie, gated.method, concrete(gated.pattern), "{}").Code == http.StatusForbidden
+		refused := ask(handler, cookie, call{gated.method, concrete(gated.pattern), "{}"}).Code == http.StatusForbidden
 
 		if themes := capabilityOf(gated) == string(role.ManageThemes); refused == themes {
 			t.Errorf("%s %s refused %v for a designer, want only the theme routes reached",
@@ -127,7 +132,7 @@ func TestTheSessionCarriesWhatAnAdministratorMayDoAndGive(t *testing.T) {
 
 	handler, cookie, _ := signedInAs(t, nil, role.Admin)
 
-	recorder := ask(handler, cookie, http.MethodGet, "/api/auth/session", "")
+	recorder := ask(handler, cookie, call{http.MethodGet, "/api/auth/session", ""})
 
 	var held struct {
 		Capabilities []string `json:"capabilities"`
@@ -152,7 +157,7 @@ func TestTheSessionOfAnAuthorCarriesAnEmptyListOfCapabilities(t *testing.T) {
 
 	handler, cookie, _ := signedInAs(t, nil, role.Author)
 
-	recorder := ask(handler, cookie, http.MethodGet, "/api/auth/session", "")
+	recorder := ask(handler, cookie, call{http.MethodGet, "/api/auth/session", ""})
 
 	if body := recorder.Body.String(); !strings.Contains(body, `"capabilities":[]`) {
 		t.Errorf("the session answers %s, want an empty list of capabilities", body)
@@ -164,8 +169,9 @@ func TestARoleWriteRefusesARoleNobodyDeclares(t *testing.T) {
 
 	handler, cookie, users := signedInAs(t, nil, role.Admin)
 	author := addWithRole(t, users, "author@example.com", "Maria Perez", role.Author)
+	path := "/api/users/" + author.ID.String() + "/role"
 
-	recorder := ask(handler, cookie, http.MethodPut, "/api/users/"+author.ID.String()+"/role", `{"role":"archivist"}`)
+	recorder := ask(handler, cookie, call{http.MethodPut, path, `{"role":"archivist"}`})
 
 	if got := refusalOf(t, recorder); recorder.Code != http.StatusUnprocessableEntity || got.Code != "role_unknown" {
 		t.Errorf("giving an undeclared role answered %d %+v, want 422 role_unknown", recorder.Code, got)
@@ -182,9 +188,10 @@ func TestARoleCarryingOnlyTheAccountCapabilityCannotReachAnAdministrator(t *test
 	handler, cookie, users := signedInAs(t, roles, "team_lead")
 	author := addWithRole(t, users, "author@example.com", "Maria Perez", role.Author)
 	owner := addWithRole(t, users, "owner@example.com", "Maria Perez", role.Admin)
+	promotion := "/api/users/" + author.ID.String() + "/role"
 
-	promoted := ask(handler, cookie, http.MethodPut, "/api/users/"+author.ID.String()+"/role", `{"role":"admin"}`)
-	disabled := ask(handler, cookie, http.MethodPatch, "/api/users/"+owner.ID.String(), `{"disabled":true}`)
+	promoted := ask(handler, cookie, call{http.MethodPut, promotion, `{"role":"admin"}`})
+	disabled := ask(handler, cookie, call{http.MethodPatch, "/api/users/" + owner.ID.String(), `{"disabled":true}`})
 
 	for name, recorder := range map[string]*httptest.ResponseRecorder{"promoting": promoted, "disabling": disabled} {
 		if got := refusalOf(t, recorder); recorder.Code != http.StatusForbidden || got.Code != "role_beyond_reach" {
