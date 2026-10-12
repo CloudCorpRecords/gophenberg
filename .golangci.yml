@@ -62,7 +62,7 @@ linters:
         linters:
           - cyclop
           - gocognit
-      - path: internal/content/contenttest/
+      - path: internal/(content/contenttest|media/mediatest)/
         linters:
           - cyclop
           - gocognit
