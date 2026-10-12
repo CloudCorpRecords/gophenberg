@@ -26,6 +26,16 @@ test('puts the data an error carries into its message', () => {
 	expect(held).toContain('colour')
 })
 
+test('names the capability a refused request lacks', () => {
+	const held = errorText({
+		error: 'capability missing',
+		code: 'capability_missing',
+		meta: { capability: 'manage_themes' },
+	})
+
+	expect(held).toBe('Your role does not allow manage_themes.')
+})
+
 test('falls back to the server message for a code it does not know', () => {
 	const held = errorText({ error: 'content: something new', code: 'a_code_from_the_future' })
 
