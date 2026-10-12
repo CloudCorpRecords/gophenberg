@@ -15,6 +15,7 @@ var userSettingCases = []Case{
 	{"IsTheReadersAlone", userSettingIsTheReadersAlone},
 	{"AnswersNothingForAKeyItNeverHeld", userSettingAnswersNothingForAKeyItNeverHeld},
 	{"KeepsEachKeyApart", userSettingKeepsEachKeyApart},
+	{"MatchesKeysExactly", userSettingMatchesKeysExactly},
 }
 
 // userSettingReadsWhatItWrote reads back as found the value a reader stored under a key.
@@ -105,6 +106,27 @@ func userSettingKeepsEachKeyApart(t *testing.T, s Stores) {
 		}
 		if !found || held != want {
 			t.Errorf("Lookup(%q) = %q, %v, want %q", key, held, found, want)
+		}
+	}
+}
+
+// userSettingMatchesKeysExactly finds nothing under a key that differs from a stored one in case or a trailing space.
+func userSettingMatchesKeysExactly(t *testing.T, s Stores) {
+	reader := uuid.New()
+	if err := s.UserSettings.Save(t.Context(), reader, "locale", "es-ES"); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	if _, found, err := s.UserSettings.Lookup(t.Context(), reader, "locale"); err != nil || !found {
+		t.Fatalf("Lookup(%q) = found %v, error %v, want the stored key found", "locale", found, err)
+	}
+
+	for _, near := range []string{"Locale", "locale "} {
+		held, found, err := s.UserSettings.Lookup(t.Context(), reader, near)
+		if err != nil {
+			t.Fatalf("Lookup(%q) error = %v, want nil", near, err)
+		}
+		if found || held != "" {
+			t.Errorf("Lookup(%q) = %q, %v, want nothing, as only %q was stored", near, held, found, "locale")
 		}
 	}
 }
