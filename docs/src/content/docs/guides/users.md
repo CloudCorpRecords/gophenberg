@@ -3,17 +3,20 @@ title: Users and signing in
 description: Accounts, the login screen, and enabling and disabling users.
 ---
 
-Everyone who writes in Gophenberg has an account with an email and
-a password. An account holds one role, and the role decides what it
-may do. Accounts made before roles existed are the one exception.
+Everyone who writes in Gophenberg, and every member of the site, has
+an account with an email and a password. An account holds one role,
+and the role decides what it may do. Accounts made before roles
+existed are the one exception.
 They hold none until you give them one, and the last section covers
 that.
 
 ## Roles
 
-Gophenberg comes with three roles, and a plugin may declare more.
+Gophenberg comes with four roles, and a plugin may declare more.
 A role carries capabilities, such as `manage_users` or
-`manage_themes`, and each one opens a part of the site.
+`manage_themes`, and each one opens a part of the site. The admin,
+the editor and the author carry `access_admin`, which lets them into
+the admin at all.
 
 An **admin** runs the site. It manages accounts, installs and
 switches themes, reshapes the content model, writes the
@@ -25,11 +28,18 @@ or settings.
 
 An **author** writes and works only its own content and media.
 
-Nothing else changes with the role. Every role signs in the same way
-and sees the same admin, minus the screens its capabilities do not
-open. A role a plugin declares with only `manage_themes`, for
-example, sees the Themes screen and none of the other admin screens.
-Each further capability the role carries opens its own screen too.
+A **member** signs in but never enters the admin. It keeps its own
+session and its language, and a plugin decides what else it may do,
+such as posting in a forum. A member who opens `/admin` reads *Sorry,
+you are not allowed to access this page.*, with a link to the site
+and a Log out button.
+
+Nothing else changes with the role. Every role signs in the same way,
+and every role carrying `access_admin` sees the same admin, minus the
+screens its capabilities do not open. A role a plugin declares with
+`access_admin` and `manage_themes`, for example, sees the Themes
+screen and none of the other administration screens. Each further
+capability the role carries opens its own screen too.
 
 ## Signing in
 
@@ -132,8 +142,12 @@ leaves the database as it was. Every account keeps the role it held.
 
 **Second, give a role to the accounts that hold none.**
 
-Accounts made before roles existed hold no role, so they can do
-nothing until one is given. The `account:grant-role` command gives a
+Accounts made before roles existed hold no role, so the admin turns
+them away with *Sorry, you are not allowed to access this page.*
+until one is given. So does an account whose role belonged to a
+plugin that is gone. That account still holds the role's name, so
+`account:grant-role` skips it: find it with `account:list` and give
+it a role with `account:role`. The `account:grant-role` command gives a
 role to every account that holds none, and says how many it changed.
 
 Like `account:role`, `account:disable` and `account:enable`, it names

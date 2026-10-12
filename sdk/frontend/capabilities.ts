@@ -9,8 +9,14 @@ export const EDITOR = 'editor'
 /** The role working only its own content and media. */
 export const AUTHOR = 'author'
 
+/** The role of a signed-in account that never enters the admin. */
+export const MEMBER = 'member'
+
 /** A named permission a screen or control asks for, the core's or one a plugin declares. */
 export type Capability = string
+
+/** The capability entering the admin and working its content and media. */
+export const ACCESS_ADMIN: Capability = 'access_admin'
 
 /** The capability administering accounts. */
 export const MANAGE_USERS: Capability = 'manage_users'

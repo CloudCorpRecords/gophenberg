@@ -1318,6 +1318,9 @@ msgstr ""
 msgid "Something went wrong. Try again."
 msgstr ""
 
+msgid "Sorry, you are not allowed to access this page."
+msgstr ""
+
 msgid "Source"
 msgstr ""
 
@@ -1791,6 +1794,9 @@ msgstr ""
 msgid "Videos"
 msgstr ""
 
+msgid "Visit Site"
+msgstr ""
+
 msgid "Web address"
 msgstr ""
 
@@ -2062,6 +2068,10 @@ msgstr ""
 
 msgctxt "role"
 msgid "Editor"
+msgstr ""
+
+msgctxt "role"
+msgid "Member"
 msgstr ""
 
 msgctxt "role"

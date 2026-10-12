@@ -34,9 +34,11 @@ func (s *server) handleAuthorList() http.HandlerFunc {
 			respondDomainError(w, fmt.Errorf("server: list authors: %w", err))
 			return
 		}
-		items := make([]authorView, len(users))
-		for i, u := range users {
-			items[i] = authorView{ID: u.ID, Name: u.Name}
+		items := make([]authorView, 0, len(users))
+		for _, u := range users {
+			if slices.Contains(s.staff, u.Role) {
+				items = append(items, authorView{ID: u.ID, Name: u.Name})
+			}
 		}
 		slices.SortFunc(items, func(a, b authorView) int {
 			return cmp.Or(strings.Compare(a.Name, b.Name), bytes.Compare(a.ID[:], b.ID[:]))

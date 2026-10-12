@@ -5,11 +5,13 @@ import { expect, test } from 'vitest'
 
 import { mayChange } from '../capabilities'
 import {
+	ACCESS_ADMIN,
 	CHANGE_OTHERS_WORK,
 	MANAGE_SETTINGS,
 	MANAGE_THEMES,
 	MANAGE_TYPES,
 	MANAGE_USERS,
+	MEMBER,
 	can,
 	sessionMayChange,
 } from '../index'
@@ -22,6 +24,14 @@ test('a session holds exactly the capabilities it lists, a plugin capability inc
 	for (const capability of [MANAGE_USERS, MANAGE_TYPES, MANAGE_SETTINGS, CHANGE_OTHERS_WORK]) {
 		expect(can(session, capability)).toBe(false)
 	}
+})
+
+test('names the capability entering the admin, which a member never holds', () => {
+	const member = { ...defaultUser, role: MEMBER, capabilities: [] }
+
+	expect(ACCESS_ADMIN).toBe('access_admin')
+	expect(MEMBER).toBe('member')
+	expect(can(member, ACCESS_ADMIN)).toBe(false)
 })
 
 test('a role name alone holds nothing', () => {

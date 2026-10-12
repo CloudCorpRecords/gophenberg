@@ -23,22 +23,37 @@ func TestCoreGrantsEachCoreRoleItsCapabilities(t *testing.T) {
 	}
 	tests := map[string][]string{
 		role.Admin: {
-			string(role.ChangeOthersWork), string(role.ManageSettings), string(role.ManageThemes),
-			string(role.ManageTypes), string(role.ManageUsers),
+			string(role.AccessAdmin), string(role.ChangeOthersWork), string(role.ManageSettings),
+			string(role.ManageThemes), string(role.ManageTypes), string(role.ManageUsers),
 		},
-		role.Editor: {string(role.ChangeOthersWork)},
-		role.Author: nil,
+		role.Editor: {string(role.AccessAdmin), string(role.ChangeOthersWork)},
+		role.Author: {string(role.AccessAdmin)},
+		role.Member: nil,
 	}
 	for named, want := range tests {
 		if held := registry.CapabilitiesOf(named); !slices.Equal(held, want) {
 			t.Errorf("CapabilitiesOf(%q) = %v, want %v", named, held, want)
 		}
 	}
-	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor}) {
-		t.Errorf("Roles() = %v, want the three core roles", roles)
+	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor, role.Member}) {
+		t.Errorf("Roles() = %v, want the four core roles", roles)
 	}
 	if held := registry.HoldersOf(string(role.ManageUsers)); !slices.Equal(held, []string{role.Admin}) {
 		t.Errorf("HoldersOf(ManageUsers) = %v, want admin alone", held)
+	}
+}
+
+func TestEveryStaffRoleAndNoMemberAccessesTheAdmin(t *testing.T) {
+	t.Parallel()
+
+	registry := role.Registry()
+
+	staff := []string{role.Admin, role.Author, role.Editor}
+	if held := registry.HoldersOf(string(role.AccessAdmin)); !slices.Equal(held, staff) {
+		t.Errorf("HoldersOf(AccessAdmin) = %v, want the staff roles %v", held, staff)
+	}
+	if held := registry.CapabilitiesOf(role.Member); len(held) != 0 {
+		t.Errorf("CapabilitiesOf(member) = %v, want none", held)
 	}
 }
 
@@ -47,8 +62,8 @@ func TestRegistryHoldsTheCoreRolesAlone(t *testing.T) {
 
 	registry := role.Registry()
 
-	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor}) {
-		t.Errorf("Roles() = %v, want the three core roles alone", roles)
+	if roles := registry.Roles(); !slices.Equal(roles, []string{role.Admin, role.Author, role.Editor, role.Member}) {
+		t.Errorf("Roles() = %v, want the four core roles alone", roles)
 	}
 	if held := registry.HoldersOf(string(role.ManageUsers)); !slices.Equal(held, []string{role.Admin}) {
 		t.Errorf("HoldersOf(ManageUsers) = %v, want admin alone", held)

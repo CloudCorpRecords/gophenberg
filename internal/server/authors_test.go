@@ -67,6 +67,26 @@ func TestAuthorsKeepADisabledAccountThatStillOwnsItems(t *testing.T) {
 	}
 }
 
+func TestAuthorsLeaveOutAMemberWhoNeverEntersTheAdmin(t *testing.T) {
+	t.Parallel()
+
+	users := newFakeUserStore()
+	ada := addAda(t, users)
+	maria := addWithRole(t, users, "maria@example.com", "Maria Perez", role.Author)
+	addWithRole(t, users, "member@example.com", "Member", role.Member)
+	handler := authedServerWithStores(t, serverConfig(users, newFakePostStore()))
+
+	held := decodeBody[authorsHeld](t, doRequest(t, handler, http.MethodGet, "/api/authors", ""))
+
+	ids := make([]uuid.UUID, len(held.Items))
+	for i, author := range held.Items {
+		ids[i] = author.ID
+	}
+	if !slices.Equal(ids, []uuid.UUID{ada.ID, maria.ID}) {
+		t.Errorf("authors = %+v, want the two accounts that may enter the admin", held.Items)
+	}
+}
+
 func TestAuthorsSortAccountsSharingANameByTheirID(t *testing.T) {
 	t.Parallel()
 

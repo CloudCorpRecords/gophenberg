@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -33,9 +34,14 @@ var publicRoutes = []route{
 	{http.MethodGet, "/api/content/v1/resolve"},
 }
 
-// everyoneRoutes names the API routes every signed in role reaches.
+// everyoneRoutes names the API routes every signed in role reaches, a member included.
 var everyoneRoutes = []route{
 	{http.MethodGet, "/api/auth/session"},
+	{http.MethodPatch, "/api/locale"},
+}
+
+// staffRoutes names the API routes every role carrying access_admin reaches.
+var staffRoutes = []route{
 	{http.MethodGet, "/api/types"},
 	{http.MethodGet, "/api/groups"},
 	{http.MethodGet, "/api/groups/params"},
@@ -54,7 +60,6 @@ var everyoneRoutes = []route{
 	{http.MethodDelete, "/api/content/{id}/revisions/{revisionID}"},
 	{http.MethodGet, "/api/version"},
 	{http.MethodGet, "/api/authors"},
-	{http.MethodPatch, "/api/locale"},
 	{http.MethodGet, "/api/settings"},
 	{http.MethodGet, "/api/media"},
 	{http.MethodPost, "/api/media"},
@@ -122,9 +127,15 @@ func (memoryReaderSettings) Save(context.Context, uuid.UUID, string, string) err
 // newGateServer returns a router carrying every optional surface, and an author's cookie.
 func newGateServer(t *testing.T) (http.Handler, *http.Cookie) {
 	t.Helper()
+	return gateServerAs(t, role.Author)
+}
+
+// gateServerAs returns a router carrying every optional surface, and the cookie of an account holding held.
+func gateServerAs(t *testing.T, held string) (http.Handler, *http.Cookie) {
+	t.Helper()
 	users := newFakeUserStore()
 	addAda(t, users)
-	addWithRole(t, users, "author@example.com", "Maria Perez", role.Author)
+	addWithRole(t, users, "author@example.com", "Maria Perez", held)
 	handler := server.NewServer(server.Config{
 		Users:      users,
 		Content:    newFakePostStore(),
@@ -137,7 +148,7 @@ func newGateServer(t *testing.T) (http.Handler, *http.Cookie) {
 	})
 	recorder := doLogin(t, handler, `{"email":"author@example.com","password":"correct horse battery"}`)
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("author login status = %d, want %d", recorder.Code, http.StatusOK)
+		t.Fatalf("%s login status = %d, want %d", held, recorder.Code, http.StatusOK)
 	}
 	return handler, sessionCookie(t, recorder)
 }
@@ -167,7 +178,7 @@ func TestEveryAPIRouteIsClaimedByExactlyOneGroup(t *testing.T) {
 
 	handler, _ := newGateServer(t)
 	claimed := map[route]int{}
-	for _, group := range [][]route{publicRoutes, everyoneRoutes, adminRoutes} {
+	for _, group := range [][]route{publicRoutes, everyoneRoutes, staffRoutes, adminRoutes} {
 		for _, claim := range group {
 			claimed[claim]++
 		}
@@ -229,39 +240,65 @@ func TestARoleTheRegistryGivesTheAccountCapabilityReachesTheUsers(t *testing.T) 
 func TestAnUnprivilegedRoleIsRefusedEveryAdminRoute(t *testing.T) {
 	t.Parallel()
 
-	handler, cookie := newGateServer(t)
+	for _, held := range []string{role.Author, role.Member} {
+		handler, cookie := gateServerAs(t, held)
 
-	for _, gated := range adminRoutes {
-		request := httptest.NewRequest(gated.method, concrete(gated.pattern), strings.NewReader("{}"))
-		request.Header.Set("Content-Type", "application/json")
-		request.AddCookie(cookie)
-		recorder := httptest.NewRecorder()
+		for _, gated := range adminRoutes {
+			recorder := ask(handler, cookie, call{gated.method, concrete(gated.pattern), "{}"})
 
-		handler.ServeHTTP(recorder, request)
-
-		if recorder.Code != http.StatusForbidden {
-			t.Errorf("%s %s status = %d, want %d for an author",
-				gated.method, gated.pattern, recorder.Code, http.StatusForbidden)
+			if recorder.Code != http.StatusForbidden {
+				t.Errorf("%s %s status = %d, want %d for the %s role",
+					gated.method, gated.pattern, recorder.Code, http.StatusForbidden, held)
+			}
 		}
 	}
 }
 
-func TestAnUnprivilegedRoleReachesEveryOpenRoute(t *testing.T) {
+func TestAnAuthorReachesEverySignedInAndStaffRoute(t *testing.T) {
 	t.Parallel()
 
 	handler, cookie := newGateServer(t)
 
-	for _, open := range everyoneRoutes {
-		request := httptest.NewRequest(open.method, concrete(open.pattern), strings.NewReader("{}"))
-		request.Header.Set("Content-Type", "application/json")
-		request.AddCookie(cookie)
-		recorder := httptest.NewRecorder()
-
-		handler.ServeHTTP(recorder, request)
+	for _, open := range slices.Concat(everyoneRoutes, staffRoutes) {
+		recorder := ask(handler, cookie, call{open.method, concrete(open.pattern), "{}"})
 
 		if recorder.Code == http.StatusForbidden {
 			t.Errorf("%s %s refused an author with %d, want the role gate to admit it",
 				open.method, open.pattern, recorder.Code)
+		}
+	}
+}
+
+func TestAMemberReachesEveryRouteAnySessionReaches(t *testing.T) {
+	t.Parallel()
+
+	handler, cookie := gateServerAs(t, role.Member)
+
+	for _, open := range everyoneRoutes {
+		recorder := ask(handler, cookie, call{open.method, concrete(open.pattern), `{"locale":"es-ES"}`})
+
+		if recorder.Code == http.StatusForbidden {
+			t.Errorf("%s %s refused a member with %d, want it admitted", open.method, open.pattern, recorder.Code)
+		}
+	}
+}
+
+func TestAMemberIsRefusedEveryStaffRouteForTheAdminCapability(t *testing.T) {
+	t.Parallel()
+
+	handler, cookie := gateServerAs(t, role.Member)
+	asked := string(role.AccessAdmin)
+
+	for _, gated := range staffRoutes {
+		recorder := ask(handler, cookie, call{gated.method, concrete(gated.pattern), "{}"})
+
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("%s %s answered %d for a member, want 403", gated.method, gated.pattern, recorder.Code)
+		}
+		got := refusalOf(t, recorder)
+		if named, _ := got.Meta["capability"].(string); got.Code != "capability_missing" || named != asked {
+			t.Errorf("%s %s refused a member with %+v, want capability_missing naming access_admin",
+				gated.method, gated.pattern, got)
 		}
 	}
 }

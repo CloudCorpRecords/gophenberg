@@ -154,15 +154,16 @@ Name another admin in `-as` to make that change.
 
 An account may hand out only a role whose capabilities its own role
 carries, and may change only an account whose role it covers that
-way. So a role a plugin gives only `manage_users` can make authors,
-but never an admin. Going past that exits with code 1:
+way. So a role a plugin gives only `manage_users` can make members,
+but never an author or an admin. Going past that exits with code 1:
 
 ```text
-gophenberg: the role admin carries change_others_work, which the account lead@example.com lacks
+gophenberg: the role admin carries access_admin, which the account lead@example.com lacks
 ```
 
-A role is one of the core's, `admin`, `editor` and `author`, or one
-a plugin declares. Every account command except `account:list` and
+A role is one of the core's, `admin`, `editor`, `author` and
+`member`, or one a plugin declares. A `member` signs in but never
+enters the admin. Every account command except `account:list` and
 `account:records` registers the plugins before it runs, so
 `account:role` and `-role` take a plugin's roles too.
 Naming a role nobody declares exits with code 2 and lists the roles
@@ -276,9 +277,10 @@ gophenberg seed [flags]
 Stores demo data to try Gophenberg on. Without `-yes` it only prints
 `would store the demo data`. With `-yes` it applies every schema
 step, then stores the demo content, the accounts
-`admin@example.com`, `editor@example.com` and `author@example.com`,
-and each plugin's demo data. It prints `created` or `kept` beside each
-account, and the accounts it created sign in with `password1234`.
+`admin@example.com`, `editor@example.com`, `author@example.com` and
+`member@example.com`, and each plugin's demo data. It prints
+`created` or `kept` beside each account, and the accounts it created
+sign in with `password1234`.
 A later run stops with an error naming the group when the demo's
 Post fields or Category fields group is turned off or no longer
 reaches its type. Never seed a production database.
@@ -312,10 +314,10 @@ gophenberg account:create-admin [flags]
 
 Creates one account with the address in `-email`, the display name in
 `-name`, and the role in `-role`, which is `admin`, `editor`,
-`author` or a role a plugin declares. It reads the password from
-standard input, keeping it out of your shell history, and applies the
-`accounts`, `records` and `core` schema steps first. It needs no
-`-as`, since it is how a site gets its first admin:
+`author`, `member` or a role a plugin declares. It reads the
+password from standard input, keeping it out of your shell history,
+and applies the `accounts`, `records` and `core` schema steps first.
+It needs no `-as`, since it is how a site gets its first admin:
 
 ```sh
 docker compose run --rm -T gophenberg \
@@ -385,7 +387,8 @@ answers one document instead.
 gophenberg account:role [flags] <email> <role>
 ```
 
-Sets the role of one account to `admin`, `editor`, `author` or a role
-a plugin declares. It refuses to change the role of the account named
-in `-as`, to hand out a role beyond the reach of that account, and to
-take `manage_users` from the last enabled account holding it.
+Sets the role of one account to `admin`, `editor`, `author`,
+`member` or a role a plugin declares. It refuses to change the role
+of the account named in `-as`, to hand out a role beyond the reach
+of that account, and to take `manage_users` from the last enabled
+account holding it.

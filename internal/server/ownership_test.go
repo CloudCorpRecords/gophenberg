@@ -117,7 +117,8 @@ func TestEveryOpenWriteEitherAsksWhoOwnsItOrOwnsNothing(t *testing.T) {
 		}
 	}
 
-	for _, open := range everyoneRoutes {
+	signedIn := slices.Concat(everyoneRoutes, staffRoutes)
+	for _, open := range signedIn {
 		if open.method == http.MethodGet {
 			continue
 		}
@@ -127,7 +128,7 @@ func TestEveryOpenWriteEitherAsksWhoOwnsItOrOwnsNothing(t *testing.T) {
 		}
 	}
 	for write := range classified {
-		if !slices.Contains(everyoneRoutes, write) {
+		if !slices.Contains(signedIn, write) {
 			t.Errorf("%s %s is classified but no longer an open route", write.method, write.pattern)
 		}
 	}

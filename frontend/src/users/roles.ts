@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { ADMIN, AUTHOR, EDITOR } from '@gophenberg/frontend-sdk'
+import { ADMIN, AUTHOR, EDITOR, MEMBER } from '@gophenberg/frontend-sdk'
 import {
 	LastPrivilegedError,
 	RoleBeyondReachError,
@@ -28,6 +28,7 @@ function coreLabels(): Map<string, string> {
 		[ADMIN, _x('Administrator', 'role', 'gophenberg')],
 		[EDITOR, _x('Editor', 'role', 'gophenberg')],
 		[AUTHOR, _x('Author', 'role', 'gophenberg')],
+		[MEMBER, _x('Member', 'role', 'gophenberg')],
 		['', _x('No role', 'role', 'gophenberg')],
 	])
 }

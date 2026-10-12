@@ -118,7 +118,7 @@ func NewServer(cfg Config) http.Handler {
 	s := &server{
 		auth: auth, users: cfg.Users, content: cfg.Content, themes: cfg.Themes,
 		media: cfg.Media, mediaStore: cfg.MediaStore, version: cfg.Version,
-		settings: cfg.Settings, readers: cfg.Readers,
+		settings: cfg.Settings, readers: cfg.Readers, staff: roles.HoldersOf(string(role.AccessAdmin)),
 		types:          registryOf(cfg),
 		definitionsCap: definitionsCapOf(cfg),
 		uploadTimeout:  uploadTimeoutOf(cfg),
@@ -144,10 +144,13 @@ func NewServer(cfg Config) http.Handler {
 		public.Get("/items", s.handlePublishedList())
 		public.Get("/resolve", s.handleContentResolve())
 	})
-	router.Group(func(protected chi.Router) {
-		protected.Use(readerOnly, auth.RequireSession)
-		protected.Get("/api/auth/session", auth.Session)
-		s.mountOpen(protected, cfg)
+	router.Group(func(signedIn chi.Router) {
+		signedIn.Use(readerOnly, auth.RequireSession)
+		s.mountSignedIn(signedIn, auth, cfg)
+	})
+	router.Group(func(staff chi.Router) {
+		staff.Use(readerOnly, auth.RequireSession, auth.RequireCapability(string(role.AccessAdmin)))
+		s.mountStaff(staff, cfg)
 	})
 	router.Group(func(privileged chi.Router) {
 		privileged.Use(readerOnly, auth.RequireSession, auth.RequirePrivilege)
@@ -173,8 +176,16 @@ func NewServer(cfg Config) http.Handler {
 	return router
 }
 
-// mountOpen registers the routes every signed in role reaches.
-func (s *server) mountOpen(r chi.Router, cfg Config) {
+// mountSignedIn registers the routes every signed in role reaches, a member included.
+func (s *server) mountSignedIn(r chi.Router, auth *authkit.Handlers, cfg Config) {
+	r.Get("/api/auth/session", auth.Session)
+	if cfg.Readers != nil {
+		r.Patch("/api/locale", s.handleLocalePatch())
+	}
+}
+
+// mountStaff registers the routes every role carrying access_admin reaches.
+func (s *server) mountStaff(r chi.Router, cfg Config) {
 	if cfg.Types != nil {
 		r.Get("/api/types", s.handleTypeList())
 		r.Get("/api/groups", s.handleGroupList())
@@ -195,9 +206,6 @@ func (s *server) mountOpen(r chi.Router, cfg Config) {
 	r.Delete("/api/content/{id}/revisions/{revisionID}", s.handleRevisionDelete())
 	r.Get("/api/version", s.handleVersion())
 	r.Get("/api/authors", s.handleAuthorList())
-	if cfg.Readers != nil {
-		r.Patch("/api/locale", s.handleLocalePatch())
-	}
 	if cfg.Settings != nil {
 		r.Get("/api/settings", s.handleSettingsGet())
 	}
@@ -276,6 +284,7 @@ type server struct {
 	settings   SiteSettings
 	readers    ReaderSettings
 	version    string
+	staff      []string
 
 	definitionsCap int64
 	uploadTimeout  time.Duration

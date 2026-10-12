@@ -55,6 +55,7 @@ func demoAccounts() []accounts.Account {
 		{Email: seed.AdminEmail, Name: seed.AdminName, Password: seed.AdminPassword, Role: role.Admin},
 		{Email: seed.EditorEmail, Name: seed.EditorName, Password: seed.AdminPassword, Role: role.Editor},
 		{Email: seed.AuthorEmail, Name: seed.AuthorName, Password: seed.AdminPassword, Role: role.Author},
+		{Email: seed.MemberEmail, Name: seed.MemberName, Password: seed.AdminPassword, Role: role.Member},
 	}
 }
 

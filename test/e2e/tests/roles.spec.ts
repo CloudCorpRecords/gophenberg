@@ -3,7 +3,7 @@
 import { expect, test } from '@playwright/test'
 import type { APIRequestContext } from '@playwright/test'
 
-import { authorAuthFile, editorAuthFile } from '../env'
+import { authorAuthFile, editorAuthFile, memberAuthFile, seededRoles } from '../env'
 
 /** A content row as the admin API lists it. */
 interface ListedPost {
@@ -116,5 +116,42 @@ test.describe('an editor', () => {
 		await page.goto(`/admin/content/post/${foreign.id}/edit`)
 
 		await expect(page.getByRole('textbox', { name: 'Title' })).toBeVisible()
+	})
+})
+
+test.describe('a member', () => {
+	test.use({ storageState: memberAuthFile })
+
+	test('is turned away from an admin screen with a link to the site', async ({ page }) => {
+		await page.goto('/admin/content/post')
+
+		await expect(page.getByText('Sorry, you are not allowed to access this page.')).toBeVisible()
+		await expect(page.getByRole('link', { name: 'Visit Site' })).toHaveAttribute('href', '/')
+		await expect(page.getByRole('navigation')).toHaveCount(0)
+	})
+
+	test('is refused the content list by the API for the admin capability', async ({ request }) => {
+		const answer = await request.get('/api/content?type=post')
+
+		expect(answer.status()).toBe(403)
+		const refusal = (await answer.json()) as CapabilityRefusal
+		expect(refusal.code).toBe('capability_missing')
+		expect(refusal.meta.capability).toBe('access_admin')
+	})
+})
+
+test.describe('a member signing in', () => {
+	test.use({ storageState: { cookies: [], origins: [] } })
+
+	test('logs out from the screen turning it away', async ({ page }) => {
+		await page.goto('/admin/')
+		await page.getByLabel('Email').fill(seededRoles.member.email)
+		await page.getByLabel('Password').fill(seededRoles.member.password)
+		await page.getByRole('button', { name: 'Log in' }).click()
+		await expect(page.getByText('Sorry, you are not allowed to access this page.')).toBeVisible()
+
+		await page.getByRole('button', { name: 'Log out' }).click()
+
+		await expect(page.getByLabel('Email')).toBeVisible()
 	})
 })

@@ -97,7 +97,7 @@ from its input, keeping it out of your shell history. Type it and
 press Enter, or pipe it in, for example from a file only you can
 read by adding `< password.txt` at the end of the command. The
 `-role` flag says what the account may do, and takes `admin`,
-`editor`, `author` or a role a plugin declares. Give the first
+`editor`, `author`, `member` or a role a plugin declares. Give the first
 account `admin`, the role that can reach everything. Only a role
 carrying `manage_users` can manage the other accounts, and `admin`
 always carries it.

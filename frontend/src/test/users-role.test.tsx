@@ -288,6 +288,13 @@ test('names an account holding no role', async () => {
 	expect(within(row).getByText('No role')).toBeInTheDocument()
 })
 
+test('reads the member role in the reader s language', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+
+	expect(roleLabel('member')).toBe('Miembro')
+})
+
 test('reads a role the screen does not know with a capital first letter', () => {
 	expect(roleLabel('archivist')).toBe('Archivist')
 	expect(roleLabel('')).toBe('No role')

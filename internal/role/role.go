@@ -22,8 +22,14 @@ const Editor = "editor"
 // Author is the role working only its own content and media.
 const Author = "author"
 
+// Member is the role of a signed-in account that never enters the admin.
+const Member = "member"
+
 // Capability is a named permission a decision point asks for.
 type Capability string
+
+// AccessAdmin is the capability entering the admin and working its content and media.
+const AccessAdmin Capability = "access_admin"
 
 // ManageUsers is the capability administering accounts.
 const ManageUsers Capability = "manage_users"
@@ -48,9 +54,10 @@ type grant struct {
 
 // carried lists every role in declaration order with the capabilities it holds.
 var carried = []grant{
-	{Admin, []Capability{ManageUsers, ManageThemes, ManageTypes, ManageSettings, ChangeOthersWork}},
-	{Editor, []Capability{ChangeOthersWork}},
-	{Author, nil},
+	{Admin, []Capability{AccessAdmin, ManageUsers, ManageThemes, ManageTypes, ManageSettings, ChangeOthersWork}},
+	{Editor, []Capability{AccessAdmin, ChangeOthersWork}},
+	{Author, []Capability{AccessAdmin}},
+	{Member, nil},
 }
 
 // Core returns the core's roles with the capabilities each carries, for a registry to grant.
