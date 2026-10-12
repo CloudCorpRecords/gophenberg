@@ -16,6 +16,7 @@ import (
 	"github.com/gopherium/gouncer"
 
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
+	"github.com/gopherium/gophenberg/internal/media/mediatest"
 )
 
 // shortRowsVariable names the variable that runs the suite on stores keeping only some rows, by the rule's name.
@@ -24,23 +25,38 @@ const shortRowsVariable = "GOPHENBERG_SHORT_ROWS"
 // reportedCase matches the line the test binary prints for each case of the short rows run.
 var reportedCase = regexp.MustCompile(`(?m)^    --- (PASS|FAIL): \S+/\S+ `)
 
+// memoryAuthors returns a way to add accounts to the in-memory account store.
+func memoryAuthors(accounts *memoryStore) func(t *testing.T, name string) uuid.UUID {
+	return func(t *testing.T, name string) uuid.UUID {
+		t.Helper()
+		id := uuid.Must(uuid.NewV7())
+		user := gouncer.User{ID: id, Email: id.String() + "@example.com", Name: name, CreatedAt: time.Now().UTC()}
+		if err := accounts.CreateUser(t.Context(), user); err != nil {
+			t.Fatalf("CreateUser() error = %v, want nil", err)
+		}
+		return id
+	}
+}
+
 // memoryStores returns fresh in-memory stores for one case.
 func memoryStores(t *testing.T) contenttest.Stores {
 	t.Helper()
 	items, types, accounts := newMemoryStores()
 	return contenttest.Stores{
-		Content: items,
-		Types:   types,
-		AddAuthor: func(t *testing.T, name string) uuid.UUID {
-			t.Helper()
-			id := uuid.Must(uuid.NewV7())
-			user := gouncer.User{ID: id, Email: id.String() + "@example.com", Name: name, CreatedAt: time.Now().UTC()}
-			if err := accounts.CreateUser(t.Context(), user); err != nil {
-				t.Fatalf("CreateUser() error = %v, want nil", err)
-			}
-			return id
-		},
+		Content:      items,
+		Types:        types,
+		SiteSettings: newMemorySettings(),
+		UserSettings: newMemoryReaders(),
+		AddAuthor:    memoryAuthors(accounts),
 	}
+}
+
+// memoryMediaStores returns a fresh in-memory media store for one case.
+func memoryMediaStores(t *testing.T) mediatest.Stores {
+	t.Helper()
+	accounts := newMemoryStore()
+	store := newMemoryMedia(accounts)
+	return mediatest.Stores{Media: store, Saved: store.Saved, AddAuthor: memoryAuthors(accounts)}
 }
 
 // shortStores returns a factory of in-memory stores whose listings keep only the rows the named rule leaves.
@@ -50,6 +66,16 @@ func shortStores(rule string) contenttest.Factory {
 		s := memoryStores(t)
 		s.Content = shortContent{Store: s.Content, keep: keptRows[rule]}
 		s.Types = shortTypes{TypeStore: s.Types, keep: keptRows[rule]}
+		return s
+	}
+}
+
+// shortMediaStores returns a factory of in-memory media stores whose reads keep only the rows the named rule leaves.
+func shortMediaStores(rule string) mediatest.Factory {
+	return func(t *testing.T) mediatest.Stores {
+		t.Helper()
+		s := memoryMediaStores(t)
+		s.Media = shortMedia{Store: s.Media, keep: keptRows[rule]}
 		return s
 	}
 }
@@ -64,6 +90,24 @@ func TestTypeStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	contenttest.RunTypes(t, memoryStores)
+}
+
+func TestMediaStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	mediatest.Run(t, memoryMediaStores)
+}
+
+func TestSiteSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunSiteSettings(t, memoryStores)
+}
+
+func TestUserSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunUserSettings(t, memoryStores)
 }
 
 // shortRowsRuns reruns the named test under each keep rule and fails on a panic or a case that never reported.
@@ -109,4 +153,14 @@ func TestTypeStoreSuiteFailsWithoutPanickingOnShortRows(t *testing.T) {
 	t.Parallel()
 
 	shortRowsRuns(t, "TestTypeStoreSuiteFailsWithoutPanickingOnShortRows", len(contenttest.TypeCases()))
+}
+
+func TestMediaStoreSuiteFailsWithoutPanickingOnShortRows(t *testing.T) {
+	if rule := os.Getenv(shortRowsVariable); rule != "" {
+		mediatest.Run(t, shortMediaStores(rule))
+		return
+	}
+	t.Parallel()
+
+	shortRowsRuns(t, "TestMediaStoreSuiteFailsWithoutPanickingOnShortRows", len(mediatest.Cases()))
 }

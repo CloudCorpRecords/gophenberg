@@ -64,6 +64,34 @@ func TestSettingSaveReportsACommitTheDatabaseRefuses(t *testing.T) {
 	}
 }
 
+func TestSettingSaveStoresNoneOfAWriteThatFails(t *testing.T) {
+	t.Parallel()
+
+	store, pool := newSettingStoreWithPool(t)
+	if err := store.Save(t.Context(), map[string]string{"theme.active": "aurora"}); err != nil {
+		t.Fatalf("seeding the active theme: %v", err)
+	}
+	plantRaiseFunction(t, pool)
+	sabotage(t, pool, "CREATE TRIGGER sabotage BEFORE INSERT ON core.settings "+
+		"FOR EACH ROW WHEN (NEW.key = 'theme.previous') EXECUTE FUNCTION sabotage_raise()")
+
+	err := store.Save(t.Context(), map[string]string{
+		"theme.active":   "riverbed",
+		"theme.previous": "aurora",
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "sabotaged") {
+		t.Fatalf("Save() error = %v, want the failing write of theme.previous reported", err)
+	}
+	active, found, err := store.Lookup(t.Context(), "theme.active")
+	if err != nil {
+		t.Fatalf("Lookup() error = %v, want nil", err)
+	}
+	if !found || active != "aurora" {
+		t.Errorf("theme.active = %q (found %v), want the seeded %q kept, as the write failed", active, found, "aurora")
+	}
+}
+
 func TestRelatedContentReportsACountItCannotRead(t *testing.T) {
 	t.Parallel()
 

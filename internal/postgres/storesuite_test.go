@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
+	"github.com/gopherium/gophenberg/internal/media/mediatest"
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/testdb"
 )
@@ -27,18 +28,33 @@ func migratedPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+// authorsIn returns a way to add accounts to the database behind the pool.
+func authorsIn(pool *pgxpool.Pool) func(t *testing.T, name string) uuid.UUID {
+	return func(t *testing.T, name string) uuid.UUID {
+		t.Helper()
+		return addAuthor(t, pool, name)
+	}
+}
+
 // postgresStores returns fresh stores over a migrated database of their own.
 func postgresStores(t *testing.T) contenttest.Stores {
 	t.Helper()
 	pool := migratedPool(t)
 	return contenttest.Stores{
-		Content: postgres.NewContentStore(pool),
-		Types:   postgres.NewTypeStore(pool),
-		AddAuthor: func(t *testing.T, name string) uuid.UUID {
-			t.Helper()
-			return addAuthor(t, pool, name)
-		},
+		Content:      postgres.NewContentStore(pool),
+		Types:        postgres.NewTypeStore(pool),
+		SiteSettings: postgres.NewSettingStore(pool),
+		UserSettings: postgres.NewUserSettingStore(pool),
+		AddAuthor:    authorsIn(pool),
 	}
+}
+
+// postgresMediaStores returns a fresh media store over a migrated database of its own.
+func postgresMediaStores(t *testing.T) mediatest.Stores {
+	t.Helper()
+	pool := migratedPool(t)
+	store := postgres.NewMediaStore(pool)
+	return mediatest.Stores{Media: store, Saved: store.Saved, AddAuthor: authorsIn(pool)}
 }
 
 func TestContentStoreSuite(t *testing.T) {
@@ -51,4 +67,22 @@ func TestTypeStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	contenttest.RunTypes(t, postgresStores)
+}
+
+func TestMediaStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	mediatest.Run(t, postgresMediaStores)
+}
+
+func TestSiteSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunSiteSettings(t, postgresStores)
+}
+
+func TestUserSettingStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	contenttest.RunUserSettings(t, postgresStores)
 }

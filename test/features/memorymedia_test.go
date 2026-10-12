@@ -9,10 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"testing"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/media"
 )
@@ -39,6 +36,7 @@ func (s *memoryMedia) Create(_ context.Context, m media.Media) (media.Media, err
 	}
 	s.next++
 	m.ID = s.next
+	m.CreatedAt, m.UpdatedAt = m.CreatedAt.UTC(), m.UpdatedAt.UTC()
 	s.items[m.ID] = m
 	return m, nil
 }
@@ -65,6 +63,19 @@ func (s *memoryMedia) ByIDs(_ context.Context, ids []int64) ([]media.Media, erro
 		}
 	}
 	return listed, nil
+}
+
+// Saved reports which of the files a stored item holds as its own file.
+func (s *memoryMedia) Saved(_ context.Context, files []string) (map[string]bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saved := make(map[string]bool)
+	for _, m := range s.items {
+		if slices.Contains(files, m.File) {
+			saved[m.File] = true
+		}
+	}
+	return saved, nil
 }
 
 // List returns the media items the filter matches, sorted as it names, beside their authors' names, with their total.
@@ -184,7 +195,7 @@ func (s *memoryMedia) Update(_ context.Context, m media.Media, expectedUpdatedAt
 	stored.AltText = m.AltText
 	stored.Caption = m.Caption
 	stored.Description = m.Description
-	stored.UpdatedAt = m.UpdatedAt
+	stored.UpdatedAt = m.UpdatedAt.UTC()
 	s.items[m.ID] = stored
 	return stored, nil
 }
@@ -199,23 +210,4 @@ func (s *memoryMedia) Delete(_ context.Context, id int64) (media.Media, error) {
 	}
 	delete(s.items, id)
 	return m, nil
-}
-
-func TestMediaStoreRefusesAnAuthorWithoutAnAccount(t *testing.T) {
-	t.Parallel()
-
-	store := newMemoryMedia(newMemoryStore())
-	orphan, err := media.New("2026/10/orphan.jpg", "orphan", "image/jpeg", uuid.Must(uuid.NewV7()))
-	if err != nil {
-		t.Fatalf("New() error = %v, want nil", err)
-	}
-
-	_, err = store.Create(t.Context(), orphan)
-
-	if err == nil {
-		t.Fatal("Create() error = nil, want the author refused for holding no account")
-	}
-	if _, total, _ := store.List(t.Context(), media.Filter{Page: 1, PerPage: 10}); total != 0 {
-		t.Errorf("List() total = %d, want the refused item left out", total)
-	}
 }
