@@ -132,83 +132,63 @@ func theAccountReadsItsSession(ctx context.Context) error {
 	return theAccountAsksFor(ctx, "/api/auth/session")
 }
 
-// sessionLists returns the capabilities and the grantable roles the last session answer carries.
-func sessionLists(ctx context.Context) (capabilities, grantable []string, err error) {
+// sessionAnswer is what the last session answer carries about the signed-in account.
+type sessionAnswer struct {
+	Capabilities []string `json:"capabilities"`
+	Grantable    []string `json:"grantable"`
+}
+
+// sessionHolds fails unless the list pick reads from the last session answer holds want.
+func sessionHolds(ctx context.Context, pick func(sessionAnswer) []string, want string) error {
 	w, err := worldOf(ctx)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	var held struct {
-		Capabilities []string `json:"capabilities"`
-		Grantable    []string `json:"grantable"`
-	}
+	var held sessionAnswer
 	if err := w.answer.decode(&held); err != nil {
-		return nil, nil, err
+		return err
 	}
-	return held.Capabilities, held.Grantable, nil
+	if listed := pick(held); !slices.Contains(listed, want) {
+		return fmt.Errorf("the session lists %v, want %q among them", listed, want)
+	}
+	return nil
 }
 
 // theSessionCarriesTheCapability fails unless the session answer carries the capability.
 func theSessionCarriesTheCapability(ctx context.Context, capability string) error {
-	capabilities, _, err := sessionLists(ctx)
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(capabilities, capability) {
-		return fmt.Errorf("the session carries %v, want %q among them", capabilities, capability)
-	}
-	return nil
+	return sessionHolds(ctx, func(held sessionAnswer) []string { return held.Capabilities }, capability)
 }
 
 // theSessionMayGiveTheRole fails unless the session answer may give the role.
 func theSessionMayGiveTheRole(ctx context.Context, held string) error {
-	_, grantable, err := sessionLists(ctx)
+	return sessionHolds(ctx, func(answer sessionAnswer) []string { return answer.Grantable }, held)
+}
+
+// writeToAccount sends the write to the path of the account stored at email.
+func writeToAccount(ctx context.Context, email string, write func(w *world, path string) error) error {
+	w, err := worldOf(ctx)
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(grantable, held) {
-		return fmt.Errorf("the session may give %v, want %q among them", grantable, held)
-	}
-	return nil
-}
-
-// accountAt returns the path of the account stored at email.
-func accountAt(ctx context.Context, email string) (string, error) {
-	w, err := worldOf(ctx)
-	if err != nil {
-		return "", err
-	}
 	held, err := w.users.UserByEmail(ctx, email)
 	if err != nil {
-		return "", fmt.Errorf("finding %s: %w", email, err)
+		return fmt.Errorf("finding %s: %w", email, err)
 	}
-	return "/api/users/" + held.ID.String(), nil
+	return write(w, "/api/users/"+held.ID.String())
 }
 
 // theAccountGivesTheRole asks the API to give the account at email the role.
 func theAccountGivesTheRole(ctx context.Context, email, held string) error {
-	path, err := accountAt(ctx, email)
-	if err != nil {
-		return err
-	}
-	w, err := worldOf(ctx)
-	if err != nil {
-		return err
-	}
-	return w.putJSON(path+"/role", fmt.Sprintf(`{"role":%q}`, held))
+	return writeToAccount(ctx, email, func(w *world, path string) error {
+		return w.putJSON(path+"/role", fmt.Sprintf(`{"role":%q}`, held))
+	})
 }
 
 // theAccountDisables asks the API to disable the account at email.
 func theAccountDisables(ctx context.Context, email string) error {
-	path, err := accountAt(ctx, email)
-	if err != nil {
-		return err
-	}
-	w, err := worldOf(ctx)
-	if err != nil {
-		return err
-	}
-	return w.patchJSON(path, `{"disabled":true}`)
+	return writeToAccount(ctx, email, func(w *world, path string) error {
+		return w.patchJSON(path, `{"disabled":true}`)
+	})
 }
 
 // initializeRouteGate binds the steps the route gate feature uses.
