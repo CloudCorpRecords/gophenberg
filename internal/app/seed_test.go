@@ -110,8 +110,10 @@ func TestSeedReportsEachDemoAccountItCreatedOrKept(t *testing.T) {
 
 	closing := "seeded demo data, an account created above signs in with " + seed.AdminPassword +
 		", a kept account keeps its own password\n"
-	created := "created " + seed.AdminEmail + "\ncreated " + seed.EditorEmail + "\ncreated " + seed.AuthorEmail + "\n"
-	kept := "kept " + seed.AdminEmail + "\nkept " + seed.EditorEmail + "\nkept " + seed.AuthorEmail + "\n"
+	created := "created " + seed.AdminEmail + "\ncreated " + seed.EditorEmail + "\ncreated " + seed.AuthorEmail +
+		"\ncreated " + seed.MemberEmail + "\n"
+	kept := "kept " + seed.AdminEmail + "\nkept " + seed.EditorEmail + "\nkept " + seed.AuthorEmail +
+		"\nkept " + seed.MemberEmail + "\n"
 	if first.String() != created+closing {
 		t.Errorf("first seed printed %q, want %q", first.String(), created+closing)
 	}
@@ -136,7 +138,7 @@ func TestSeedStoresAnAccountUnderEveryRole(t *testing.T) {
 	defer pool.Close()
 	users := authkitpg.NewUserStore(pool)
 
-	for _, email := range []string{seed.EditorEmail, seed.AuthorEmail} {
+	for _, email := range []string{seed.EditorEmail, seed.AuthorEmail, seed.MemberEmail} {
 		if !strings.Contains(stdout.String(), email) {
 			t.Errorf("output = %q, want it to name the seeded %q", stdout.String(), email)
 		}
@@ -145,6 +147,7 @@ func TestSeedStoresAnAccountUnderEveryRole(t *testing.T) {
 		seed.AdminEmail:  role.Admin,
 		seed.EditorEmail: role.Editor,
 		seed.AuthorEmail: role.Author,
+		seed.MemberEmail: role.Member,
 	} {
 		held, err := users.UserByEmail(t.Context(), email)
 		if err != nil {
@@ -725,7 +728,7 @@ func TestDemoAccountsHoldEveryCoreRoleUnderOnePassword(t *testing.T) {
 		}
 	}
 
-	if core := []string{role.Admin, role.Editor, role.Author}; !slices.Equal(roles, core) {
+	if core := []string{role.Admin, role.Editor, role.Author, role.Member}; !slices.Equal(roles, core) {
 		t.Errorf("demo accounts hold %v, want one account under each core role %v", roles, core)
 	}
 }
