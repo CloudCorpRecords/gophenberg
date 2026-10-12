@@ -17,23 +17,6 @@ func newSettingStoreWithPool(t *testing.T) (*postgres.SettingStore, *pgxpool.Poo
 	return postgres.NewSettingStore(pool), pool
 }
 
-func TestSettingWritesNothingWhenTheWriteCannotStart(t *testing.T) {
-	store, pool := newSettingStoreWithPool(t)
-	if err := store.Save(t.Context(), map[string]string{"theme.active": "aurora"}); err != nil {
-		t.Fatalf("seeding the active theme: %v", err)
-	}
-	pool.Close()
-
-	err := store.Save(t.Context(), map[string]string{
-		"theme.active":   "riverbed",
-		"theme.previous": "aurora",
-	})
-
-	if err == nil {
-		t.Fatal("Save() on a closed pool error = nil, want a failure")
-	}
-}
-
 func TestSettingReportsDatabaseFailures(t *testing.T) {
 	store, pool := newSettingStoreWithPool(t)
 	pool.Close()
