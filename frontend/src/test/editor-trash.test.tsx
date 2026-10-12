@@ -5,6 +5,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
+import { listenAt } from './announcements'
 import { gate } from './gate'
 import { renderAt, renderRoutedAt } from './render'
 import { storedPost } from './postFixture'
@@ -13,6 +14,8 @@ import { siteSettings } from './siteSettings'
 const EDITOR_PATH = `/content/post/${storedPost.id}/edit`
 
 const RESTORED_AT = '2026-07-29T09:00:00Z'
+
+const PARENT_TRASHED = 'The item you picked as parent is in the trash. Restore it, or pick another parent.'
 
 const trashed: string[] = []
 const restored: string[] = []
@@ -221,6 +224,22 @@ test('opens a trashed post as a reading view', async () => {
 	expect(screen.queryByRole('button', { name: /save draft|publish/i })).not.toBeInTheDocument()
 })
 
+test('opens a trashed post without speaking its notice, as WordPress leaves a static notice silent', async () => {
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	server.use(
+		http.get(`/api/content/${storedPost.id}`, () =>
+			HttpResponse.json({ ...storedPost, status: 'trash' }),
+		),
+	)
+	renderAt(EDITOR_PATH)
+
+	await screen.findByText(/This item is in the trash/)
+
+	expect(polite()).toEqual([])
+	expect(assertive()).toEqual([])
+})
+
 test('restores a trashed post and opens it in the editor', async () => {
 	serveRestorable()
 	renderAt(EDITOR_PATH)
@@ -281,6 +300,31 @@ test('opens the editor when the restore finds the post already out of the trash'
 	expect(await screen.findByRole('textbox', { name: 'Title' })).toBeInTheDocument()
 })
 
+test('speaks nothing when the restore finds the post already out of the trash', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	let held: Record<string, unknown> = { ...storedPost, status: 'trash' }
+	server.use(
+		http.get(`/api/content/${storedPost.id}`, () => HttpResponse.json(held)),
+		http.post(`/api/content/${storedPost.id}/restore`, () => {
+			held = { ...storedPost, updated_at: RESTORED_AT }
+			return HttpResponse.json(
+				{ error: 'content: only a trashed item can be restored', code: 'restore_not_trashed' },
+				{ status: 422 },
+			)
+		}),
+	)
+	const client = renderAt(EDITOR_PATH)
+
+	await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+	await screen.findByRole('textbox', { name: 'Title' })
+	await waitFor(() => expect(client.isMutating()).toBe(0))
+	expect(assertive()).toEqual([])
+	expect(polite()).toEqual([])
+})
+
 test('reports a restore the reading view could not make', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
@@ -312,9 +356,28 @@ test('reports the reason a refused restore gave in the reading view', async () =
 
 	await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
 
-	expect(
-		await screen.findByText('The item you picked as parent is in the trash. Restore it, or pick another parent.'),
-	).toBeInTheDocument()
+	expect(await screen.findByText(PARENT_TRASHED)).toBeInTheDocument()
+})
+
+test('speaks the reason a restore failed once, as an urgent update', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	server.use(
+		http.get(`/api/content/${storedPost.id}`, () =>
+			HttpResponse.json({ ...storedPost, status: 'trash' }),
+		),
+		http.post(`/api/content/${storedPost.id}/restore`, () =>
+			HttpResponse.json({ error: 'content: parent is in the trash', code: 'parent_trashed' }, { status: 422 }),
+		),
+	)
+	renderAt(EDITOR_PATH)
+
+	await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+	await screen.findByText(PARENT_TRASHED)
+	expect(assertive()).toEqual([PARENT_TRASHED])
+	expect(polite()).toEqual([])
 })
 
 test('opens a post trashed from the editor as a reading view', async () => {

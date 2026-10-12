@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notice } from '@gophenberg/frontend-sdk'
+import { Notice, speak } from '@gophenberg/frontend-sdk'
 import { __ } from '@wordpress/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 import { fetchAutosave } from './api'
 import type { Autosave, PostDetail } from './api'
@@ -61,11 +61,16 @@ export function RestoreBanner({
 		staleTime: 'static',
 		gcTime: 0,
 	})
-	const offer = offerable(kept.data, stored)
-	if (offer === null || taken) {
+	const offer = taken ? null : offerable(kept.data, stored)
+	const message = __('The browser kept an unsaved version of this post.', 'gophenberg')
+	useEffect(() => {
+		if (offer !== null) {
+			speak(message, 'polite')
+		}
+	}, [offer, message])
+	if (offer === null) {
 		return null
 	}
-	const message = __('The browser kept an unsaved version of this post.', 'gophenberg')
 	return (
 		<Notice.Root intent="warning">
 			<Notice.Description>{message}</Notice.Description>

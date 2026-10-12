@@ -5,6 +5,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 
+import { listenAt } from './announcements'
 import { OTHER_POST, comeBack, openAnotherPost } from './anotherPost'
 import { collectParks } from './parks'
 import { renderAt, renderRoutedAt } from './render'
@@ -22,6 +23,8 @@ const NEWER = {
 }
 
 const OLDER = { ...NEWER, saved_at: '2026-07-20T09:00:00Z' }
+
+const OFFER = 'The browser kept an unsaved version of this post.'
 
 beforeAll(async () => {
 	await import('../content/EditorScreen')
@@ -94,6 +97,31 @@ test('says nothing when the post already holds the kept words', async () => {
 	expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument()
 })
 
+test('speaks nothing when the post already holds the kept words', async () => {
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	const asked: string[] = []
+	server.use(
+		http.get(`/api/content/${storedPost.id}/autosave`, () => {
+			asked.push('read')
+			return HttpResponse.json({
+				...NEWER,
+				title: storedPost.title,
+				content: storedPost.content,
+				excerpt: storedPost.excerpt,
+			})
+		}),
+	)
+	const client = renderAt(EDITOR_PATH)
+	await screen.findByRole('textbox', { name: 'Title' })
+
+	await waitFor(() => expect(asked).toHaveLength(1))
+	await waitFor(() => expect(client.isFetching({ queryKey: ['post-autosave'] })).toBe(0))
+
+	expect(polite()).toEqual([])
+	expect(assertive()).toEqual([])
+})
+
 test('says nothing when the kept words trail the post inside one second', async () => {
 	const asked: string[] = []
 	server.use(
@@ -119,6 +147,31 @@ test('offers the kept words when they are newer than the post', async () => {
 
 	expect(await screen.findByText(/unsaved version/i)).toBeInTheDocument()
 	expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+})
+
+test('speaks the offer of kept words once, politely, and not again as the editor redraws', async () => {
+	const polite = listenAt('polite')
+	const assertive = listenAt('assertive')
+	serveAutosave(NEWER)
+	renderAt(EDITOR_PATH)
+	await screen.findByText(OFFER)
+
+	await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), '!')
+
+	expect(polite()).toEqual([OFFER])
+	expect(assertive()).toEqual([])
+})
+
+test('speaks nothing more once the kept words are taken', async () => {
+	const polite = listenAt('polite')
+	serveAutosave(NEWER)
+	renderAt(EDITOR_PATH)
+	await screen.findByText(OFFER)
+
+	await userEvent.click(screen.getByRole('button', { name: 'Restore' }))
+
+	await waitFor(() => expect(screen.queryByText(OFFER)).not.toBeInTheDocument())
+	expect(polite()).toEqual([OFFER])
 })
 
 test('takes the kept words into the editor when restored', async () => {

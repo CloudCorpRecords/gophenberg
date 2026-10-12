@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Notice } from '@gophenberg/frontend-sdk'
+import { Notice, speak } from '@gophenberg/frontend-sdk'
 import { useToaster } from '@gopherium/godmin'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useRefresh } from './actions'
 import { restorePost } from './api'
+import type { PostDetail } from './api'
 
 /**
  * Renders the notice that a post is in the trash, with the control returning it to draft.
@@ -23,7 +24,12 @@ export function TrashedNotice({ postId, title }: { postId: string, title: string
 			await Promise.all([client.invalidateQueries({ queryKey: ['post', postId], exact: true }), refresh()])
 			toaster.show(sprintf(__('"%s" has been restored.', 'gophenberg'), toaster.name(title)))
 		},
-		onError: () => client.invalidateQueries({ queryKey: ['post', postId], exact: true }),
+		onError: async (error) => {
+			await client.invalidateQueries({ queryKey: ['post', postId], exact: true })
+			if (client.getQueryData<PostDetail>(['post', postId])?.status === 'trash') {
+				speak(error.message, 'assertive')
+			}
+		},
 	})
 	const message =
 		restore.error?.message ?? __('This item is in the trash. Restore it first to work on it again.', 'gophenberg')
