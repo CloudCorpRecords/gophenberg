@@ -3,6 +3,7 @@
 package content
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -13,40 +14,45 @@ import (
 // letterFolds maps the lowercase Latin letters that have no canonical decomposition to the plain letters WordPress
 // swaps them for when it saves a slug.
 var letterFolds = map[rune]string{
-	'\u00df': "ss", // ß
-	'\u00e6': "ae", // æ
-	'\u0153': "oe", // œ
-	'\u00f8': "o",  // ø
-	'\u0111': "d",  // đ
-	'\u00f0': "d",  // ð
-	'\u00fe': "th", // þ
-	'\u0142': "l",  // ł
-	'\u0127': "h",  // ħ
-	'\u0131': "i",  // ı
-	'\u0167': "t",  // ŧ
-	'\u0133': "ij", // ĳ
-	'\u0140': "l",  // ŀ
-	'\u0138': "k",  // ĸ
-	'\u0149': "n",  // ŉ
-	'\u014b': "n",  // ŋ
-	'\u017f': "s",  // ſ
+	'ß': "ss",
+	'æ': "ae",
+	'œ': "oe",
+	'ø': "o",
+	'đ': "d",
+	'ð': "d",
+	'þ': "th",
+	'ł': "l",
+	'ħ': "h",
+	'ı': "i",
+	'ŧ': "t",
+	'ĳ': "ij",
+	'ŀ': "l",
+	'ĸ': "k",
+	'ŉ': "n",
+	'ŋ': "n",
+	'ſ': "s",
 }
 
 // foldAccents returns s with accented Latin letters replaced by their plain forms, the way WordPress does when it
-// saves a slug. It expects s in NFC form. Only marks that follow a Latin letter are dropped, so letters of other
-// scripts, such as Cyrillic "й" or CJK characters, are left exactly as they are.
+// saves a slug. It expects s in NFC form, lowercased. Combining marks that follow a Latin letter are dropped, including
+// ones NFC could not compose, so "x" followed by a separate acute accent folds to "x". Letters of other scripts and
+// the marks that follow them, such as Cyrillic "й" or CJK characters, are left exactly as they are.
 func foldAccents(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
+	afterLatin := false
 	for _, r := range s {
-		switch {
-		case r < utf8.RuneSelf:
-			b.WriteRune(r)
-		case letterFolds[r] != "":
-			b.WriteString(letterFolds[r])
-		default:
-			b.WriteRune(plainLatin(r))
+		if afterLatin && unicode.Is(unicode.Mn, r) {
+			continue
 		}
+		plain := plainLatin(r)
+		switch {
+		case letterFolds[plain] != "":
+			b.WriteString(letterFolds[plain])
+		default:
+			b.WriteRune(plain)
+		}
+		afterLatin = isLatinLetter(plain)
 	}
 	return b.String()
 }
@@ -54,17 +60,21 @@ func foldAccents(s string) string {
 // plainLatin returns the Latin letter r is built from when r is a Latin letter carrying only combining marks, and r
 // itself otherwise.
 func plainLatin(r rune) rune {
-	if !unicode.Is(unicode.Latin, r) {
+	if r < utf8.RuneSelf || !unicode.Is(unicode.Latin, r) {
 		return r
 	}
 	decomposed := []rune(norm.NFD.String(string(r)))
-	if len(decomposed) < 2 || !unicode.Is(unicode.Latin, decomposed[0]) {
+	if len(decomposed) < 2 || !unicode.Is(unicode.Latin, decomposed[0]) ||
+		slices.ContainsFunc(decomposed[1:], func(mark rune) bool { return !unicode.Is(unicode.Mn, mark) }) {
 		return r
 	}
-	for _, mark := range decomposed[1:] {
-		if !unicode.Is(unicode.Mn, mark) {
-			return r
-		}
-	}
 	return decomposed[0]
+}
+
+// isLatinLetter reports whether r is a letter of the Latin script.
+func isLatinLetter(r rune) bool {
+	if r < utf8.RuneSelf {
+		return unicode.IsLetter(r)
+	}
+	return unicode.Is(unicode.Latin, r) && unicode.IsLetter(r)
 }
