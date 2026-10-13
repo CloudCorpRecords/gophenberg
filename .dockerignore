@@ -7,6 +7,10 @@ frontend/coverage
 **/*_test.go
 .env
 .env.*
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.migrate.lock
 .covdata
 cover.out
 /gophenberg

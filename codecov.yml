@@ -12,12 +12,17 @@ coverage:
         flags:
           - kit
         target: 100%
+      sqlite:
+        flags:
+          - sqlite
+        target: 100%
     patch:
       default:
         target: 100%
 
 ignore:
   - internal/postgres/db
+  - internal/sqlite/db
   - internal/testdb
   - internal/content/contenttest
   - internal/media/mediatest

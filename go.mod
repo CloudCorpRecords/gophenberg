@@ -14,6 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gopherium/framework/dbkit v0.2.0
 	github.com/gopherium/framework/dbkit/postgres v0.3.0
+	github.com/gopherium/framework/dbkit/sqlite v0.1.0
 	github.com/gopherium/framework/goncierge v0.1.0
 	github.com/gopherium/framework/gonsole v0.7.0
 	github.com/gopherium/framework/gonsole/auth v0.7.0
@@ -23,6 +24,7 @@ require (
 	github.com/gopherium/gouncer/authkit v0.19.0
 	github.com/gopherium/gouncer/authkit/postgres v0.13.0
 	github.com/gopherium/gouncer/authkit/ratelimit v0.3.1
+	github.com/gopherium/gouncer/authkit/sqlite v0.1.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
@@ -45,6 +47,7 @@ require (
 	github.com/cucumber/gherkin/go/v42 v42.0.0 // indirect
 	github.com/cucumber/messages/go/v34 v34.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -69,6 +72,7 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.2.2 // indirect
@@ -76,6 +80,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86 // indirect
 	github.com/pingcap/log v1.1.0 // indirect
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260418072757-ce92298d1124 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/riza-io/grpc-go v0.2.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
@@ -107,6 +112,10 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	modernc.org/libc v1.77.1 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.12.1 // indirect
+	modernc.org/sqlite v1.60.1 // indirect
 )
 
 replace github.com/gopherium/gophenberg/sdk => ./sdk

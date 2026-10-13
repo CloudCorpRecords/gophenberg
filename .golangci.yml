@@ -5,6 +5,7 @@ linters:
   enable:
     - cyclop
     - depguard
+    - forbidigo
     - gocognit
     - lll
     - misspell
@@ -56,6 +57,26 @@ linters:
           deny:
             - pkg: github.com/gopherium/gophenberg/internal
               desc: plugins may import only the sdk package from Gophenberg
+        one-sqlite-driver:
+          deny:
+            - pkg: modernc.org/sqlite
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+            - pkg: modernc.org/libc
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+            - pkg: github.com/mattn/go-sqlite3
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+            - pkg: github.com/ncruces/go-sqlite3
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+            - pkg: github.com/glebarez/go-sqlite
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+            - pkg: turso.tech/database/tursogo
+              desc: open SQLite through github.com/gopherium/framework/dbkit/sqlite
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^sql\.Open(DB)?$
+          pkg: ^database/sql$
+          msg: open the database through dbkit
   exclusions:
     rules:
       - path: _test\.go
@@ -66,6 +87,12 @@ linters:
         linters:
           - cyclop
           - gocognit
+      - path: ^internal/postgres/(migrate|migrate_test|export_test|content(_types|_paths)?_migration_test)\.go$
+        linters:
+          - forbidigo
+      - path: ^internal/testdb/testdb_test\.go$
+        linters:
+          - forbidigo
 
 formatters:
   enable:
