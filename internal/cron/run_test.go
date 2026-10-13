@@ -427,6 +427,34 @@ func TestRunDueReportsASettleTheStoreRefuses(t *testing.T) {
 		t.Errorf("RunDue() = %+v, want the run whose outcome went unsaved counted as failed", report)
 	}
 	r.logged(t, "cron job unsettled")
+	if strings.Contains(r.logs.String(), `msg="cron job ran"`) {
+		t.Errorf("the log reads %q, want no success logged for a run whose outcome went unsaved", r.logs.String())
+	}
+}
+
+func TestRunDueStopsAtTheFirstSettleTheStoreRefuses(t *testing.T) {
+	t.Parallel()
+
+	tidy, vacuum := &counter{}, &counter{}
+	r := rigOver(&failingStore{Store: crontest.NewMemoryStore(), settleErr: errors.New("the store is unreachable")},
+		hourly("tidy", tidy.Run), hourly("vacuum", vacuum.Run))
+
+	if report := r.runDue(t); report != (cron.Report{Failed: 1}) || vacuum.count() != 0 {
+		t.Errorf("RunDue() = %+v with %d later runs, want the pass stopped at the refused settle",
+			report, vacuum.count())
+	}
+}
+
+func TestRunDueGoesOnAfterALostLease(t *testing.T) {
+	t.Parallel()
+
+	tidy, vacuum := &counter{}, &counter{}
+	r := rigOver(&failingStore{Store: crontest.NewMemoryStore(), settleErr: cron.ErrLeaseLost},
+		hourly("tidy", tidy.Run), hourly("vacuum", vacuum.Run))
+
+	if report := r.runDue(t); report != (cron.Report{Failed: 2}) || vacuum.count() != 1 {
+		t.Errorf("RunDue() = %+v with %d later runs, want the pass to go on past a lost lease", report, vacuum.count())
+	}
 }
 
 // stalledSlots wraps a store, holding every read of the slots until its context ends.
@@ -471,16 +499,16 @@ func TestRunDueGivesUpOnATakeThatStallsPastTheLease(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		job := &counter{}
-		r := rigOver(stalledTake{crontest.NewMemoryStore()}, hourly("tidy", job.Run))
+		tidy, vacuum := &counter{}, &counter{}
+		r := rigOver(stalledTake{crontest.NewMemoryStore()}, hourly("tidy", tidy.Run), hourly("vacuum", vacuum.Run))
 		began := time.Now()
 
-		if report := r.runDue(t); report != (cron.Report{Failed: 1}) || job.count() != 0 {
-			t.Errorf("RunDue() = %+v with %d runs, want the stalled take counted as failed and no run",
-				report, job.count())
+		if report := r.runDue(t); report != (cron.Report{Failed: 1}) || tidy.count()+vacuum.count() != 0 {
+			t.Errorf("RunDue() = %+v with %d runs, want the pass stopped at the stalled take and no run",
+				report, tidy.count()+vacuum.count())
 		}
 		if waited := time.Since(began); waited != 2*time.Second {
-			t.Errorf("RunDue() gave up after %s, want the two second lease", waited)
+			t.Errorf("RunDue() gave up after %s, want one two second lease for the whole pass", waited)
 		}
 	})
 }

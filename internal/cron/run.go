@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// RunDue runs every job that is due and free, one after another, failing only when it cannot read the slots.
+// RunDue runs each job that is due and free in turn until the store fails, erring only when it cannot read the slots.
 func (r *Runner) RunDue(ctx context.Context) (Report, error) {
 	var report Report
 	if r.refused {
@@ -31,7 +31,9 @@ func (r *Runner) RunDue(ctx context.Context) (Report, error) {
 		if ctx.Err() != nil {
 			break
 		}
-		r.runOne(ctx, job, &report)
+		if !r.runOne(ctx, job, &report) {
+			break
+		}
 	}
 	return report, nil
 }
@@ -61,27 +63,29 @@ func (r *Runner) plan(slots []Slot, now time.Time) ([]Job, int) {
 	return ready, held
 }
 
-// runOne takes, runs and settles one job, counting how it ended.
-func (r *Runner) runOne(ctx context.Context, job Job, report *Report) {
+// runOne takes, runs and settles one job, counting how it ended, and reports whether the store can serve the next.
+func (r *Runner) runOne(ctx context.Context, job Job, report *Report) bool {
 	taken := r.clock()
 	lease, ok, err := r.take(ctx, Lease{Name: job.Name, Token: rand.Text(), Taken: taken, Until: taken.Add(r.lease)})
 	if err != nil {
 		report.Failed++
 		r.logger.Warn("cron job failed", "job", job.Name, "error", err)
-		return
+		return false
 	}
 	if !ok {
 		report.Held++
-		return
+		return true
 	}
 	failure := r.attempt(ctx, job, lease)
 	outcome := r.outcome(ctx, job, lease, failure)
-	r.logRun(job, outcome.Finished.Sub(taken), outcome)
-	if r.settle(ctx, lease, outcome) != nil || outcome.Failure != "" {
+	settled := r.settle(ctx, lease, outcome)
+	served := settled == nil || errors.Is(settled, ErrLeaseLost)
+	if settled != nil && outcome.Failure == "" {
 		report.Failed++
-		return
+		return served
 	}
-	report.Ran++
+	r.count(job, outcome.Finished.Sub(taken), outcome, report)
+	return served
 }
 
 // take asks the store for lease, giving up once the length of a lease has passed.
@@ -91,12 +95,14 @@ func (r *Runner) take(ctx context.Context, lease Lease) (Lease, bool, error) {
 	return r.store.Take(bounded, lease)
 }
 
-// logRun logs how one run ended and how long it took.
-func (r *Runner) logRun(job Job, took time.Duration, outcome Outcome) {
+// count tallies how one run ended and how long it took, and logs it.
+func (r *Runner) count(job Job, took time.Duration, outcome Outcome, report *Report) {
 	if outcome.Failure == "" {
+		report.Ran++
 		r.logger.Info("cron job ran", "job", job.Name, "took", took)
 		return
 	}
+	report.Failed++
 	r.logger.Warn("cron job failed", "job", job.Name, "took", took, "error", outcome.Failure)
 }
 
