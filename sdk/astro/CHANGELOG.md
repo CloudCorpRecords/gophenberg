@@ -11,10 +11,11 @@ npm-style tag stays invisible to the Go toolchain, unlike a
 `sdk/astro/vX.Y.Z` tag naming the directory as a module. Versions
 through 0.8.0 shipped in step with Gophenberg under its `vX.Y.Z` tags.
 
-## Unreleased
+## [0.15.1] - 2026-10-13
 
 ### Changed
 
+- A theme built on 0.15.1 needs Gophenberg 0.18.2 or newer.
 - The kit parses blocks with `@wordpress/block-serialization-default-parser` 5.57.0.
 
 ### Fixed
