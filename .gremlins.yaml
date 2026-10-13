@@ -6,6 +6,7 @@ unleash:
     - '(^|/)testdb\.go$'
     - '(^|/)internal/content/contenttest/'
     - '(^|/)internal/media/mediatest/'
+    - '(^|/)internal/cron/crontest/'
     - '(^|/)cmd/'
     - '^plugins/'
 mutants:
