@@ -219,6 +219,23 @@ func TestResolveTidiesTheAddressBeforeReadingIt(t *testing.T) {
 	}
 }
 
+func TestResolveAnswersContentAtAnAddressBeyondASCII(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeAddresses()
+	held := store.hold("page", "pages/naïve")
+	resolver := newResolver(t, store)
+
+	answer, err := resolver.Resolve(t.Context(), "/pages/naïve")
+	if err != nil {
+		t.Fatalf("Resolve error = %v, want nil", err)
+	}
+
+	if answer.Kind != content.KindItem || answer.Item.ID != held.ID {
+		t.Errorf("answer = %q %v, want the item stored at the address", answer.Kind, answer.Item.ID)
+	}
+}
+
 func TestResolveCarriesAFailedLookupOutward(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +276,7 @@ func TestResolveAnswersAnAddressNoStoreCanHoldAsNotFound(t *testing.T) {
 		"invalid UTF-8":                         "/broken/\xe9",
 		"a NUL byte before a parent segment":    "/broken\x00/../a-post",
 		"invalid UTF-8 before a parent segment": "/broken\xe9/../a-post",
+		"a NUL byte before a page number":       "/broken\x00/page/2",
 	} {
 		_, err := resolver.Resolve(t.Context(), raw)
 		if !errors.Is(err, content.ErrNotFound) {
