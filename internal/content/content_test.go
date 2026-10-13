@@ -166,6 +166,40 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
+func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"precomposed accent":            {in: "Café", want: "cafe"},
+		"decomposed accent":             {in: "Cafe\u0301", want: "cafe"},
+		"decomposed accent mid-word":    {in: "Cafe\u0301s", want: "cafes"},
+		"several accents":               {in: "Crème Brûlée", want: "creme-brulee"},
+		"sharp s expands":               {in: "Straße", want: "strasse"},
+		"ligatures expand":              {in: "Ærøskøbing Œuvre", want: "aeroskobing-oeuvre"},
+		"stroked and barred letters":    {in: "Łódź Đà Nẵng", want: "lodz-da-nang"},
+		"caron and ring":                {in: "Dvořák Ångström", want: "dvorak-angstrom"},
+		"dotted capital i":              {in: "İstanbul", want: "istanbul"},
+		"thorn and eth":                 {in: "Þórr Ðú", want: "thorr-du"},
+		"cjk is kept":                   {in: "東京タワー", want: "東京タワー"},
+		"cyrillic is kept intact":       {in: "Йога Привет", want: "йога-привет"},
+		"greek is kept":                 {in: "Αθήνα", want: "αθήνα"},
+		"composed and decomposed agree": {in: "Cafe\u0301", want: content.Slugify("Café")},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if got := content.Slugify(tc.in); got != tc.want {
+				t.Errorf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlugifyTruncatesLongTitlesWithoutTrailingSeparator(t *testing.T) {
 	t.Parallel()
 
