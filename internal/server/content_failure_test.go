@@ -109,7 +109,7 @@ func TestContentAPIAnswersNotFoundForAnAddressNoStoreCanHold(t *testing.T) {
 	t.Parallel()
 
 	store := newFakePostStore()
-	store.publishedErr = errors.New("pq: invalid byte sequence for encoding \"UTF8\"")
+	store.publishedErr = errors.New("database down")
 	handler := contentServerOver(store)
 
 	for name, query := range map[string]string{
