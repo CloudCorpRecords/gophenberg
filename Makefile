@@ -1,10 +1,11 @@
-.PHONY: peers dev seed test test-race cover cover-html mutate lint fmt generate outdated db-up db-down pot catalogs \
+.PHONY: peers dev seed test test-race cover cover-sqlite cover-html mutate lint fmt generate outdated db-up db-down pot catalogs \
 	translations \
 	translations-push translations-retire \
 	e2e e2e-build e2e-theme e2e-serve e2e-db-reset e2e-seed e2e-reset bump bump-kit sdk-compat \
 	brick-link brick-sync brick-pack brick-unlink
 
-COVERPKGS = $(shell go list ./... | grep -v -e /internal/postgres/db -e /internal/testdb -e /internal/content/contenttest -e /internal/media/mediatest)
+COVERPKGS = $(shell go list ./... | grep -v -e /internal/postgres/db -e /internal/sqlite -e /internal/testdb -e /internal/content/contenttest -e /internal/media/mediatest)
+SQLITE_COVERPKGS = $(shell go list ./internal/sqlite/... | grep -v -e /internal/sqlite/db)
 
 # Where a linked package's restore point is kept while it is linked.
 BRICK_HELD = .brick-held
@@ -143,6 +144,19 @@ cover:
 
 cover-html: cover
 	go tool cover -html=$(COVERDATA)/cover.out
+
+SQLITE_COVERDATA = $(COVERDATA)/sqlite
+
+cover-sqlite:
+	rm -rf $(SQLITE_COVERDATA)
+	mkdir -p $(SQLITE_COVERDATA)/counters
+	go test -cover -covermode=atomic $(GOTESTFLAGS) $(SQLITE_COVERPKGS) \
+		-args -test.gocoverdir=$(CURDIR)/$(SQLITE_COVERDATA)/counters
+	@echo "=== SQLite coverage ==="
+	go tool covdata percent -i=$(SQLITE_COVERDATA)/counters
+	@echo
+	@go tool covdata textfmt -i=$(SQLITE_COVERDATA)/counters -o $(SQLITE_COVERDATA)/cover.out
+	@go tool cover -func=$(SQLITE_COVERDATA)/cover.out | tail -1
 
 MUTATE_PKG ?= .
 MUTATE_FLAGS ?=
