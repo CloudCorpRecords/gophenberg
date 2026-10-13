@@ -608,3 +608,27 @@ func TestTheSiteSpeaksTheLanguageItChose(t *testing.T) {
 		})
 	}
 }
+
+func TestSiteRefusesAnAddressNoStoreCanHold(t *testing.T) {
+	t.Parallel()
+
+	handler, reader := siteWith(publishedPost("A Post", "a-post", blockMarkup, time.Now().UTC()))
+	reader.readErr = errors.New("database down")
+
+	for name, raw := range map[string]string{
+		"a NUL byte":    "/\x00",
+		"invalid UTF-8": "/broken\xe9",
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.URL.Path = raw
+		handler.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("%s status = %d, want %d", name, recorder.Code, http.StatusNotFound)
+		}
+		if !strings.Contains(recorder.Body.String(), "A Test Site") {
+			t.Errorf("%s body = %q, want the styled not found page", name, recorder.Body.String())
+		}
+	}
+}
