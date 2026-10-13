@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -32,6 +33,7 @@ var publicRoutes = []route{
 	{http.MethodGet, "/api/content/v1"},
 	{http.MethodGet, "/api/content/v1/items"},
 	{http.MethodGet, "/api/content/v1/resolve"},
+	{http.MethodPost, "/api/cron"},
 }
 
 // everyoneRoutes names the API routes every signed in role reaches, a member included.
@@ -145,6 +147,8 @@ func gateServerAs(t *testing.T, held string) (http.Handler, *http.Cookie) {
 		Readers:    memoryReaderSettings{},
 		Media:      mediahost.New(mediahost.Config{Dir: t.TempDir()}),
 		MediaStore: newFakeMediaStore(),
+		Cron:       server.NewCronRuns(&recordedJobs{}, time.Minute, time.Now),
+		CronSecret: cronSecret,
 	})
 	recorder := doLogin(t, handler, `{"email":"author@example.com","password":"correct horse battery"}`)
 	if recorder.Code != http.StatusOK {

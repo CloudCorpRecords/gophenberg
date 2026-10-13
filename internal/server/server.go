@@ -79,6 +79,12 @@ type Config struct {
 	Lists ListSettings
 	// Roles holds the roles accounts take and the capabilities each carries. Nil holds the core's roles alone.
 	Roles *goncierge.Registry
+	// Cron owns the cron runs that visits and the cron address start. Nil leaves both off.
+	Cron *CronRuns
+	// CronSecret is the bearer secret the cron address asks for. Empty leaves the address unserved.
+	CronSecret string
+	// CronOnVisits lets each answered request start the cron jobs.
+	CronOnVisits bool
 }
 
 // rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
@@ -131,8 +137,10 @@ func NewServer(cfg Config) http.Handler {
 	router := chi.NewRouter()
 	router.Use(trustForwarded(cfg.TrustedProxies))
 	router.Use(crossOriginProtection(cfg.TrustedProxies, cfg.PublicURL, cfg.Logger))
+	router.Use(afterVisits(cfg.Cron, cfg.CronOnVisits))
 	router.With(ratelimit.Middleware(ratelimit.Config{TrustedProxies: cfg.TrustedProxies})).
 		Post("/api/auth/login", auth.Login)
+	mountCron(router, cfg, s.logger)
 	router.Post("/api/auth/logout", auth.Logout)
 	router.Route("/api/locale", func(locale chi.Router) {
 		locale.Use(contentHeaders(readerCacheControl))
