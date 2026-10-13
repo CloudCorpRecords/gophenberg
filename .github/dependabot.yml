@@ -10,6 +10,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "modernc.org/sqlite"
+      - dependency-name: "modernc.org/libc"
   - package-ecosystem: npm
     directory: /
     versioning-strategy: increase-if-necessary
