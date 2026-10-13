@@ -358,7 +358,8 @@ func TestContentAPIAdvertisesTheTypesItServes(t *testing.T) {
 	if handshake.API != 0 {
 		t.Errorf("api = %d, want 0", handshake.API)
 	}
-	if !slices.Equal(handshake.Kit, []string{"0.9.0", "0.10.0", "0.11.0", "0.12.0", "0.13.0", "0.14.0", "0.15.0", "0.15.1"}) {
+	want := []string{"0.9.0", "0.10.0", "0.11.0", "0.12.0", "0.13.0", "0.14.0", "0.15.0", "0.15.1"}
+	if !slices.Equal(handshake.Kit, want) {
 		t.Errorf("kit = %v, want the kit versions this release serves", handshake.Kit)
 	}
 	if len(handshake.Types) != 1 {
