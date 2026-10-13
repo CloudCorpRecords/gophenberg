@@ -150,6 +150,7 @@ type world struct {
 	rememberedETag string
 	file           *definitions.Import
 	roles          *goncierge.Registry
+	cron           *cronWorld
 }
 
 // newMemoryStores returns one scenario's content, type and account stores, wired to each other.
@@ -297,6 +298,9 @@ func (w *world) serve(jar http.CookieJar) error {
 		Lists:      w.lists,
 	}
 	cfg.Plugins, cfg.PluginPublicPaths, cfg.Roles = w.plugins, w.publicPaths, w.roles
+	if w.cron != nil {
+		w.cron.into(&cfg)
+	}
 	w.logs = &logBook{}
 	cfg.Logger = slog.New(slog.NewTextHandler(w.logs, nil))
 	public, err := server.ParsePublicURL(w.publicURL)

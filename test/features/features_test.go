@@ -161,3 +161,7 @@ func TestCrossOriginWrites(t *testing.T) {
 func TestPublicAddress(t *testing.T) {
 	runFeature(t, "features/public-address.feature", initializeCrossOrigin)
 }
+
+func TestCron(t *testing.T) {
+	runFeature(t, "features/cron.feature", initializeCron)
+}
