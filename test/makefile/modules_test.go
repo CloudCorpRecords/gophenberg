@@ -68,7 +68,7 @@ func makeIn(t *testing.T, dir string, workspace bool, args ...string) (string, e
 	}
 	command := exec.Command("make", args...)
 	command.Dir = dir
-	command.Env = append(os.Environ(), gowork, "GOFLAGS=", "MAKEFLAGS=", "MFLAGS=", "MAKELEVEL=")
+	command.Env = append(isolated(), gowork, "GOFLAGS=", "MAKEFLAGS=", "MFLAGS=", "MAKELEVEL=")
 	out, err := command.CombinedOutput()
 	return string(out), err
 }
