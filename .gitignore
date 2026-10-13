@@ -13,6 +13,10 @@ test/theme/dist/
 /reports/
 .stryker-tmp/
 .dev-media/
+*.db
+*.db-wal
+*.db-shm
+*.migrate.lock
 node_modules/
 .env
 /pluginwire
