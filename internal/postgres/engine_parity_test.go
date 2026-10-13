@@ -32,7 +32,7 @@ const (
 	// postgresIndexSlots lists every slot of every index on the core tables in order, each name taking the schema.
 	postgresIndexSlots = `SELECT ns.nspname || '_' || tc.relname, ns.nspname || '_' || ic.relname,
 		i.indisprimary, i.indisunique, i.indnullsnotdistinct, NOT i.indimmediate, k.n <= i.indnkeyatts,
-		i.indkey[k.n - 1] = 0,
+		CASE WHEN i.indkey[k.n - 1] = 0 THEN pg_get_indexdef(i.indexrelid, k.n, true) ELSE '' END,
 		coalesce(a.attname::text, ''), coalesce((i.indoption[k.n - 1] & 1) = 1, false),
 		coalesce(pg_get_expr(i.indpred, i.indrelid), '')
 	FROM pg_index AS i
@@ -69,7 +69,8 @@ const (
 	sqliteColumns = `SELECT name, upper(type), "notnull", pk, coalesce(dflt_value, '')
 	FROM pragma_table_info(?) ORDER BY cid`
 	// sqliteIndexSlots lists every key slot of every index of one SQLite table but its primary key, in order.
-	sqliteIndexSlots = `SELECT il.name, il."unique", coalesce(s.sql, ''), x.cid = -2, coalesce(x.name, ''), x."desc"
+	sqliteIndexSlots = `SELECT il.name, il."unique", coalesce(s.sql, ''), x.cid = -2, x.seqno, coalesce(x.name, ''),
+		x."desc"
 	FROM pragma_index_list(?) AS il
 	JOIN pragma_index_xinfo(il.name) AS x ON x."key" = 1
 	LEFT JOIN sqlite_schema AS s ON s.type = 'index' AND s.name = il.name
@@ -239,6 +240,8 @@ var (
 	}
 	// indexPredicate finds the predicate after the key list of a CREATE INDEX statement.
 	indexPredicate = regexp.MustCompile(`(?s)\)\s+WHERE\s+(.+)$`)
+	// indexKeyList finds the parenthesis that opens the key list of a CREATE INDEX statement.
+	indexKeyList = regexp.MustCompile(`(?is)\bON\s+\w+\s*\(`)
 	// checkStart finds the name of every named CHECK constraint in a CREATE TABLE statement and the parenthesis after it.
 	checkStart = regexp.MustCompile(`(?i)\bCONSTRAINT\s+(\w+)\s+CHECK\s*\(`)
 )
@@ -277,10 +280,10 @@ type indexShape struct {
 	predicate        string
 }
 
-// indexKey is one key slot of an index, a column or an expression, in ascending or descending order.
+// indexKey is one key slot of an index, a column or the text of an expression, in ascending or descending order.
 type indexKey struct {
 	column     string
-	expression bool
+	expression string
 	descending bool
 }
 
@@ -409,8 +412,8 @@ func postgresShape(t *testing.T, pool *pgxpool.Pool) schemaShape {
 // readPostgresIndexes adds every index of the core tables on pool to shape, the primary key as its columns.
 func readPostgresIndexes(t *testing.T, pool *pgxpool.Pool, shape schemaShape) {
 	t.Helper()
-	var table, name, column, predicate string
-	var primary, unique, nullsNotDistinct, deferrable, isKey, expression, descending bool
+	var table, name, expression, column, predicate string
+	var primary, unique, nullsNotDistinct, deferrable, isKey, descending bool
 	dest := []any{
 		&table, &name, &primary, &unique, &nullsNotDistinct, &deferrable, &isKey, &expression, &column, &descending,
 		&predicate,
@@ -492,14 +495,44 @@ func readSQLiteColumns(t *testing.T, db *sql.DB, table, statement string, owner 
 func readSQLiteIndexes(t *testing.T, db *sql.DB, table string, owner *tableShape) {
 	t.Helper()
 	var name, statement, column string
-	var unique, expression, descending bool
-	dest := []any{&name, &unique, &statement, &expression, &column, &descending}
+	var unique, isExpression, descending bool
+	var position int
+	dest := []any{&name, &unique, &statement, &isExpression, &position, &column, &descending}
 	eachSQLiteRow(t, db, sqliteIndexSlots, []any{table}, dest, func() {
 		index := owner.indexes[name]
 		index.unique, index.predicate = unique, predicateOf(statement)
+		expression := ""
+		if isExpression {
+			expression = expressionAt(statement, position)
+		}
 		index.keys = append(index.keys, slot(column, expression, descending))
 		owner.indexes[name] = index
 	})
+}
+
+// expressionAt returns the key slot at position of a CREATE INDEX statement, its spaces folded and its order dropped.
+func expressionAt(statement string, position int) string {
+	start := indexKeyList.FindStringIndex(statement)
+	item := topLevelItems(enclosed(statement[start[1]-1:]))[position]
+	return strings.TrimSuffix(strings.TrimSuffix(item, " DESC"), " ASC")
+}
+
+// topLevelItems returns the parts of text between the commas that stand outside parentheses, each trimmed.
+func topLevelItems(text string) []string {
+	var items []string
+	depth, from := 0, 0
+	for i, r := range text {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')':
+			depth--
+		case r == ',' && depth == 0:
+			items = append(items, strings.TrimSpace(text[from:i]))
+			from = i + 1
+		}
+	}
+	return append(items, strings.TrimSpace(text[from:]))
 }
 
 // readSQLiteForeignKeys adds every foreign key of the named table on db to owner, keyed by its columns.
@@ -576,10 +609,10 @@ func addColumn(owner *tableShape, name string, column columnShape) {
 	owner.columns[name] = column
 }
 
-// slot returns the index key slot over column, or over an expression when expression is set.
-func slot(column string, expression, descending bool) indexKey {
-	if expression {
-		return indexKey{expression: true, descending: descending}
+// slot returns the index key slot over column, or over the text of expression when it is not empty.
+func slot(column, expression string, descending bool) indexKey {
+	if expression != "" {
+		return indexKey{expression: expression, descending: descending}
 	}
 	return indexKey{column: column, descending: descending}
 }
@@ -671,7 +704,7 @@ func coalescedParent(index indexShape) (indexShape, bool) {
 		return index, true
 	}
 	keys := slices.Clone(index.keys)
-	keys[1] = indexKey{expression: true}
+	keys[1] = indexKey{expression: "coalesce(parent_field_id, 0)"}
 	index.keys, index.nullsNotDistinct = keys, false
 	return index, true
 }
@@ -725,8 +758,8 @@ func (i indexShape) String() string {
 // String returns the key slot as a failure reads it, a column name or an expression, with DESC when it descends.
 func (k indexKey) String() string {
 	text := k.column
-	if k.expression {
-		text = "an expression"
+	if k.expression != "" {
+		text = k.expression
 	}
 	if k.descending {
 		text += " DESC"
