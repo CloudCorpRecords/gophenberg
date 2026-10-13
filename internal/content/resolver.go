@@ -56,10 +56,10 @@ func NewResolver(store AddressReader, registry TypeReader) *Resolver {
 
 // Resolve returns what the address holds, or [ErrNotFound].
 func (r *Resolver) Resolve(ctx context.Context, raw string) (Address, error) {
-	address := tidy(raw)
-	if !storableAddress(raw) || !storableAddress(address) {
+	if !storableAddress(raw) {
 		return Address{}, ErrNotFound
 	}
+	address := tidy(raw)
 	item, err := r.content.PublishedByPath(ctx, address)
 	if err == nil {
 		return r.itemAt(ctx, item, 1)
@@ -96,8 +96,7 @@ func tidy(raw string) string {
 	return strings.Trim(path.Clean("/"+raw), "/")
 }
 
-// storableAddress reports whether an address can name stored content,
-// which never holds a NUL byte or invalid UTF-8.
+// storableAddress reports whether an address can name stored content.
 func storableAddress(address string) bool {
 	return !strings.ContainsRune(address, '\x00') && utf8.ValidString(address)
 }
