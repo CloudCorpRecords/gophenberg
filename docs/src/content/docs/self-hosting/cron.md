@@ -125,8 +125,10 @@ When more than one server serves the site, keep their clocks in step,
 for example with NTP. A server judges another's hold by its own clock.
 
 The server also waits no longer than `GOPHENBERG_CRON_LEASE` for the
-database to list the jobs or hand one over. A database that stops
-answering delays the cron jobs, but later visits still check again.
+database to list the jobs or hand one over. When the database fails to
+hand over a job or to record how it ended, the run stops there, and the
+other jobs wait for the next check. A database that stops answering
+delays the cron jobs, but later visits still check again.
 
 A stop tells a running job to stop as soon as the server stops taking
 requests, and gives it `GOPHENBERG_CRON_STOP_GRACE`, two seconds unless
