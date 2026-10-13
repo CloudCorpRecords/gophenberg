@@ -72,6 +72,7 @@ type sceneJob struct {
 	runs         int
 	finished     int
 	release      chan struct{}
+	releaseOnce  sync.Once
 	failWith     string
 	untilStopped bool
 	panics       bool
@@ -95,6 +96,15 @@ func (j *sceneJob) Run(ctx context.Context, _ time.Time) error {
 		return errors.New(j.failWith)
 	}
 	return nil
+}
+
+// letGo lets a job that waits until it is let go finish, closing its wait at most once.
+func (j *sceneJob) letGo() {
+	j.releaseOnce.Do(func() {
+		if j.release != nil {
+			close(j.release)
+		}
+	})
 }
 
 // end counts one finished run.
@@ -153,6 +163,18 @@ func (cw *cronWorld) RunDue(ctx context.Context) (cron.Report, error) {
 // into hands the server the scenario's cron runs and trigger settings.
 func (cw *cronWorld) into(cfg *server.Config) {
 	cfg.Cron, cfg.CronSecret, cfg.CronOnVisits = cw.runs, cw.secret, cw.onVisits
+}
+
+// stop lets every held job go, then closes the scenario's cron runs, waiting at most readyWait.
+func (cw *cronWorld) stop(ctx context.Context) error {
+	cw.mu.Lock()
+	for _, job := range cw.jobs {
+		job.letGo()
+	}
+	cw.mu.Unlock()
+	waiting, cancel := context.WithTimeout(context.WithoutCancel(ctx), readyWait)
+	defer cancel()
+	return cw.runs.Close(waiting)
 }
 
 // job returns the scenario's job of the name.
@@ -389,7 +411,7 @@ func theJobFinishesOnceItIsLetGo(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	close(job.release)
+	job.letGo()
 	return theJobHasRun(ctx, name, 1)
 }
 

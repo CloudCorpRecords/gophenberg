@@ -205,6 +205,10 @@ func retireWorld(ctx context.Context, _ *godog.Scenario, err error) (context.Con
 	for _, name := range w.installed {
 		_ = w.openGate(name)
 	}
+	var stopped error
+	if w.cron != nil {
+		stopped = w.cron.stop(ctx)
+	}
 	_ = w.settle()
 	if w.manager != nil {
 		w.manager.Close()
@@ -212,7 +216,8 @@ func retireWorld(ctx context.Context, _ *godog.Scenario, err error) (context.Con
 	if w.site != nil {
 		w.site.Close()
 	}
-	return ctx, errors.Join(err, os.RemoveAll(w.themesDir), os.RemoveAll(w.gateDir), os.RemoveAll(w.mediaDir))
+	return ctx, errors.Join(err, stopped,
+		os.RemoveAll(w.themesDir), os.RemoveAll(w.gateDir), os.RemoveAll(w.mediaDir))
 }
 
 // worldOf returns the scenario's world, or the error that no step provisioned one.
