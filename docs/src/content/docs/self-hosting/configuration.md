@@ -62,7 +62,7 @@ so it takes the default.
 | `GOPHENBERG_CRON_ON_VISITS` | No | `true` | Whether a visit may start the cron jobs once its page is answered |
 | `GOPHENBERG_CRON_VISIT_PACE` | No | `1m` | How long after one check a visit waits before it checks again |
 | `GOPHENBERG_CRON_TIME_LIMIT` | No | `30s` | How long one cron job run may take before it is cut short |
-| `GOPHENBERG_CRON_LEASE` | No | `1m` | How long a run holds its job so no other run takes it, above the time limit |
+| `GOPHENBERG_CRON_LEASE` | No | `1m` | How long a run holds its job so no other run takes it, above the time limit. Also the longest the server waits for the database to list or hand over a job |
 | `GOPHENBERG_CRON_STOP_GRACE` | No | `2s` | How long a stop gives a running cron job to end and record itself |
 | `GOPHENBERG_SESSION_SWEEP_INTERVAL` | No | `1h` | How often expired sessions and expired account links are swept |
 | `GOPHENBERG_COMMAND_RECORD_TIMEOUT` | No | `5s` | How long an account command has to store the record of a change it applied, see [the commands](/self-hosting/commands/) |

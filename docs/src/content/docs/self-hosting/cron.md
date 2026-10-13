@@ -38,20 +38,41 @@ openssl rand -hex 32
 ```
 
 The secret travels in a header, never in the address, so it stays out
-of the host's access logs.
+of the host's access logs. Keep it out of the command as well. While a
+command runs, other accounts on the same server may read its words in
+the list of running processes. So the secret goes in a small file only
+your account can read, and the command names that file.
 
-On a cPanel plan, open cPanel's **Cron Jobs** screen, choose
-**Once Per Five Minutes**, and paste this command with your own secret
-and address:
+On a cPanel plan:
+
+1. Open cPanel's **File Manager**, go to your home folder, not
+   `public_html`, and create a file named `gophenberg-cron-header`.
+2. Edit the file so it holds this one line, with your own secret:
+
+   ```text
+   Authorization: Bearer PASTE_THE_SECRET
+   ```
+
+3. Choose **Permissions** on the file and set them to `600`, so only
+   your account can read it.
+4. Open cPanel's **Cron Jobs** screen, choose **Once Per Five Minutes**,
+   and paste this command with your own address:
+
+   ```sh
+   curl -fsS -X POST -H @"$HOME/gophenberg-cron-header" https://example.com/api/cron > /dev/null
+   ```
+
+On a server of your own, create the same file so only you can read it:
 
 ```sh
-curl -fsS -X POST -H "Authorization: Bearer PASTE_THE_SECRET" https://example.com/api/cron > /dev/null
+install -m 600 /dev/null ~/gophenberg-cron-header
 ```
 
-On a server of your own, a crontab line every minute does the same:
+Write the `Authorization` line into it with an editor such as `nano`,
+then add a crontab line that runs every minute:
 
 ```sh
-* * * * * curl -fsS -X POST -H "Authorization: Bearer PASTE_THE_SECRET" https://example.com/api/cron > /dev/null
+* * * * * curl -fsS -X POST -H @"$HOME/gophenberg-cron-header" https://example.com/api/cron > /dev/null
 ```
 
 When `GOPHENBERG_PUBLIC_URL` is set, call that public address. A call
@@ -59,8 +80,10 @@ to another address, such as `localhost`, needs
 `-H "Host: example.com"` as well, or the server refuses it.
 
 The call answers with how many jobs ran, failed, and were held by
-another run, such as `{"ran":1,"failed":0,"held":0}`. A caller that
-hangs up or times out does not cut a job short.
+another run, such as `{"ran":1,"failed":0,"held":0}`. A job that ran
+but whose result the server could not save counts as failed, because
+it runs again once its hold runs out. A caller that hangs up or times
+out does not cut a job short.
 
 What the other answers mean:
 
@@ -70,7 +93,8 @@ What the other answers mean:
   address is on, a `GET` answers 405, which tells a stranger the
   address exists. That is harmless, because the secret guards it.
 - **500** means the server could not read its cron jobs, usually
-  because the database is unreachable. `curl -f` turns it into an
+  because the database is unreachable or did not answer within
+  `GOPHENBERG_CRON_LEASE`. `curl -f` turns it into an
   error, and cPanel mails that command's output to you.
 
 When the host's cron calls the address, you can turn off the visit
@@ -100,11 +124,16 @@ never run the same job at once. Two things follow:
 When more than one server serves the site, keep their clocks in step,
 for example with NTP. A server judges another's hold by its own clock.
 
+The server also waits no longer than `GOPHENBERG_CRON_LEASE` for the
+database to list the jobs or hand one over. A database that stops
+answering delays the cron jobs, but later visits still check again.
+
 A stop tells a running job to stop as soon as the server stops taking
 requests, and gives it `GOPHENBERG_CRON_STOP_GRACE`, two seconds unless
-set, to end and record itself, before the plugins stop. A job that ends and records itself
-within that time runs again at the first check after the restart. One
-that does not keeps its hold, and runs again once its hold runs out.
+set, to end and record itself, before the plugins stop. A job that ends
+and records itself within that time runs again at the first check after
+the restart. One that does not keeps its hold, and runs again once its
+hold runs out.
 
 ## The job that ships
 
