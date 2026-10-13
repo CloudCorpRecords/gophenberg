@@ -91,6 +91,16 @@ type CoreContentType struct {
 	Description   string
 }
 
+type CoreCronJob struct {
+	Name           string
+	NextRunAt      time.Time
+	LeasedUntil    *time.Time
+	LeaseToken     *string
+	LastStartedAt  *time.Time
+	LastFinishedAt *time.Time
+	LastError      *string
+}
+
 type CoreFieldGroup struct {
 	ID        int32
 	Title     string
