@@ -18,6 +18,10 @@ pnpm add @gophenberg/astro
 
 Astro 7 is a peer dependency.
 
+A site runs a theme only when its Gophenberg release serves the kit
+version the theme was built on. See
+[Theme compatibility](https://docs.gophenberg.org/themes/compatibility/).
+
 ## Use
 
 Two files make an Astro project a theme.
