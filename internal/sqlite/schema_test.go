@@ -367,6 +367,20 @@ func TestSchemaRefusesASecondTopLevelFieldWithOneKeyInAGroup(t *testing.T) {
 	}
 }
 
+func TestSchemaTakesASubFieldThatSharesAKeyWithATopLevelFieldOfItsGroup(t *testing.T) {
+	t.Parallel()
+
+	db := withRows(t)
+	inserted(t, db, insertField, "title")
+
+	err := classed(t, db, "INSERT INTO core_content_fields (key, label, kind, group_id, parent_field_id, depth, "+
+		"created_at, updated_at) VALUES ('title', 'Title', 'text', 1, 1, 1, 1767225600000000, 1767225600000000)")
+
+	if err != nil {
+		t.Errorf("a sub field of field 1 keyed title beside a top-level title = %v, want it stored", err)
+	}
+}
+
 func TestSchemaRefusesASecondContentRowOnOnePath(t *testing.T) {
 	t.Parallel()
 
