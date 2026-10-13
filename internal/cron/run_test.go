@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/gopherium/gophenberg/internal/cron"
@@ -422,8 +423,66 @@ func TestRunDueReportsASettleTheStoreRefuses(t *testing.T) {
 	r := rigOver(&failingStore{Store: crontest.NewMemoryStore(), settleErr: errors.New("the store is unreachable")},
 		hourly("tidy", (&counter{}).Run))
 
-	r.runDue(t)
+	if report := r.runDue(t); report != (cron.Report{Failed: 1}) {
+		t.Errorf("RunDue() = %+v, want the run whose outcome went unsaved counted as failed", report)
+	}
 	r.logged(t, "cron job unsettled")
+}
+
+// stalledSlots wraps a store, holding every read of the slots until its context ends.
+type stalledSlots struct {
+	cron.Store
+}
+
+// Slots waits for ctx to end and returns why it ended.
+func (stalledSlots) Slots(ctx context.Context) ([]cron.Slot, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestRunDueGivesUpOnASlotsReadThatStallsPastTheLease(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		r := rigOver(stalledSlots{crontest.NewMemoryStore()}, hourly("tidy", (&counter{}).Run))
+		began := time.Now()
+
+		if _, err := r.runner.RunDue(t.Context()); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("RunDue() error = %v, want the stalled read given up", err)
+		}
+		if waited := time.Since(began); waited != 2*time.Second {
+			t.Errorf("RunDue() gave up after %s, want the two second lease", waited)
+		}
+	})
+}
+
+// stalledTake wraps a store, holding every take until its context ends.
+type stalledTake struct {
+	cron.Store
+}
+
+// Take waits for ctx to end and returns why it ended.
+func (stalledTake) Take(ctx context.Context, _ cron.Lease) (cron.Lease, bool, error) {
+	<-ctx.Done()
+	return cron.Lease{}, false, ctx.Err()
+}
+
+func TestRunDueGivesUpOnATakeThatStallsPastTheLease(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		job := &counter{}
+		r := rigOver(stalledTake{crontest.NewMemoryStore()}, hourly("tidy", job.Run))
+		began := time.Now()
+
+		if report := r.runDue(t); report != (cron.Report{Failed: 1}) || job.count() != 0 {
+			t.Errorf("RunDue() = %+v with %d runs, want the stalled take counted as failed and no run",
+				report, job.count())
+		}
+		if waited := time.Since(began); waited != 2*time.Second {
+			t.Errorf("RunDue() gave up after %s, want the two second lease", waited)
+		}
+	})
 }
 
 func TestRunDueReportsTheLostLeaseOfAJobThatOverranIt(t *testing.T) {

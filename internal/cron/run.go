@@ -18,7 +18,9 @@ func (r *Runner) RunDue(ctx context.Context) (Report, error) {
 	if r.refused {
 		return report, nil
 	}
-	slots, err := r.store.Slots(ctx)
+	read, cancel := context.WithTimeout(ctx, r.lease)
+	slots, err := r.store.Slots(read)
+	cancel()
 	if err != nil {
 		r.logger.Error("cron jobs unread", "error", err)
 		return report, fmt.Errorf("cron: read the slots: %w", err)
@@ -62,8 +64,7 @@ func (r *Runner) plan(slots []Slot, now time.Time) ([]Job, int) {
 // runOne takes, runs and settles one job, counting how it ended.
 func (r *Runner) runOne(ctx context.Context, job Job, report *Report) {
 	taken := r.clock()
-	lease, ok, err := r.store.Take(ctx,
-		Lease{Name: job.Name, Token: rand.Text(), Taken: taken, Until: taken.Add(r.lease)})
+	lease, ok, err := r.take(ctx, Lease{Name: job.Name, Token: rand.Text(), Taken: taken, Until: taken.Add(r.lease)})
 	if err != nil {
 		report.Failed++
 		r.logger.Warn("cron job failed", "job", job.Name, "error", err)
@@ -75,18 +76,27 @@ func (r *Runner) runOne(ctx context.Context, job Job, report *Report) {
 	}
 	failure := r.attempt(ctx, job, lease)
 	outcome := r.outcome(ctx, job, lease, failure)
-	r.count(job, outcome.Finished.Sub(taken), outcome, report)
-	r.settle(ctx, lease, outcome)
+	r.logRun(job, outcome.Finished.Sub(taken), outcome)
+	if r.settle(ctx, lease, outcome) != nil || outcome.Failure != "" {
+		report.Failed++
+		return
+	}
+	report.Ran++
 }
 
-// count tallies how one run ended and how long it took, and logs it.
-func (r *Runner) count(job Job, took time.Duration, outcome Outcome, report *Report) {
+// take asks the store for lease, giving up once the length of a lease has passed.
+func (r *Runner) take(ctx context.Context, lease Lease) (Lease, bool, error) {
+	bounded, cancel := context.WithTimeout(ctx, r.lease)
+	defer cancel()
+	return r.store.Take(bounded, lease)
+}
+
+// logRun logs how one run ended and how long it took.
+func (r *Runner) logRun(job Job, took time.Duration, outcome Outcome) {
 	if outcome.Failure == "" {
-		report.Ran++
 		r.logger.Info("cron job ran", "job", job.Name, "took", took)
 		return
 	}
-	report.Failed++
 	r.logger.Warn("cron job failed", "job", job.Name, "took", took, "error", outcome.Failure)
 }
 
@@ -125,18 +135,19 @@ func (r *Runner) outcome(ctx context.Context, job Job, lease Lease, failure erro
 	return Outcome{NextRun: nextRun(lease.NextRun, job.Every, finished), Finished: finished, Failure: failure.Error()}
 }
 
-// settle records the outcome under a context the end of ctx cannot cancel, bounded by the lease.
-func (r *Runner) settle(ctx context.Context, lease Lease, outcome Outcome) {
+// settle records the outcome past the end of ctx, bounded by the lease, and returns why it could not.
+func (r *Runner) settle(ctx context.Context, lease Lease, outcome Outcome) error {
 	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.lease)
 	defer cancel()
 	err := r.store.Settle(bounded, lease, outcome)
 	if errors.Is(err, ErrLeaseLost) {
 		r.logger.Warn("cron job lease lost", "job", lease.Name)
-		return
+		return err
 	}
 	if err != nil {
 		r.logger.Error("cron job unsettled", "job", lease.Name, "error", err)
 	}
+	return err
 }
 
 // nextRun returns the first time after now on the rhythm that started at from.
