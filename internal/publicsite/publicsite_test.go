@@ -613,7 +613,7 @@ func TestSiteRefusesAnAddressNoStoreCanHold(t *testing.T) {
 	t.Parallel()
 
 	handler, reader := siteWith(publishedPost("A Post", "a-post", blockMarkup, time.Now().UTC()))
-	reader.readErr = errors.New("pq: invalid byte sequence for encoding \"UTF8\"")
+	reader.readErr = errors.New("database down")
 
 	for name, raw := range map[string]string{
 		"a NUL byte":    "/\x00",
