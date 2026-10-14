@@ -16,7 +16,7 @@ sql:
           - column: "core.media.sizes"
             go_type:
               import: "github.com/gopherium/gophenberg/internal/media"
-              type: "RenditionMap"
+              type: "Sizes"
           - column: "core.content.fields"
             go_type:
               import: "github.com/gopherium/gophenberg/internal/content"
@@ -47,3 +47,41 @@ sql:
             go_type:
               type: "string"
               pointer: true
+  - engine: "sqlite"
+    queries: "internal/sqlite/queries"
+    schema:
+      - "internal/sqlite/schema"
+      - "internal/sqlite/migrations"
+    gen:
+      go:
+        package: "db"
+        out: "internal/sqlite/db"
+        emit_exported_queries: true
+        emit_pointers_for_null_types: true
+        rename:
+          core_medium: "CoreMedia"
+        overrides:
+          - column: "core_media.author_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "core_user_settings.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "auth_users.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "core_media.created_at"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+          - column: "core_media.updated_at"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+          - column: "core_media.sizes"
+            go_type:
+              import: "github.com/gopherium/gophenberg/internal/sqlite/columns"
+              type: "Sizes"
