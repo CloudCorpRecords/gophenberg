@@ -271,7 +271,7 @@ func TestSeedStoresTheDemoMediaWhenADirectoryIsConfigured(t *testing.T) {
 			t.Errorf("%q carries no alt text, want every demo picture described", item.Title)
 		}
 		if len(item.Sizes) == 0 {
-			t.Errorf("%q carries no renditions, want them derived by the pipeline", item.Title)
+			t.Errorf("%q carries no sub-sizes, want them derived by the pipeline", item.Title)
 		}
 	}
 	if documents != 1 {
