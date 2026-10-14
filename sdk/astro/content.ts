@@ -37,8 +37,8 @@ export interface LinkValue {
 	new_tab: boolean
 }
 
-/** One stored rendition of a library file, as a reader sees it. */
-export interface MediaRendition {
+/** One sub-size of a library file, its stored copy at an image size, as a reader sees it. */
+export interface MediaSubSize {
 	src: string
 	width: number
 	height: number
@@ -55,7 +55,7 @@ export interface MediaValue {
 	mime_type: string
 	width: number
 	height: number
-	sizes: Record<string, MediaRendition>
+	sizes: Record<string, MediaSubSize>
 }
 
 /** One typed field a content type declares. */
