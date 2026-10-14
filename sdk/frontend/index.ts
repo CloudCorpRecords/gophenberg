@@ -44,6 +44,7 @@ export {
 	VisuallyHidden,
 } from '@wordpress/ui'
 export {
+	commentAuthorAvatar as authorIcon,
 	chevronLeft as backIcon,
 	backup as backupIcon,
 	chevronDown as downIcon,
