@@ -5,10 +5,12 @@ import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import type { QueryClient } from '@tanstack/react-query'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test } from 'vitest'
 
 import '../index.css'
 import { errorMessage } from '../content/TypesScreen'
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 
 const POST_TYPE = {
@@ -36,6 +38,32 @@ const PAGE_TYPE = {
 	hierarchical: true,
 	default: false,
 }
+
+/** How a Spanish and a French reader see the Pages row, with the sentences naming a built-in type by its kind. */
+const READERS = [
+	{
+		locale: 'es-ES',
+		region: 'Tipos de contenido',
+		pages: /Páginas/,
+		deactivate: 'Desactivar',
+		makeDefault: 'Establecer como predeterminado',
+		handOver: 'Ceder la raíz a Páginas',
+		updated: 'Tipo de contenido Páginas actualizado.',
+		answers: 'El tipo Páginas responderá en la raíz.',
+		moves: 'El tipo Entradas pasa a /posts. Cambian todas las direcciones de ambos tipos.',
+	},
+	{
+		locale: 'fr-FR',
+		region: 'Types de contenu',
+		pages: /Pages/,
+		deactivate: 'Désactiver',
+		makeDefault: 'Rendre par défaut',
+		handOver: 'Céder la racine à Pages',
+		updated: 'Type de contenu Pages mis à jour.',
+		answers: 'Le type Pages répondra à la racine.',
+		moves: 'Le type Articles passe à /posts. Toutes les adresses des deux types changent.',
+	},
+]
 
 /**
  * Returns a gate an answer waits behind, and what opens it.
@@ -218,6 +246,44 @@ test('names the type in the title of the Describe dialog', async () => {
 	expect(await screen.findByRole('dialog', { name: 'Describe Posts' })).toBeInTheDocument()
 })
 
+test('names the built-in types in the words of WordPress es_ES for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/content-types')
+
+	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+
+	expect(within(table).getByText('Entradas')).toBeInTheDocument()
+	expect(within(table).getByText('Páginas')).toBeInTheDocument()
+	expect(within(table).queryByText('Posts')).not.toBeInTheDocument()
+})
+
+test('names a type a plugin declared under a built-in key as the plugin named it to a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, origin: 'shop' }] })))
+	renderAt('/content-types')
+
+	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+
+	expect(within(table).getByText('Entradas')).toBeInTheDocument()
+	expect(within(table).getByText('Pages')).toBeInTheDocument()
+	expect(within(table).queryByText('Páginas')).not.toBeInTheDocument()
+})
+
+test('names a built-in type in the Describe title in Spanish and leaves the stored description to edit', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/content-types')
+	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+
+	const pages = within(table).getByRole('row', { name: /Páginas/ })
+	await userEvent.click(within(pages).getByRole('button', { name: 'Describir' }))
+	const dialog = await screen.findByRole('dialog', { name: 'Describir Páginas' })
+
+	expect(within(dialog).getByLabelText('Descripción')).toHaveValue('Manage the pages on this site.')
+})
+
 test('explains the description field of the Describe dialog', async () => {
 	renderAt('/content-types')
 	const table = await screen.findByRole('region', { name: 'Content Types' })
@@ -378,6 +444,19 @@ test('closes a type without removing it', async () => {
 	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
 
 	await waitFor(() => expect(sent[0]).toEqual({ active: false }))
+})
+
+test.each(READERS)('names a built-in type in the toast of an edit by its kind for a $locale reader', async (reader) => {
+	setLocaleData(await catalogFor(reader.locale), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	server.use(http.patch('/api/types/page', () => HttpResponse.json({ ...PAGE_TYPE, active: false })))
+	renderAt('/content-types')
+	const table = await screen.findByRole('region', { name: reader.region })
+
+	const pages = within(table).getByRole('row', { name: reader.pages })
+	await userEvent.click(within(pages).getByRole('button', { name: reader.deactivate }))
+
+	expect(await screen.findByText(reader.updated, { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
 test('names the plugin that declared a type and keeps its shape out of reach', async () => {
@@ -1329,6 +1408,23 @@ test('states what the root hand over moves before moving it', async () => {
 
 	await waitFor(() => expect(sent[0]).toEqual({ default: true }))
 })
+
+test.each(READERS)(
+	'names the built-in types of the root hand over by kind for a $locale reader, the address from the stored name',
+	async (reader) => {
+		setLocaleData(await catalogFor(reader.locale), 'gophenberg')
+		onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+		renderAt('/content-types')
+		const table = await screen.findByRole('region', { name: reader.region })
+
+		const pages = within(table).getByRole('row', { name: reader.pages })
+		await userEvent.click(within(pages).getByRole('button', { name: reader.makeDefault }))
+		const dialog = await screen.findByRole('dialog', { name: reader.handOver })
+
+		expect(within(dialog).getByText(reader.answers)).toBeInTheDocument()
+		expect(within(dialog).getByText(reader.moves)).toBeInTheDocument()
+	},
+)
 
 test('hands over nothing when the root confirmation is dismissed', async () => {
 	const sent: unknown[] = []

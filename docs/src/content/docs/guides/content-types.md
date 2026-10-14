@@ -19,8 +19,14 @@ route word, so Guides answer under `/guides`.
 
 The **Description** is optional. Write one sentence about what the
 type holds, like "Every guide this site keeps." Gophenberg stores it
-exactly as you typed it. Like the two names, it is never translated.
-Posts start with "Manage the posts on this site."
+exactly as you typed it. Posts start with "Manage the posts on this
+site."
+
+The names and descriptions Gophenberg gives its own types, like Posts,
+show in the language you read the admin in while they still hold the
+English Gophenberg gave them. Once someone changes one, it shows as
+typed, like anything else you write here. A type a plugin declared
+always shows the words its plugin gives it.
 
 The description shows under the title of the type's list. A type
 with no description shows a sentence of the admin's own there

@@ -3,9 +3,11 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { groupsQueryKey } from '../content/groups'
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 
 const POST_TYPE = {
@@ -828,6 +830,21 @@ test('declares a relation field pointing at the type and holding what was picked
 			required: true,
 		}),
 	)
+})
+
+test('offers a built-in type as a relation target in the words of WordPress es_ES for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/field-groups')
+	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
+	const row = within(table).getByRole('row', { name: /Article details/ })
+	await userEvent.click(within(row).getByRole('button', { name: 'Campos' }))
+	const dialog = await screen.findByRole('dialog')
+
+	await userEvent.click(within(dialog).getByLabelText('Tipo'))
+	await userEvent.click(await screen.findByRole('option', { name: 'Relación' }))
+
+	expect(within(dialog).getByLabelText('Apunta a')).toHaveTextContent('Entradas')
 })
 
 test('declares a plain field while the content types are still out of reach', async () => {

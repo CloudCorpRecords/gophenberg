@@ -18,6 +18,7 @@ import { Link } from '@tanstack/react-router'
 import { DocumentBar } from './DocumentBar'
 import { PREVIEW_WIDTHS, previewItem } from './editorSetup'
 import type { PreviewWidth } from './editorSetup'
+import { pluralOf } from './typeText'
 import type { EditorBuffer } from './useEditorBuffer'
 import { useContentType } from './useContentType'
 import type { EditorViews } from './useEditorViews'
@@ -78,7 +79,7 @@ export function EditorHeader(
 		<div className="gophenberg-editor__header">
 			<Stack direction="row" gap="xs" align="center">
 				<IconButton
-					label={sprintf(__('Back to %(type)s', 'gophenberg'), { type: listed.pluralLabel.toLowerCase() })}
+					label={sprintf(__('Back to %(type)s', 'gophenberg'), { type: pluralOf(listed).toLowerCase() })}
 					icon={backIcon}
 					variant="minimal"
 					tone="neutral"

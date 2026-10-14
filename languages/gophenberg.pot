@@ -875,10 +875,19 @@ msgstr ""
 msgid "Make optional"
 msgstr ""
 
+msgid "Manage the categories on this site."
+msgstr ""
+
 msgid "Manage the images and files this site holds."
 msgstr ""
 
 msgid "Manage the items of this content type."
+msgstr ""
+
+msgid "Manage the pages on this site."
+msgstr ""
+
+msgid "Manage the posts on this site."
 msgstr ""
 
 msgid "Many targets"
@@ -1967,10 +1976,6 @@ msgctxt "admin section"
 msgid "Media"
 msgstr ""
 
-msgctxt "breadcrumb root"
-msgid "Post"
-msgstr ""
-
 msgctxt "column"
 msgid "Date"
 msgstr ""
@@ -2071,6 +2076,22 @@ msgctxt "post status"
 msgid "Trash"
 msgstr ""
 
+msgctxt "post type general name"
+msgid "Pages"
+msgstr ""
+
+msgctxt "post type general name"
+msgid "Posts"
+msgstr ""
+
+msgctxt "post type singular name"
+msgid "Page"
+msgstr ""
+
+msgctxt "post type singular name"
+msgid "Post"
+msgstr ""
+
 msgctxt "relation target"
 msgid "None"
 msgstr ""
@@ -2101,6 +2122,14 @@ msgstr ""
 
 msgctxt "status filter"
 msgid "All"
+msgstr ""
+
+msgctxt "taxonomy general name"
+msgid "Categories"
+msgstr ""
+
+msgctxt "taxonomy singular name"
+msgid "Category"
 msgstr ""
 
 msgctxt "theme"

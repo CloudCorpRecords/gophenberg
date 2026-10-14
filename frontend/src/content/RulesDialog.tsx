@@ -21,9 +21,10 @@ import {
 } from './groups'
 import { SourceOfLinks } from './SourceOfLinks'
 import { chosenOf } from './select'
+import { pluralOf } from './typeText'
 import type { BacklinkPick, FieldGroup, Location, LocationRule, RuleSource } from './groups'
 import type { Choice } from './select'
-import type { ContentField } from './types'
+import type { ContentField, ContentType } from './types'
 
 /** A Linked from source the operator picked, with the stamp its field carried when they picked it. */
 interface Touched extends BacklinkPick {
@@ -62,6 +63,34 @@ function sourceLabel(source: string): string {
  */
 function chosen(offered: Choice[], value: string): Choice {
 	return offered.find((held) => held.value === value) ?? { label: value, value }
+}
+
+/**
+ * Returns a type the content type source offers under the plural name the reader reads it by.
+ * @param offered - The type key the server offers and the plural name it carries.
+ * @param types - The registered types, each naming the plugin that declared it.
+ * @returns The choice the value select holds, as the server sent it while the type is not among the registered ones.
+ */
+function namedType(offered: Choice, types: ContentType[]): Choice {
+	const found = types.find((held) => held.key === offered.value)
+	if (found === undefined) {
+		return offered
+	}
+	return { ...offered, label: pluralOf({ key: offered.value, pluralLabel: offered.label, origin: found.origin }) }
+}
+
+/**
+ * Returns the sources the server offers, each type among the values named as the reader reads it.
+ * @param sources - The sources the server offers.
+ * @param types - The registered types, each naming the plugin that declared it.
+ * @returns The sources the selects offer.
+ */
+function namedSources(sources: RuleSource[], types: ContentType[]): RuleSource[] {
+	return sources.map((offered) =>
+		offered.source === typeSource
+			? { ...offered, values: offered.values.map((value) => namedType(value, types)) }
+			: offered,
+	)
 }
 
 /**
@@ -131,12 +160,13 @@ function pointedAnew(
 
 /**
  * Renders the control editing where a group appears.
- * @param props - The group, the groups a relation may stand in, and the reporters.
+ * @param props - The group, the groups a relation may stand in, the registered types, and the reporters.
  * @returns The control and its dialog.
  */
 export function RulesDialog(props: {
 	held: FieldGroup
 	groups: FieldGroup[]
+	types: ContentType[]
 	onDone: (said: string) => void
 	onRefused: (cause: unknown) => void
 }) {
@@ -197,7 +227,7 @@ export function RulesDialog(props: {
 							{notice !== '' && <ErrorNotice>{notice}</ErrorNotice>}
 							<RulesBody
 								draft={draft}
-								sources={sources.data ?? []}
+								sources={namedSources(sources.data ?? [], props.types)}
 								failed={sources.isError}
 								onDraft={setDraft}
 							/>

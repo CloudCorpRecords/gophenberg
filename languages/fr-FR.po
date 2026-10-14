@@ -106,7 +106,7 @@ msgstr "%(name)s ne peut pas servir de nom de thème. Nommez le fichier zip comm
 
 #, fuzzy
 msgid "%(name)s moves to /%(word)s. Every address of both types changes."
-msgstr "%(name)s passe à /%(word)s. Toutes les adresses des deux types changent."
+msgstr "Le type %(name)s passe à /%(word)s. Toutes les adresses des deux types changent."
 
 #, fuzzy
 msgid "%(source)s is %(value)s"
@@ -1623,15 +1623,15 @@ msgstr "%(type)s déclaré."
 
 #, fuzzy
 msgid "%(type)s removed."
-msgstr "%(type)s retiré."
+msgstr "Type de contenu %(type)s retiré."
 
 #, fuzzy
 msgid "%(type)s updated."
-msgstr "%(type)s mis à jour."
+msgstr "Type de contenu %(type)s mis à jour."
 
 #, fuzzy
 msgid "%(type)s will answer at the root."
-msgstr "%(type)s répondra à la racine."
+msgstr "Le type %(type)s répondra à la racine."
 
 #, fuzzy
 msgid "Activate %(theme)s"
@@ -1643,7 +1643,7 @@ msgstr "Ajouter %(type)s"
 
 #, fuzzy
 msgid "Back to %(type)s"
-msgstr "Retour à %(type)s"
+msgstr "Retour aux %(type)s"
 
 #, fuzzy
 msgid "Change the address of %(type)s"
@@ -1770,11 +1770,6 @@ msgstr "État"
 msgctxt "admin section"
 msgid "Media"
 msgstr "Médias"
-
-#, fuzzy
-msgctxt "breadcrumb root"
-msgid "Post"
-msgstr "Article"
 
 #, fuzzy
 msgctxt "column"
@@ -2531,7 +2526,7 @@ msgstr "Gérez les éléments de ce type de contenu."
 
 #, fuzzy
 msgid "Search %(type)s…"
-msgstr "Rechercher %(type)s…"
+msgstr "Rechercher des %(type)s…"
 
 #, fuzzy
 msgid "Pending Review"
@@ -2887,3 +2882,45 @@ msgstr "Gérez les images et les fichiers que ce site contient."
 #, fuzzy
 msgid "There is nothing at this address. Check the link and try again."
 msgstr "Il n'y a rien à cette adresse. Vérifiez le lien et réessayez."
+
+#, fuzzy
+msgctxt "post type singular name"
+msgid "Post"
+msgstr "Article"
+
+#, fuzzy
+msgctxt "post type general name"
+msgid "Posts"
+msgstr "Articles"
+
+#, fuzzy
+msgid "Manage the posts on this site."
+msgstr "Gérez les articles de ce site."
+
+#, fuzzy
+msgctxt "post type singular name"
+msgid "Page"
+msgstr "Page"
+
+#, fuzzy
+msgctxt "post type general name"
+msgid "Pages"
+msgstr "Pages"
+
+#, fuzzy
+msgid "Manage the pages on this site."
+msgstr "Gérez les pages de ce site."
+
+#, fuzzy
+msgctxt "taxonomy singular name"
+msgid "Category"
+msgstr "Catégorie"
+
+#, fuzzy
+msgctxt "taxonomy general name"
+msgid "Categories"
+msgstr "Catégories"
+
+#, fuzzy
+msgid "Manage the categories on this site."
+msgstr "Gérez les catégories de ce site."

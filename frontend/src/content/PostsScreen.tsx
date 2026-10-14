@@ -35,6 +35,7 @@ import {
 import type { OfferedView } from './fields'
 import { typesQueryKey } from './nav'
 import { StatusTabs } from './StatusTabs'
+import { pluralOf, typeText } from './typeText'
 import { listTypes } from './types'
 import type { ContentType } from './types'
 import { useAddNew } from './useAddNew'
@@ -238,7 +239,7 @@ function subtitleOf(listed: ContentType): string {
 	if (listed.description.trim() === '') {
 		return __('Manage the items of this content type.', 'gophenberg')
 	}
-	return listed.description
+	return typeText(listed, 'description', listed.description)
 }
 
 /**
@@ -330,7 +331,7 @@ function PostsTable(props: {
 			)}
 			isLoading={posts.isFetching || props.waiting}
 			getItemId={(post) => post.id}
-			searchLabel={sprintf(__('Search %(type)s…', 'gophenberg'), { type: listed.pluralLabel.toLowerCase() })}
+			searchLabel={sprintf(__('Search %(type)s…', 'gophenberg'), { type: pluralOf(listed).toLowerCase() })}
 		/>
 	)
 }
@@ -373,7 +374,7 @@ export function PostsScreen() {
 	const session = useSession().data
 	return (
 		<Page
-			title={listed.pluralLabel}
+			title={pluralOf(listed)}
 			subtitle={waiting ? undefined : subtitleOf(listed)}
 			actions={
 				<>
@@ -385,7 +386,7 @@ export function PostsScreen() {
 			}
 			tabs={<StatusTabs current={current} />}
 		>
-			<div ref={region} className="godmin-page__list" role="region" aria-label={listed.pluralLabel} tabIndex={-1}>
+			<div ref={region} className="godmin-page__list" role="region" aria-label={pluralOf(listed)} tabIndex={-1}>
 				{failure === undefined ? null : <ErrorNotice>{failure}</ErrorNotice>}
 				<PostsTable
 					listed={listed}

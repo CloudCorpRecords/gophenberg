@@ -3,9 +3,11 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { expect, onTestFinished, test } from 'vitest'
 
 import { chosenDefinitions } from '../content/ImportDefinitions'
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 
 const PLAN = {
@@ -87,6 +89,32 @@ test('shows what a chosen definitions file would change', async () => {
 	expect(
 		screen.getByText('recipe becomes the type the site opens on, and the old one takes an address.'),
 	).toBeInTheDocument()
+})
+
+test('names a built-in type in the plan in the words of WordPress es_ES for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	planning(() =>
+		HttpResponse.json({
+			changes: [
+				{ action: 'update', subject: 'type', key: 'post', label: 'Post' },
+				{ action: 'create', subject: 'field', key: 'post', group: 'links', label: 'Post' },
+				{ action: 'delete', subject: 'type', key: 'page', label: 'Page', reason: 'removed' },
+			],
+			warnings: [],
+		}),
+	)
+	renderAt('/field-groups')
+	await userEvent.click(await screen.findByRole('button', { name: 'Importar definiciones' }))
+
+	await userEvent.upload(
+		screen.getByLabelText('Archivo de definiciones'),
+		new File(['{"format":"1.0.0"}'], 'definitions.json', { type: 'application/json' }),
+	)
+
+	expect(await screen.findByText('Cambiar Entrada')).toBeInTheDocument()
+	expect(screen.getByText('Añadir Post')).toBeInTheDocument()
+	expect(screen.getByRole('checkbox', { name: 'Quitar Página' })).toBeInTheDocument()
 })
 
 test('holds no definitions file when the field holds none at all', () => {

@@ -8,6 +8,7 @@ import { useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 
 import { typesQueryKey } from './nav'
+import { pluralOf } from './typeText'
 import { createType, deleteType, listTypes, updateType } from './types'
 import type { ContentType, NewType, TypeEdit } from './types'
 
@@ -243,14 +244,14 @@ function DeleteType(props: Pick<Reporter, 'onDone'> & { registered: ContentType;
 		}
 		deleted.current = true
 		setOpen(false)
-		await props.onDone(sprintf(__('%(type)s removed.', 'gophenberg'), { type: registered.pluralLabel }))
+		await props.onDone(sprintf(__('%(type)s removed.', 'gophenberg'), { type: pluralOf(registered) }))
 	}
 	return (
 		<AlertDialog.Root open={open} onOpenChange={change} onConfirm={confirm}>
 			<AlertDialog.Trigger render={<Button variant="outline" />}>{__('Delete', 'gophenberg')}</AlertDialog.Trigger>
 			<AlertDialog.Popup
 				intent="irreversible"
-				title={sprintf(__('Delete "%(type)s"?', 'gophenberg'), { type: name(registered.pluralLabel) })}
+				title={sprintf(__('Delete "%(type)s"?', 'gophenberg'), { type: name(pluralOf(registered)) })}
 				description={__('This cannot be undone.', 'gophenberg')}
 				confirmButtonText={__('Delete', 'gophenberg')}
 				cancelButtonText={__('Cancel', 'gophenberg')}
@@ -326,7 +327,7 @@ function useTypeEdit(props: Reporter & { registered: ContentType }, dialog?: Ret
 		scope: { id: `content-type/${props.registered.key}` },
 		onMutate: dialog?.current,
 		onSuccess: async (_stored, _asked, opening) => {
-			await props.onDone(sprintf(__('%(type)s updated.', 'gophenberg'), { type: props.registered.pluralLabel }))
+			await props.onDone(sprintf(__('%(type)s updated.', 'gophenberg'), { type: pluralOf(props.registered) }))
 			dialog?.settle(opening)
 		},
 		onError: (cause, _asked, opening) => {
@@ -377,7 +378,7 @@ function TypeRow(
 		<tr>
 			<td>
 				<Stack direction="column" gap="xs">
-					<Text>{registered.pluralLabel}</Text>
+					<Text>{pluralOf(registered)}</Text>
 					<Text variant="body-sm">{registered.key}</Text>
 				</Stack>
 			</td>
@@ -420,14 +421,14 @@ function HandOverRoot(props: {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>
-							{sprintf(__('Hand the root to %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
+							{sprintf(__('Hand the root to %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
 						</Dialog.Title>
 						<Dialog.CloseIconButton />
 					</Dialog.Header>
 					<Dialog.Content>
 						<Stack direction="column" gap="md">
 							<Text>
-								{sprintf(__('%(type)s will answer at the root.', 'gophenberg'), { type: props.registered.pluralLabel })}
+								{sprintf(__('%(type)s will answer at the root.', 'gophenberg'), { type: pluralOf(props.registered) })}
 							</Text>
 							{holder !== undefined && (
 								<Text>
@@ -436,7 +437,7 @@ function HandOverRoot(props: {
 											'%(name)s moves to /%(word)s. Every address of both types changes.',
 											'gophenberg',
 										),
-										{ name: holder.pluralLabel, word: slugify(holder.pluralLabel) },
+										{ name: pluralOf(holder), word: slugify(holder.pluralLabel) },
 									)}
 								</Text>
 							)}
@@ -477,7 +478,7 @@ function DescribeType(props: Reporter & { registered: ContentType }) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>
-							{sprintf(__('Describe %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
+							{sprintf(__('Describe %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
 						</Dialog.Title>
 						<Dialog.CloseIconButton />
 					</Dialog.Header>
@@ -520,7 +521,7 @@ function ChangeAddress(props: Reporter & { registered: ContentType }) {
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>
-							{sprintf(__('Change the address of %(type)s', 'gophenberg'), { type: props.registered.pluralLabel })}
+							{sprintf(__('Change the address of %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
 						</Dialog.Title>
 						<Dialog.CloseIconButton />
 					</Dialog.Header>

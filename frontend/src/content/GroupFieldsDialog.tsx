@@ -38,6 +38,7 @@ import {
 import { FieldConditions } from './FieldConditions'
 import { SourceOfLinks } from './SourceOfLinks'
 import { chosenOf } from './select'
+import { pluralOf } from './typeText'
 import {
 	holdsFields,
 	holdsRows,
@@ -307,7 +308,7 @@ function AddField(
 	},
 ) {
 	const [kinds] = useState(() => kindsInside(props.parent))
-	const targets = props.types.map((listed) => ({ label: listed.pluralLabel, value: listed.key }))
+	const targets = props.types.map((listed) => ({ label: pluralOf(listed), value: listed.key }))
 	const [presences] = useState<Choice[]>([
 		{ label: __('No', 'gophenberg'), value: 'optional' },
 		{ label: __('Yes', 'gophenberg'), value: 'required' },
