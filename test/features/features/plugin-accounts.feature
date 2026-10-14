@@ -42,25 +42,21 @@ Feature: Plugins read account names
     When the plugin "names" asks for "Maria Perez" and "Unconfirmed Member"
     Then it shows only "Maria Perez"
 
-  @wip
   Scenario: The answer never holds an email address
     Given the site draws avatars from "gravatar"
     When the plugin "names" asks for "Maria Perez" and "Second Author"
     Then the answer holds no email address
 
-  @wip
   Scenario: With initials the site draws the avatar and sends nothing out
     Given the site draws avatars from "initials"
     When the plugin "names" asks for "Maria Perez" at 48 pixels
     Then the avatar of "Maria Perez" is a picture the site drew with the letter "M"
 
-  @wip
   Scenario: With Gravatar the avatar carries a hash of the address at the asked size
     Given the site draws avatars from "gravatar"
     When the plugin "names" asks for "Maria Perez" at 48 pixels
     Then the avatar of "Maria Perez" is the Gravatar of "maria@example.com" at 48 pixels
 
-  @wip
   Scenario: With avatars off the avatar is empty
     Given the site draws avatars from "off"
     When the plugin "names" asks for "Maria Perez"
