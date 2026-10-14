@@ -34,7 +34,7 @@ func TestASiteLendsAnAccountReaderByEmbeddingHostOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("People() error = %v", err)
 	}
-	if got := people[asked]; got.ID != asked || got.Name != "Maria Perez" || got.Avatar != "8" {
+	if got := people[asked]; got != (Person{ID: asked, Name: "Maria Perez", Role: "member", Avatar: "8"}) {
 		t.Errorf("People() = %+v, want the asked account by its id at the asked avatar size", people)
 	}
 }
