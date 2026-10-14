@@ -134,8 +134,8 @@ test('shows a stored rule under the source, condition and value it carries', asy
 test('offers the built-in types as rule values in the words of WordPress es_ES for a Spanish reader', async () => {
 	const rule = await openSpanishValues()
 
-	expect(within(rule).getByLabelText('Valor')).toHaveTextContent('Entradas')
 	expect(await screen.findByRole('option', { name: 'Entradas' })).toBeInTheDocument()
+	expect(within(rule).getByLabelText('Valor')).toHaveTextContent('Entradas')
 	expect(screen.getByRole('option', { name: 'Recipes' })).toBeInTheDocument()
 })
 
