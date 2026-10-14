@@ -5,7 +5,7 @@ import type { Session } from '@gophenberg/frontend-sdk'
 import { DataViews } from '@gophenberg/frontend-sdk/dataviews'
 import type { Action, Field, View } from '@gophenberg/frontend-sdk/dataviews'
 import { __, sprintf } from '@wordpress/i18n'
-import { ErrorNotice, ListEmpty, Page, paginationOf } from '@gopherium/godmin'
+import { ErrorNotice, ListEmpty, Page, paginationOf, useMediaQuery } from '@gopherium/godmin'
 import { openOnTap, useListView } from '@gopherium/godmin/router'
 import type { ListView } from '@gopherium/godmin/router'
 import { useSession } from '@gopherium/react-auth'
@@ -22,7 +22,16 @@ import type { ListRun } from './actions'
 import { listPosts } from './api'
 import type { Post, PostPage, PostQuery } from './api'
 import { EmptyTrash } from './EmptyTrash'
-import { OPENING_SORT, PHONE_COLUMNS, levelOf, narrowedBy, offeredView, openingColumns, postFields } from './fields'
+import {
+	BELOW_HUGE_QUERY,
+	OPENING_SORT,
+	PHONE_COLUMNS,
+	levelOf,
+	narrowedBy,
+	offeredView,
+	openingColumns,
+	postFields,
+} from './fields'
 import type { OfferedView } from './fields'
 import { typesQueryKey } from './nav'
 import { StatusTabs } from './StatusTabs'
@@ -192,8 +201,9 @@ function offeredSize(asked: number | undefined, settings: ListSettings | undefin
 function usePostList(listed: ContentType, status: string) {
 	const settings = useListSettings().data
 	const columns = useMemo(() => postFields(listed), [listed])
+	const roomy = !useMediaQuery(BELOW_HUGE_QUERY)
 	const list = useListView<View>({
-		fields: openingColumns(columns),
+		fields: openingColumns(columns, roomy),
 		phoneFields: PHONE_COLUMNS,
 		titleField: 'title',
 		descriptionField: 'excerpt',
