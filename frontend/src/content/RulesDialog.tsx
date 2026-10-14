@@ -69,11 +69,14 @@ function chosen(offered: Choice[], value: string): Choice {
  * Returns a type the content type source offers under the plural name the reader reads it by.
  * @param offered - The type key the server offers and the plural name it carries.
  * @param types - The registered types, each naming the plugin that declared it.
- * @returns The choice the value select holds.
+ * @returns The choice the value select holds, as the server sent it while the type is not among the registered ones.
  */
 function namedType(offered: Choice, types: ContentType[]): Choice {
-	const origin = types.find((held) => held.key === offered.value)?.origin
-	return { ...offered, label: pluralOf({ key: offered.value, pluralLabel: offered.label, origin }) }
+	const found = types.find((held) => held.key === offered.value)
+	if (found === undefined) {
+		return offered
+	}
+	return { ...offered, label: pluralOf({ key: offered.value, pluralLabel: offered.label, origin: found.origin }) }
 }
 
 /**

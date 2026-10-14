@@ -8,6 +8,7 @@ import { beforeEach, expect, onTestFinished, test } from 'vitest'
 
 import { operatorLabel } from '../content/RulesDialog'
 import { catalogFor } from '../i18n/catalog'
+import { gate } from './gate'
 import { renderAt } from './render'
 
 const POST_TYPE = {
@@ -139,6 +140,35 @@ test('offers a type a plugin declared under a built-in key as a rule value by th
 
 	expect(await screen.findByRole('option', { name: 'Pages' })).toBeInTheDocument()
 	expect(screen.getByRole('option', { name: 'Entradas' })).toBeInTheDocument()
+})
+
+test('names a rule value as the server sent it until the type list says who declared it', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	const declared = { ...RECIPE_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', origin: 'shop' }
+	const [offered] = SOURCES.items
+	const types = gate()
+	server.use(
+		http.get('/api/types', async () => {
+			await types.held
+			return HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, declared] })
+		}),
+		http.get('/api/groups/params', () =>
+			HttpResponse.json({ items: [{ ...offered, values: [...offered.values, { value: 'page', label: 'Pages' }] }] }),
+		),
+	)
+	renderAt('/field-groups')
+
+	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
+	const row = within(table).getByRole('row', { name: /Article details/ })
+	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
+	const dialog = await screen.findByRole('dialog')
+	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
+	await userEvent.click(within(rule).getByLabelText('Valor'))
+
+	expect(await screen.findByRole('option', { name: 'Pages' })).toBeInTheDocument()
+	expect(screen.queryByRole('option', { name: 'Páginas' })).not.toBeInTheDocument()
+	types.release()
 })
 
 test('shows each alternative as its own rule set', async () => {
