@@ -63,6 +63,12 @@ A content type's plural label and its description read as their author
 typed them, in whatever language they typed them, and no catalogue
 reaches them.
 
+The names and descriptions Gophenberg ships for its own types are the
+exception. They go through `frontend/src/content/typeText.ts`, which
+shows the catalogue text while the stored text still equals the shipped
+English and no plugin declared the type. A text Gophenberg ships for a
+new built-in type belongs in that file, never on a screen.
+
 ## When one word means two things
 
 English reuses words that other languages separate. Status means one
