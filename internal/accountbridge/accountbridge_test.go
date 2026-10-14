@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gopherium/gouncer"
+	"github.com/gopherium/gouncer/avatar"
 
 	"github.com/gopherium/gophenberg/internal/accountbridge"
 	"github.com/gopherium/gophenberg/sdk"
@@ -58,6 +60,16 @@ func confirmed(name, email, role string) gouncer.User {
 // sizedAvatar draws an avatar address naming the account's name and the asked size.
 func sizedAvatar(name, _ string, size int) string {
 	return fmt.Sprintf("avatar:%s:%d", name, size)
+}
+
+// emailTrace returns the form of email that text holds, raw or escaped for a query, empty when it holds neither.
+func emailTrace(text, email string) string {
+	for _, form := range []string{email, url.QueryEscape(email)} {
+		if strings.Contains(text, form) {
+			return form
+		}
+	}
+	return ""
 }
 
 // openReader returns a reader over users, opened, drawing avatars with sizedAvatar.
@@ -138,7 +150,7 @@ func TestPeopleReadsARepeatedIDOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("People() error = %v", err)
 	}
-	if len(people) != 1 || len(users.asked) != 1 || len(users.asked[0]) != 1 {
+	if len(people) != 1 || !slices.EqualFunc(users.asked, [][]uuid.UUID{{member.ID}}, slices.Equal[[]uuid.UUID]) {
 		t.Errorf("People() = %+v after reading %v, want one account from one read of one id", people, users.asked)
 	}
 }
@@ -152,8 +164,11 @@ func TestPeopleWithNoIDsReadsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("People() error = %v", err)
 	}
-	if people == nil || len(people) != 0 || len(users.asked) != 0 {
-		t.Errorf("People() = %#v after %d reads, want an empty map and no read", people, len(users.asked))
+	if people == nil || len(people) != 0 {
+		t.Errorf("People() = %#v, want an empty map", people)
+	}
+	if len(users.asked) != 0 {
+		t.Errorf("People() read the store %d times, want no read", len(users.asked))
 	}
 }
 
@@ -234,9 +249,12 @@ func TestPeopleRefusesAnAvatarSizeOutsideTheRange(t *testing.T) {
 	for _, size := range []int{0, -1, 2049} {
 		users := &countedUsers{held: []gouncer.User{member}}
 		people, err := openReader(users).People(context.Background(), []sdk.ID{idOf(member)}, size)
-		if !errors.Is(err, accountbridge.ErrAvatarSize) || people != nil || len(users.asked) != 0 {
-			t.Errorf("People() at %d pixels = %v, %v after %d reads, want ErrAvatarSize before any read",
-				size, people, err, len(users.asked))
+		if !errors.Is(err, accountbridge.ErrAvatarSize) || people != nil {
+			t.Errorf("People() at %d pixels = %v, %v, want no map and ErrAvatarSize", size, people, err)
+		}
+		if len(users.asked) != 0 {
+			t.Errorf("People() at %d pixels read the store %d times, want the size refused before any read",
+				size, len(users.asked))
 		}
 		if err != nil && !strings.Contains(err.Error(), fmt.Sprint(size)) {
 			t.Errorf("People() at %d pixels error = %q, want the refused size named", size, err)
@@ -247,16 +265,28 @@ func TestPeopleRefusesAnAvatarSizeOutsideTheRange(t *testing.T) {
 func TestPeopleNeverPutsAnEmailInTheAnswer(t *testing.T) {
 	t.Parallel()
 
-	member := confirmed("Maria Perez", "maria@example.com", "member")
-	author := confirmed("Second Author", "second@example.com", "author")
+	held := []gouncer.User{
+		confirmed("Maria Perez", "maria@example.com", "member"),
+		confirmed("Second Author", "second@example.com", "author"),
+	}
+	gravatar := avatar.Options{Mode: avatar.ModeGravatar}
+	reader := accountbridge.New(&countedUsers{held: held}, accountbridge.Options{
+		Avatar: func(name, email string, size int) string {
+			return avatar.Address(name, email, size, gravatar)
+		},
+		Timeout: time.Second,
+	})
+	reader.Open()
 
-	people, err := openReader(&countedUsers{held: []gouncer.User{member, author}}).People(
-		context.Background(), []sdk.ID{idOf(member), idOf(author)}, 48)
+	people, err := reader.People(context.Background(), []sdk.ID{idOf(held[0]), idOf(held[1])}, 48)
 	if err != nil {
 		t.Fatalf("People() error = %v", err)
 	}
-	if answer := fmt.Sprintf("%+v", people); strings.Contains(answer, "@") {
-		t.Errorf("People() = %s, want no email address in the answer", answer)
+	answer := fmt.Sprintf("%+v", people)
+	for _, user := range held {
+		if trace := emailTrace(answer, user.Email); trace != "" {
+			t.Errorf("People() = %s, want no trace of %q, found %q", answer, user.Email, trace)
+		}
 	}
 }
 
@@ -268,9 +298,11 @@ func TestPeopleRefusesUntilTheSiteOpensIt(t *testing.T) {
 	reader := accountbridge.New(users, accountbridge.Options{Avatar: sizedAvatar, Timeout: time.Second})
 
 	people, err := reader.People(context.Background(), []sdk.ID{idOf(member)}, 48)
-	if !errors.Is(err, accountbridge.ErrNotOpen) || people != nil || len(users.asked) != 0 {
-		t.Errorf("People() before Open = %v, %v after %d reads, want ErrNotOpen before any read",
-			people, err, len(users.asked))
+	if !errors.Is(err, accountbridge.ErrNotOpen) || people != nil {
+		t.Errorf("People() before Open = %v, %v, want no map and ErrNotOpen", people, err)
+	}
+	if len(users.asked) != 0 {
+		t.Errorf("People() before Open read the store %d times, want no read", len(users.asked))
 	}
 }
 

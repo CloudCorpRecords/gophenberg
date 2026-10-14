@@ -1,0 +1,10 @@
+{
+  "avatars": [
+    {"name": "Ana Lopez", "circle": "#3b59e4", "letter_colour": "#f7ecbd", "letter": "A"},
+    {"name": "Maria Perez", "circle": "#c6396e", "letter_colour": "#ecfaf4", "letter": "M"},
+    {"name": "another@example.com", "circle": "#964c9a", "letter_colour": "#deefdd", "letter": "A"},
+    {"name": "reader@example.com", "circle": "#007017", "letter_colour": "#ffffff", "letter": "R"},
+    {"name": "Luis Garcia", "circle": "#996800", "letter_colour": "#ffffff", "letter": "L"},
+    {"name": "Admin", "circle": "#50575e", "letter_colour": "#ffffff", "letter": "A"}
+  ]
+}
