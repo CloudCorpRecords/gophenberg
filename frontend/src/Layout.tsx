@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { Text } from '@gophenberg/frontend-sdk'
 import { Frame } from '@gopherium/godmin'
 import { __ } from '@wordpress/i18n'
 import { useCanvas, useFrameLocation } from '@gopherium/godmin/router'
@@ -14,7 +15,10 @@ import { RailContent } from './RailContent'
 export function Layout() {
 	return (
 		<Frame.Root location={useFrameLocation()}>
-			<Frame.Rail menuLabel={__('Open navigation', 'gophenberg')}>
+			<Frame.Rail
+				brand={<Text variant="heading-lg">{'Gophenberg'}</Text>}
+				menuLabel={__('Open navigation', 'gophenberg')}
+			>
 				<RailContent />
 			</Frame.Rail>
 			<Frame.Canvas canvas={useCanvas()}>
