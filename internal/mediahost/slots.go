@@ -14,6 +14,10 @@ func (s slots) take(ctx context.Context) error {
 	}
 	select {
 	case s <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			s.give()
+			return err
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

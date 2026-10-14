@@ -87,6 +87,21 @@ func (g gatedDecoder) decode(r io.Reader) (image.Image, string, error) {
 	return image.Decode(r)
 }
 
+// endingContext reports no error on its first check and the ended context's error after it.
+type endingContext struct {
+	context.Context
+	checked bool
+}
+
+// Err answers nil on the first call and the wrapped context's error on every later one.
+func (c *endingContext) Err() error {
+	if !c.checked {
+		c.checked = true
+		return nil
+	}
+	return c.Context.Err()
+}
+
 // gatedQuality answers the quality lookup once the test closes it.
 type gatedQuality chan struct{}
 
@@ -259,6 +274,25 @@ func TestIngestTakesNoFreeSlotOnceTheRequestHasEnded(t *testing.T) {
 	}
 	if decoded := len(decoder.entered); decoded != 0 {
 		t.Errorf("images decoded for an ended request = %d, want none", decoded)
+	}
+}
+
+func TestTakeGivesBackASlotWhenTheRequestEndsAfterItsCheck(t *testing.T) {
+	t.Parallel()
+
+	ended, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range cancelledIngests {
+		gate := make(slots, 1)
+
+		err := gate.take(&endingContext{Context: ended})
+
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("take() for a request that ended after its check error = %v, want %v", err, context.Canceled)
+		}
+		if held := len(gate); held != 0 {
+			t.Fatalf("slots held = %d, want the slot given back", held)
+		}
 	}
 }
 
