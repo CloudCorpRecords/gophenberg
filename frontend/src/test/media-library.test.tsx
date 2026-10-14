@@ -100,7 +100,7 @@ test('counts its pages by the size the server served', async () => {
 	expect(pages.map((page) => page.textContent)).toEqual(['1', '2', '3'])
 })
 
-test('draws a picture from its smallest fitting rendition', async () => {
+test('draws a picture from its smallest fitting sub-size', async () => {
 	renderAt('/media')
 
 	const picture = await screen.findByAltText('Boats at sunrise')

@@ -6,7 +6,7 @@ import { __, sprintf } from '@wordpress/i18n'
 
 import { listMediaByIDs, mediaSrc } from '../media/api'
 import type { MediaItem } from '../media/api'
-import { bestRendition } from '../media/format'
+import { bestSubSizeFile } from '../media/format'
 import { MediaLibraryPicker } from '../media/MediaLibraryPicker'
 import { FieldLabel } from './FieldLabel'
 import type { ContentField } from './types'
@@ -110,7 +110,7 @@ function GalleryPreview(props: { id: number; item: MediaItem | undefined; name: 
 		<>
 			<img
 				className="gophenberg-editor__gallery-preview"
-				src={mediaSrc(bestRendition(props.item, previewWidth))}
+				src={mediaSrc(bestSubSizeFile(props.item, previewWidth))}
 				alt={props.item.altText === '' ? props.name : props.item.altText}
 				loading="lazy"
 			/>
