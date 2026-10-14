@@ -5,8 +5,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/gopherium/gouncer"
 	"github.com/gopherium/gouncer/authkit"
+	"github.com/gopherium/gouncer/avatar"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/served"
@@ -29,20 +33,30 @@ var countedStatuses = []content.Status{
 	content.StatusTrash,
 }
 
+// authorCellAvatar is the avatar size the admin's author cell asks for, twice the 16 pixels it draws.
+const authorCellAvatar = 32
+
 type contentResponse struct {
-	ID          uuid.UUID  `json:"id"`
-	Type        string     `json:"type"`
-	ParentID    *uuid.UUID `json:"parent_id"`
-	Path        string     `json:"path"`
-	Slug        string     `json:"slug"`
-	Title       string     `json:"title"`
-	Excerpt     string     `json:"excerpt"`
-	Status      string     `json:"status"`
-	AuthorID    uuid.UUID  `json:"author_id"`
-	AuthorName  string     `json:"author_name"`
-	PublishedAt *time.Time `json:"published_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID           uuid.UUID  `json:"id"`
+	Type         string     `json:"type"`
+	ParentID     *uuid.UUID `json:"parent_id"`
+	Path         string     `json:"path"`
+	Slug         string     `json:"slug"`
+	Title        string     `json:"title"`
+	Excerpt      string     `json:"excerpt"`
+	Status       string     `json:"status"`
+	AuthorID     uuid.UUID  `json:"author_id"`
+	AuthorName   string     `json:"author_name"`
+	AuthorAvatar string     `json:"author_avatar"`
+	PublishedAt  *time.Time `json:"published_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// author is who wrote an item as the admin shows them: the display name and the avatar address.
+type author struct {
+	name   string
+	avatar string
 }
 
 type contentDetailResponse struct {
@@ -65,27 +79,28 @@ type contentListResponse struct {
 	PerPage int          `json:"per_page"`
 }
 
-// newContentResponse builds a contentResponse from an item, normalizing timestamps to UTC.
-func newContentResponse(c content.Content, authorName string) contentResponse {
+// newContentResponse builds a contentResponse from an item and its author, normalizing timestamps to UTC.
+func newContentResponse(c content.Content, writer author) contentResponse {
 	published := c.PublishedAt
 	if published != nil {
 		utc := published.UTC()
 		published = &utc
 	}
 	return contentResponse{
-		ID:          c.ID,
-		Type:        c.Type,
-		ParentID:    c.ParentID,
-		Path:        c.Path,
-		Slug:        c.Slug,
-		Title:       c.Title,
-		Excerpt:     c.Excerpt,
-		Status:      string(c.Status),
-		AuthorID:    c.AuthorID,
-		AuthorName:  authorName,
-		PublishedAt: published,
-		CreatedAt:   c.CreatedAt.UTC(),
-		UpdatedAt:   c.UpdatedAt.UTC(),
+		ID:           c.ID,
+		Type:         c.Type,
+		ParentID:     c.ParentID,
+		Path:         c.Path,
+		Slug:         c.Slug,
+		Title:        c.Title,
+		Excerpt:      c.Excerpt,
+		Status:       string(c.Status),
+		AuthorID:     c.AuthorID,
+		AuthorName:   writer.name,
+		AuthorAvatar: writer.avatar,
+		PublishedAt:  published,
+		CreatedAt:    c.CreatedAt.UTC(),
+		UpdatedAt:    c.UpdatedAt.UTC(),
 	}
 }
 
@@ -100,6 +115,51 @@ func (s *server) authorNames(ctx context.Context) (map[uuid.UUID]string, error) 
 		names[u.ID] = u.Name
 	}
 	return names, nil
+}
+
+// authorOf returns the author of one item with the avatar the author cell draws, from one read of every account.
+func (s *server) authorOf(ctx context.Context, id uuid.UUID) (author, error) {
+	users, err := s.users.ListUsers(ctx)
+	if err != nil {
+		return author{}, fmt.Errorf("server: list authors: %w", err)
+	}
+	var writer gouncer.User
+	if at := slices.IndexFunc(users, func(u gouncer.User) bool { return u.ID == id }); at >= 0 {
+		writer = users[at]
+	}
+	return author{
+		name:   writer.Name,
+		avatar: avatar.Address(writer.Name, writer.Email, authorCellAvatar, s.avatars),
+	}, nil
+}
+
+// authorsOf returns each named author of a listing with the avatar the author cell draws, keyed by id.
+func (s *server) authorsOf(ctx context.Context, names map[uuid.UUID]string) (map[uuid.UUID]author, error) {
+	emails, err := s.authorEmails(ctx, names)
+	if err != nil {
+		return nil, err
+	}
+	authors := make(map[uuid.UUID]author, len(names))
+	for id, name := range names {
+		authors[id] = author{name: name, avatar: avatar.Address(name, emails[id], authorCellAvatar, s.avatars)}
+	}
+	return authors, nil
+}
+
+// authorEmails returns the email of each named author in one read when Gravatar draws the avatars, none otherwise.
+func (s *server) authorEmails(ctx context.Context, names map[uuid.UUID]string) (map[uuid.UUID]string, error) {
+	emails := make(map[uuid.UUID]string, len(names))
+	if s.avatars.Mode != avatar.ModeGravatar {
+		return emails, nil
+	}
+	users, err := s.users.UsersByIDs(ctx, slices.Collect(maps.Keys(names)))
+	if err != nil {
+		return nil, fmt.Errorf("server: read author emails: %w", err)
+	}
+	for _, user := range users {
+		emails[user.ID] = user.Email
+	}
+	return emails, nil
 }
 
 // parseAdminContentFilter reads the list query parameters into a filter over the given type.
@@ -278,16 +338,36 @@ func (s *server) handleContentList() http.HandlerFunc {
 			respondDomainError(w, err)
 			return
 		}
-		items := make([]contentRow, len(rows))
-		for i, c := range rows {
-			items[i] = contentRow{
-				contentResponse: newContentResponse(c.Content, c.AuthorName),
-				ParentTitle:     c.ParentTitle,
-				Fields:          content.ListedValues(contentType.Fields, c.Fields),
-			}
+		items, err := s.listedRows(r.Context(), rows, contentType.Fields)
+		if err != nil {
+			respondDomainError(w, err)
+			return
 		}
 		authkit.Respond(w, http.StatusOK, contentListResponse{Items: items, Total: total, PerPage: filter.PerPage})
 	}
+}
+
+// listedRows returns the rows of a listing as the admin reads them, each author with the avatar the cell draws.
+func (s *server) listedRows(
+	ctx context.Context, rows []content.ListedItem, fields []content.Field,
+) ([]contentRow, error) {
+	names := make(map[uuid.UUID]string, len(rows))
+	for _, c := range rows {
+		names[c.AuthorID] = c.AuthorName
+	}
+	authors, err := s.authorsOf(ctx, names)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]contentRow, len(rows))
+	for i, c := range rows {
+		items[i] = contentRow{
+			contentResponse: newContentResponse(c.Content, authors[c.AuthorID]),
+			ParentTitle:     c.ParentTitle,
+			Fields:          content.ListedValues(fields, c.Fields),
+		}
+	}
+	return items, nil
 }
 
 // handleContentGet returns an http.HandlerFunc responding with one item and its content.
@@ -344,7 +424,7 @@ func (s *server) respondWritten(w http.ResponseWriter, r *http.Request, status i
 func (s *server) answerContent(
 	w http.ResponseWriter, r *http.Request, status int, c content.Content, refusing bool,
 ) {
-	names, err := s.authorNames(r.Context())
+	writer, err := s.authorOf(r.Context(), c.AuthorID)
 	if err != nil {
 		respondDomainError(w, err)
 		return
@@ -361,7 +441,7 @@ func (s *server) answerContent(
 		return
 	}
 	authkit.Respond(w, status, contentDetailResponse{
-		contentResponse: newContentResponse(c, names[c.AuthorID]),
+		contentResponse: newContentResponse(c, writer),
 		Content:         c.Content,
 		Fields:          values,
 		FieldTotals:     totals,
