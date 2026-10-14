@@ -146,7 +146,7 @@ func TestFileOfAddressesTheStoredFileAndItsSizes(t *testing.T) {
 
 	held := served.FileOf(media.Media{
 		ID: 12, File: "2026/08/sunrise.jpg", Title: "Sunrise", MimeType: "image/jpeg",
-		Sizes: map[string]media.Rendition{
+		Sizes: map[string]media.SubSize{
 			"large": {File: "2026/08/sunrise-1024.jpg", Width: 1024, Height: 576, MimeType: "image/jpeg"},
 		},
 	})
@@ -155,7 +155,7 @@ func TestFileOfAddressesTheStoredFileAndItsSizes(t *testing.T) {
 		t.Errorf("FileOf() = %+v, want the stored file addressed", held)
 	}
 	if held.Sizes["large"].Src != "/media/2026/08/sunrise-1024.jpg" {
-		t.Errorf("sizes = %+v, want each rendition addressed", held.Sizes)
+		t.Errorf("sizes = %+v, want each sub-size addressed", held.Sizes)
 	}
 }
 

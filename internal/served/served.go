@@ -26,8 +26,8 @@ type Pointer struct {
 	Type string `json:"type"`
 }
 
-// Rendition is one stored rendition as a public reader sees it.
-type Rendition struct {
+// SubSize is one stored sub-size of a library file as a public reader sees it.
+type SubSize struct {
 	Src      string `json:"src"`
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
@@ -36,15 +36,15 @@ type Rendition struct {
 
 // File is one library file as a public reader sees it.
 type File struct {
-	ID       int64                `json:"id"`
-	Src      string               `json:"src"`
-	Title    string               `json:"title"`
-	AltText  string               `json:"alt_text"`
-	Caption  string               `json:"caption"`
-	MimeType string               `json:"mime_type"`
-	Width    int                  `json:"width"`
-	Height   int                  `json:"height"`
-	Sizes    map[string]Rendition `json:"sizes"`
+	ID       int64              `json:"id"`
+	Src      string             `json:"src"`
+	Title    string             `json:"title"`
+	AltText  string             `json:"alt_text"`
+	Caption  string             `json:"caption"`
+	MimeType string             `json:"mime_type"`
+	Width    int                `json:"width"`
+	Height   int                `json:"height"`
+	Sizes    map[string]SubSize `json:"sizes"`
 }
 
 // Library reads the stored files a media value names.
@@ -81,9 +81,9 @@ func NamedPointers(held []content.Pointer) []Pointer {
 
 // FileOf returns the public view of one stored file.
 func FileOf(m media.Media) File {
-	sizes := make(map[string]Rendition, len(m.Sizes))
+	sizes := make(map[string]SubSize, len(m.Sizes))
 	for slug, held := range m.Sizes {
-		sizes[slug] = Rendition{
+		sizes[slug] = SubSize{
 			Src:      MediaPrefix + "/" + held.File,
 			Width:    held.Width,
 			Height:   held.Height,
