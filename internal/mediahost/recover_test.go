@@ -16,12 +16,12 @@ import (
 	"github.com/gopherium/gophenberg/internal/mediahost"
 )
 
-// filesOf returns the item's stored file and every rendition file it owns.
+// filesOf returns the item's stored file and every sub-size file it owns.
 func filesOf(m media.Media) []string {
 	files := []string{m.File}
-	for _, r := range m.Sizes {
-		if !slices.Contains(files, r.File) {
-			files = append(files, r.File)
+	for _, subSize := range m.Sizes {
+		if !slices.Contains(files, subSize.File) {
+			files = append(files, subSize.File)
 		}
 	}
 	return files
@@ -147,7 +147,7 @@ func TestRecoverAsksAboutEachItemOnce(t *testing.T) {
 		t.Fatalf("Recover() error = %v, want nil", err)
 	}
 	if len(m.Sizes) == 0 {
-		t.Fatalf("Sizes = %v, want renditions noted beside the item's file", m.Sizes)
+		t.Fatalf("Sizes = %v, want sub-sizes noted beside the item's file", m.Sizes)
 	}
 	if !slices.Equal(asked, []string{m.File}) {
 		t.Errorf("Recover() asked about %v, want the item's own file once", asked)

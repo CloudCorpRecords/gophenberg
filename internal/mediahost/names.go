@@ -10,7 +10,7 @@ import (
 	"unicode"
 )
 
-// lookalikeSuffix matches a stem that could collide with rendition naming.
+// lookalikeSuffix matches a stem that could collide with sub-size naming.
 var lookalikeSuffix = regexp.MustCompile(`-(\d+x\d+|scaled)$`)
 
 // baseName returns name without any leading path, whichever separator wrote it.

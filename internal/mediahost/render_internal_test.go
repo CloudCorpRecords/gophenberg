@@ -37,13 +37,13 @@ func TestEncodeImageReportsWhatItCannotEncode(t *testing.T) {
 	}
 }
 
-func TestRenditionFormatFallsBackWhenNothingDeclaresTransparency(t *testing.T) {
+func TestSubSizeFormatFallsBackWhenNothingDeclaresTransparency(t *testing.T) {
 	t.Parallel()
 
-	held := renditionFormat("webp", plainImage{image.NewRGBA(image.Rect(0, 0, 2, 2))})
+	held := subSizeFormat("webp", plainImage{image.NewRGBA(image.Rect(0, 0, 2, 2))})
 
 	if held != "png" {
-		t.Errorf("renditionFormat() = %q, want png when transparency is unknown", held)
+		t.Errorf("subSizeFormat() = %q, want png when transparency is unknown", held)
 	}
 }
 
@@ -60,11 +60,11 @@ func wantEncodePanic(t *testing.T, call, errorText string) {
 	}
 }
 
-func TestEncodedRenditionPanicsOnAnImageItCannotEncode(t *testing.T) {
+func TestEncodeSubSizePanicsOnAnImageItCannotEncode(t *testing.T) {
 	t.Parallel()
 
-	defer wantEncodePanic(t, "encodedRendition()", "encoding a png rendition")
-	encodedRendition("full", flatImage(bigImageBound*2), "png", DefaultJPEGQuality)
+	defer wantEncodePanic(t, "encodeSubSize()", "encoding a png image")
+	encodeSubSize("full", flatImage(bigImageBound*2), "png", DefaultJPEGQuality)
 }
 
 func TestUprightJPEGPanicsOnAnImageItCannotReEncode(t *testing.T) {
@@ -72,7 +72,7 @@ func TestUprightJPEGPanicsOnAnImageItCannotReEncode(t *testing.T) {
 
 	turned := jpegWithSegment(0xE1, append([]byte("Exif\x00\x00"), tiffBlock(shortEntry(0x0112, 6))...))
 
-	defer wantEncodePanic(t, "uprightJPEG()", "encoding a jpeg rendition")
+	defer wantEncodePanic(t, "uprightJPEG()", "encoding a jpeg image")
 	uprightJPEG(kind{ext: "jpg", mime: "image/jpeg"}, hugeImage(), turned, DefaultJPEGQuality)
 }
 
@@ -89,13 +89,13 @@ func TestWriteExclusiveReportsWhatItCannotOpen(t *testing.T) {
 	}
 }
 
-func TestRenditionFormatKeepsAnOpaqueWebPAsJPEG(t *testing.T) {
+func TestSubSizeFormatKeepsAnOpaqueWebPAsJPEG(t *testing.T) {
 	t.Parallel()
 
-	held := renditionFormat("webp", image.NewGray(image.Rect(0, 0, 2, 2)))
+	held := subSizeFormat("webp", image.NewGray(image.Rect(0, 0, 2, 2)))
 
 	if held != "jpeg" {
-		t.Errorf("renditionFormat() = %q, want jpeg when the image declares itself opaque", held)
+		t.Errorf("subSizeFormat() = %q, want jpeg when the image declares itself opaque", held)
 	}
 }
 

@@ -93,7 +93,7 @@ func wantEmptyDir(t *testing.T, l *mediahost.Library) {
 	}
 }
 
-func TestIngestStoresAPhotoWithRenditions(t *testing.T) {
+func TestIngestStoresAPhotoWithSubSizes(t *testing.T) {
 	t.Parallel()
 
 	library := newLibrary(t)
@@ -123,11 +123,11 @@ func TestIngestStoresAPhotoWithRenditions(t *testing.T) {
 	if m.AuthorID != author {
 		t.Errorf("AuthorID = %v, want the uploader", m.AuthorID)
 	}
-	wantRenditions(t, library, m)
+	wantSubSizes(t, library, m)
 }
 
-// wantRenditions asserts the 2400x1600 photo derived its four renditions.
-func wantRenditions(t *testing.T, library *mediahost.Library, m media.Media) {
+// wantSubSizes asserts the 2400x1600 photo derived its four sub-sizes.
+func wantSubSizes(t *testing.T, library *mediahost.Library, m media.Media) {
 	t.Helper()
 	if len(m.Sizes) != 4 {
 		t.Fatalf("Sizes = %v, want thumbnail, medium, large and full", m.Sizes)
@@ -148,11 +148,11 @@ func wantRenditions(t *testing.T, library *mediahost.Library, m media.Media) {
 	if large := m.Sizes["large"]; large.Width != 1024 || large.Height != 683 {
 		t.Errorf("large measures %dx%d, want 1024x683", large.Width, large.Height)
 	}
-	for slug, rendition := range m.Sizes {
-		if rendition.Filesize <= 0 {
-			t.Errorf("%s carries filesize %d, want it measured", slug, rendition.Filesize)
+	for slug, subSize := range m.Sizes {
+		if subSize.Filesize <= 0 {
+			t.Errorf("%s carries filesize %d, want it measured", slug, subSize.Filesize)
 		}
-		storedBytes(t, library, rendition.File)
+		storedBytes(t, library, subSize.File)
 	}
 }
 
@@ -201,7 +201,7 @@ func TestIngestStoresASidewaysPhotoUpright(t *testing.T) {
 		t.Errorf("the stored file measures %dx%d, want 20x40", cfg.Width, cfg.Height)
 	}
 	if len(m.Sizes) != 1 || m.Sizes["full"].File != m.File {
-		t.Errorf("Sizes = %v, want only a full rendition on a tiny photo", m.Sizes)
+		t.Errorf("Sizes = %v, want only a full sub-size on a tiny photo", m.Sizes)
 	}
 }
 
@@ -217,7 +217,7 @@ func TestIngestKeepsAnimationByStoringTheGIFUntouched(t *testing.T) {
 		t.Errorf("Type = %q, want an animated GIF stored as an image", m.Type)
 	}
 	if len(m.Sizes) != 0 {
-		t.Errorf("Sizes = %v, want no renditions so the animation survives", m.Sizes)
+		t.Errorf("Sizes = %v, want no sub-sizes so the animation survives", m.Sizes)
 	}
 	if m.Width != 10 || m.Height != 10 {
 		t.Errorf("measures %dx%d, want 10x10", m.Width, m.Height)
@@ -227,7 +227,7 @@ func TestIngestKeepsAnimationByStoringTheGIFUntouched(t *testing.T) {
 	}
 }
 
-func TestIngestMakesPNGRenditionsForAStaticGIF(t *testing.T) {
+func TestIngestMakesPNGSubSizesForAStaticGIF(t *testing.T) {
 	t.Parallel()
 
 	library := newLibrary(t)
@@ -245,7 +245,7 @@ func TestIngestMakesPNGRenditionsForAStaticGIF(t *testing.T) {
 		t.Errorf("medium measures %dx%d, want 300x225", medium.Width, medium.Height)
 	}
 	if _, offered := m.Sizes["large"]; offered {
-		t.Errorf("Sizes = %v, want no large rendition below its bound", m.Sizes)
+		t.Errorf("Sizes = %v, want no large sub-size below its bound", m.Sizes)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestIngestAcceptsAWebP(t *testing.T) {
 		t.Errorf("measures %dx%d, want 1x1", m.Width, m.Height)
 	}
 	if len(m.Sizes) != 1 || m.Sizes["full"].File != m.File {
-		t.Errorf("Sizes = %v, want only a full rendition on a tiny image", m.Sizes)
+		t.Errorf("Sizes = %v, want only a full sub-size on a tiny image", m.Sizes)
 	}
 }
 
@@ -303,7 +303,7 @@ func TestIngestUniquifiesTakenNames(t *testing.T) {
 	}
 }
 
-func TestIngestKeepsRenditionsApartAcrossSourceFormats(t *testing.T) {
+func TestIngestKeepsSubSizesApartAcrossSourceFormats(t *testing.T) {
 	t.Parallel()
 
 	library := newLibrary(t)
@@ -318,12 +318,12 @@ func TestIngestKeepsRenditionsApartAcrossSourceFormats(t *testing.T) {
 	if err := library.Remove(fromPNG); err != nil {
 		t.Fatalf("Remove() error = %v, want nil", err)
 	}
-	for _, rendition := range fromGIF.Sizes {
-		storedBytes(t, library, rendition.File)
+	for _, subSize := range fromGIF.Sizes {
+		storedBytes(t, library, subSize.File)
 	}
 }
 
-func TestIngestGuardsRenditionLookalikeNames(t *testing.T) {
+func TestIngestGuardsSubSizeLookalikeNames(t *testing.T) {
 	t.Parallel()
 
 	library := newLibrary(t)
@@ -333,7 +333,7 @@ func TestIngestGuardsRenditionLookalikeNames(t *testing.T) {
 	scaledLike := mustIngest(t, library, "shot-scaled.jpg", photo)
 
 	if filepath.Base(cropLike.File) != "photo-150x150-file.jpg" {
-		t.Errorf("File = %q, want the rendition lookalike suffixed", cropLike.File)
+		t.Errorf("File = %q, want the sub-size lookalike suffixed", cropLike.File)
 	}
 	if filepath.Base(scaledLike.File) != "shot-scaled-file.jpg" {
 		t.Errorf("File = %q, want the scaled lookalike suffixed", scaledLike.File)
@@ -565,7 +565,7 @@ func TestIngestReportsAnUnwritableDirectory(t *testing.T) {
 	}
 }
 
-func TestIngestCleansUpWhenARenditionCannotBeWritten(t *testing.T) {
+func TestIngestCleansUpWhenASubSizeCannotBeWritten(t *testing.T) {
 	t.Parallel()
 
 	library := newLibrary(t)
@@ -578,7 +578,7 @@ func TestIngestCleansUpWhenARenditionCannotBeWritten(t *testing.T) {
 	_, err := library.Ingest(t.Context(), "harbor.jpg", jpegImage(t, 800, 600), uuid.Must(uuid.NewV7()))
 
 	if err == nil {
-		t.Fatal("Ingest() over a blocked rendition path error = nil, want a failure")
+		t.Fatal("Ingest() over a blocked sub-size path error = nil, want a failure")
 	}
 	entries, readErr := os.ReadDir(filepath.Join(library.Dir(), filepath.FromSlash(month)))
 	if readErr != nil {
@@ -715,10 +715,10 @@ func TestRemoveDeletesTheItemsFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(library.Dir(), filepath.FromSlash(m.File))); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the original still exists, want it removed")
 	}
-	for slug, rendition := range m.Sizes {
-		_, err := os.Stat(filepath.Join(library.Dir(), filepath.FromSlash(rendition.File)))
+	for slug, subSize := range m.Sizes {
+		_, err := os.Stat(filepath.Join(library.Dir(), filepath.FromSlash(subSize.File)))
 		if !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("the %s rendition still exists, want it removed", slug)
+			t.Errorf("the %s sub-size still exists, want it removed", slug)
 		}
 	}
 }

@@ -124,7 +124,7 @@ func encodeImage(img image.Image, format string, quality int) ([]byte, error) {
 		err = jpeg.Encode(&buffer, img, &jpeg.Options{Quality: quality})
 	}
 	if err != nil {
-		return nil, fmt.Errorf("encoding a %s rendition: %w", format, err)
+		return nil, fmt.Errorf("encoding a %s image: %w", format, err)
 	}
 	return buffer.Bytes(), nil
 }
@@ -138,8 +138,8 @@ func mustEncode(img image.Image, format string, quality int) []byte {
 	return data
 }
 
-// renditionFormat returns the format renditions of a source format encode in.
-func renditionFormat(ext string, img image.Image) string {
+// subSizeFormat returns the format the sub-sizes of a source format encode in.
+func subSizeFormat(ext string, img image.Image) string {
 	switch ext {
 	case "png", "gif":
 		return "png"
