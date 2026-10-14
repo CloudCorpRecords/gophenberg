@@ -93,7 +93,7 @@ type CreateMediaParams struct {
 	Width       int32
 	Height      int32
 	Filesize    int64
-	Sizes       media.RenditionMap
+	Sizes       media.Sizes
 	AuthorID    uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -269,7 +269,7 @@ type ListMediaRow struct {
 	Width       int32
 	Height      int32
 	Filesize    int64
-	Sizes       media.RenditionMap
+	Sizes       media.Sizes
 	AuthorID    uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

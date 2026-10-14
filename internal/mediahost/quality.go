@@ -4,13 +4,13 @@ package mediahost
 
 import "strconv"
 
-// DefaultJPEGQuality is the quality renditions encode at when nothing else applies.
+// DefaultJPEGQuality is the quality sub-sizes encode at when nothing else applies.
 const DefaultJPEGQuality = 82
 
-// MaxJPEGQuality is the highest quality renditions may encode at.
+// MaxJPEGQuality is the highest quality sub-sizes may encode at.
 const MaxJPEGQuality = 100
 
-// JPEGQualityKey names the stored quality renditions encode at.
+// JPEGQualityKey names the stored quality sub-sizes encode at.
 const JPEGQualityKey = "media.jpeg_quality"
 
 // ParseJPEGQuality returns the quality the text names, or the reason it is not one.

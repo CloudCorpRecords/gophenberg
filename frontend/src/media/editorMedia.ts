@@ -26,7 +26,7 @@ export const ALLOWED_MIME_TYPES: Record<string, string> = {
 	zip: 'application/zip',
 }
 
-// IMAGE_SIZES names the renditions the editor offers, in the server's slugs.
+/** The image sizes the editor offers, in the server's slugs. */
 export const IMAGE_SIZES = [
 	{
 		slug: 'thumbnail',
@@ -87,11 +87,11 @@ export interface EditorMediaUploadArgs {
  */
 export function toAttachment(item: MediaItem): EditorAttachment {
 	const sizes: Record<string, { source_url: string, width: number, height: number }> = {}
-	for (const [slug, rendition] of Object.entries(item.sizes)) {
+	for (const [slug, subSize] of Object.entries(item.sizes)) {
 		sizes[slug] = {
-			source_url: mediaSrc(rendition.file),
-			width: rendition.width,
-			height: rendition.height,
+			source_url: mediaSrc(subSize.file),
+			width: subSize.width,
+			height: subSize.height,
 		}
 	}
 	return {

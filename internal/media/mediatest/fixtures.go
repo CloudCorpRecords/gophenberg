@@ -13,7 +13,7 @@ import (
 // DefaultAuthor is the name the suite gives the account most cases upload as.
 const DefaultAuthor = "Maria Perez"
 
-// MustImage returns an image item measured and carrying two renditions.
+// MustImage returns an image item measured and carrying two sub-sizes.
 func MustImage(t *testing.T, file, title string, author uuid.UUID) media.Media {
 	t.Helper()
 	m, err := media.New(file, title, "image/jpeg", author)
@@ -23,7 +23,7 @@ func MustImage(t *testing.T, file, title string, author uuid.UUID) media.Media {
 	m.Width = 3000
 	m.Height = 2000
 	m.Filesize = 1_500_000
-	m.Sizes = media.RenditionMap{
+	m.Sizes = media.Sizes{
 		"thumbnail": {File: title + "-150x150.jpg", Width: 150, Height: 150, MimeType: "image/jpeg", Filesize: 9_000},
 		"large":     {File: title + "-1024x683.jpg", Width: 1024, Height: 683, MimeType: "image/jpeg", Filesize: 210_000},
 	}

@@ -29,19 +29,19 @@ func libraryEncodingAt(t *testing.T, settings mediahost.Settings) *mediahost.Lib
 	return mediahost.New(mediahost.Config{Dir: t.TempDir(), Settings: settings})
 }
 
-// renditionSizes returns the stored byte size of every rendition the upload produced.
-func renditionSizes(t *testing.T, settings mediahost.Settings, photo []byte) map[string]int64 {
+// subSizeBytes returns the stored byte count of every sub-size the upload produced.
+func subSizeBytes(t *testing.T, settings mediahost.Settings, photo []byte) map[string]int64 {
 	t.Helper()
 	library := libraryEncodingAt(t, settings)
 	held, err := library.Ingest(t.Context(), "harbor.jpg", photo, uuid.Must(uuid.NewV7()))
 	if err != nil {
 		t.Fatalf("Ingest() error = %v, want nil", err)
 	}
-	sizes := map[string]int64{}
+	filesizes := map[string]int64{}
 	for slug, held := range held.Sizes {
-		sizes[slug] = held.Filesize
+		filesizes[slug] = held.Filesize
 	}
-	return sizes
+	return filesizes
 }
 
 func TestIngestEncodesAtTheQualityTheSiteChose(t *testing.T) {
@@ -49,15 +49,15 @@ func TestIngestEncodesAtTheQualityTheSiteChose(t *testing.T) {
 
 	photo := jpegImage(t, 2400, 1600)
 
-	lean := renditionSizes(t, chosenQuality{held: "30", found: true}, photo)
-	rich := renditionSizes(t, nil, photo)
+	lean := subSizeBytes(t, chosenQuality{held: "30", found: true}, photo)
+	rich := subSizeBytes(t, nil, photo)
 
 	for _, slug := range []string{"thumbnail", "medium", "large"} {
 		if lean[slug] == 0 || rich[slug] == 0 {
-			t.Fatalf("the %s rendition was not derived, want it measured at both qualities", slug)
+			t.Fatalf("the %s sub-size was not derived, want it measured at both qualities", slug)
 		}
 		if lean[slug] >= rich[slug] {
-			t.Errorf("the %s rendition is %d bytes at quality 30 and %d at the default, want it smaller",
+			t.Errorf("the %s sub-size is %d bytes at quality 30 and %d at the default, want it smaller",
 				slug, lean[slug], rich[slug])
 		}
 	}
@@ -71,7 +71,7 @@ func TestIngestEncodesAtTheDefaultForAQualityItCannotUse(t *testing.T) {
 	t.Parallel()
 
 	photo := jpegImage(t, 600, 400)
-	rich := renditionSizes(t, nil, photo)
+	rich := subSizeBytes(t, nil, photo)
 
 	for name, settings := range map[string]mediahost.Settings{
 		"a word":                 chosenQuality{held: "best", found: true},
@@ -84,11 +84,11 @@ func TestIngestEncodesAtTheDefaultForAQualityItCannotUse(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			held := renditionSizes(t, settings, photo)
+			held := subSizeBytes(t, settings, photo)
 
-			for slug, size := range held {
-				if size != rich[slug] {
-					t.Errorf("the %s rendition is %d bytes, want the default %d", slug, size, rich[slug])
+			for slug, filesize := range held {
+				if filesize != rich[slug] {
+					t.Errorf("the %s sub-size is %d bytes, want the default %d", slug, filesize, rich[slug])
 				}
 			}
 		})

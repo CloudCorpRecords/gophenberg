@@ -276,7 +276,7 @@ func TestUploadingMediaStoresItAndAnswersTheItem(t *testing.T) {
 		t.Errorf("body = %+v, want the measured photo", body)
 	}
 	if _, offered := body.Sizes["full"]; !offered {
-		t.Errorf("Sizes = %v, want a full rendition", body.Sizes)
+		t.Errorf("Sizes = %v, want a full sub-size", body.Sizes)
 	}
 	if body.AuthorID == "" {
 		t.Error("AuthorID is empty, want the session identity")

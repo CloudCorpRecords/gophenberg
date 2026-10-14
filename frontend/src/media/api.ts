@@ -8,7 +8,7 @@ import { errorText } from '../i18n/errors'
 /** How many identities one request for named files may carry, as the server caps them. */
 const MEDIA_IDS_PER_CALL = 100
 
-const renditionSchema = z.object({
+const subSizeSchema = z.object({
 	file: z.string(),
 	width: z.number(),
 	height: z.number(),
@@ -28,7 +28,7 @@ const mediaSchema = z.object({
 	width: z.number().optional(),
 	height: z.number().optional(),
 	filesize: z.number().optional(),
-	sizes: z.record(z.string(), renditionSchema).optional(),
+	sizes: z.record(z.string(), subSizeSchema).optional(),
 	author_id: z.string().optional(),
 	created_at: z.string().optional(),
 	updated_at: z.string().optional(),
@@ -44,7 +44,7 @@ const errorSchema = z.object({
 	meta: z.record(z.string(), z.unknown()).optional(),
 })
 
-interface Rendition {
+interface MediaSubSize {
 	file: string
 	width: number
 	height: number
@@ -64,7 +64,7 @@ export interface MediaItem {
 	width: number
 	height: number
 	filesize: number
-	sizes: Record<string, Rendition>
+	sizes: Record<string, MediaSubSize>
 	authorId: string
 	createdAt: string
 	updatedAt: string
@@ -99,19 +99,19 @@ export type DescribeOutcome =
 export const mediaQueryKey = ['media']
 
 /**
- * Returns the renditions carried by an API row.
- * @param sizes - The renditions as the API sent them.
- * @returns The renditions in the shape screens use.
+ * Returns the sub-sizes carried by an API row.
+ * @param sizes - The sub-sizes as the API sent them.
+ * @returns The sub-sizes in the shape screens use.
  */
-function toSizes(sizes: z.infer<typeof mediaSchema>['sizes']): Record<string, Rendition> {
-	const mapped: Record<string, Rendition> = {}
-	for (const [slug, size] of Object.entries(sizes ?? {})) {
+function toSizes(sizes: z.infer<typeof mediaSchema>['sizes']): Record<string, MediaSubSize> {
+	const mapped: Record<string, MediaSubSize> = {}
+	for (const [slug, subSize] of Object.entries(sizes ?? {})) {
 		mapped[slug] = {
-			file: size.file,
-			width: size.width,
-			height: size.height,
-			mimeType: size.mime_type,
-			filesize: size.filesize,
+			file: subSize.file,
+			width: subSize.width,
+			height: subSize.height,
+			mimeType: subSize.mime_type,
+			filesize: subSize.filesize,
 		}
 	}
 	return mapped

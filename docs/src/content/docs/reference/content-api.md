@@ -361,7 +361,7 @@ and a list for a Gallery, ready to render:
 ```
 
 `src` is the one address every file carries. `sizes` maps the stored
-renditions for building responsive images, and it can be empty, for
+image sizes for building responsive images, and it can be empty, for
 an animated GIF or a plain file, so never rely on a particular slug.
 A file that was deleted from the library drops out of a list, and a
 field whose only file is gone is absent, so a theme checks presence

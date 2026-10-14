@@ -26,7 +26,7 @@ export type {
 	ContentTypeField,
 	Handshake,
 	LinkValue,
-	MediaRendition,
+	MediaSubSize,
 	MediaValue,
 	Page,
 	Pointer,

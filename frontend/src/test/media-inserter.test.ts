@@ -147,7 +147,7 @@ test('places the scaled display copy of an oversized picture', () => {
 	expect(shaped.url).toBe('/media/2026/08/cliff-scaled.jpg')
 })
 
-test('previews a stored item that carries no rendition from its own file', () => {
+test('previews a stored item that carries no sub-sizes from its own file', () => {
 	const shaped = toInserterItem({
 		id: 8,
 		type: 'video',

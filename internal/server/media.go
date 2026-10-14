@@ -39,14 +39,14 @@ type MediaLibrary interface {
 	Cap() int64
 	// Ingest validates an upload, stores its files, and returns the media item they make.
 	Ingest(ctx context.Context, name string, data []byte, authorID uuid.UUID) (media.Media, error)
-	// Remove deletes the item's stored file and every rendition it owns.
+	// Remove deletes the item's stored file and every sub-size it owns.
 	Remove(m media.Media) error
 	// Finish marks the upload of a saved item finished.
 	Finish(m media.Media)
 }
 
-// renditionView is one derived copy of an image as the admin sees it.
-type renditionView struct {
+// subSizeView is one sub-size as the admin sees it.
+type subSizeView struct {
 	File     string `json:"file"`
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
@@ -56,33 +56,33 @@ type renditionView struct {
 
 // mediaView is one media item as the admin sees it.
 type mediaView struct {
-	ID          int64                    `json:"id"`
-	Type        string                   `json:"type"`
-	File        string                   `json:"file"`
-	Title       string                   `json:"title"`
-	AltText     string                   `json:"alt_text"`
-	Caption     string                   `json:"caption"`
-	Description string                   `json:"description"`
-	MimeType    string                   `json:"mime_type"`
-	Width       int                      `json:"width"`
-	Height      int                      `json:"height"`
-	Filesize    int64                    `json:"filesize"`
-	Sizes       map[string]renditionView `json:"sizes"`
-	AuthorID    string                   `json:"author_id"`
-	CreatedAt   time.Time                `json:"created_at"`
-	UpdatedAt   time.Time                `json:"updated_at"`
+	ID          int64                  `json:"id"`
+	Type        string                 `json:"type"`
+	File        string                 `json:"file"`
+	Title       string                 `json:"title"`
+	AltText     string                 `json:"alt_text"`
+	Caption     string                 `json:"caption"`
+	Description string                 `json:"description"`
+	MimeType    string                 `json:"mime_type"`
+	Width       int                    `json:"width"`
+	Height      int                    `json:"height"`
+	Filesize    int64                  `json:"filesize"`
+	Sizes       map[string]subSizeView `json:"sizes"`
+	AuthorID    string                 `json:"author_id"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 }
 
 // newMediaView maps a media item to the shape the admin API answers.
 func newMediaView(m media.Media) mediaView {
-	sizes := make(map[string]renditionView, len(m.Sizes))
-	for slug, r := range m.Sizes {
-		sizes[slug] = renditionView{
-			File:     r.File,
-			Width:    r.Width,
-			Height:   r.Height,
-			MimeType: r.MimeType,
-			Filesize: r.Filesize,
+	sizes := make(map[string]subSizeView, len(m.Sizes))
+	for slug, subSize := range m.Sizes {
+		sizes[slug] = subSizeView{
+			File:     subSize.File,
+			Width:    subSize.Width,
+			Height:   subSize.Height,
+			MimeType: subSize.MimeType,
+			Filesize: subSize.Filesize,
 		}
 	}
 	return mediaView{

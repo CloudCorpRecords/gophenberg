@@ -1,17 +1,17 @@
 Feature: Uploading media files
   A signed in administrator builds the site's media library by
   uploading files. Every accepted image is stored ready to embed,
-  with upright pixels and the renditions the editor offers.
+  with upright pixels and the image sizes the editor offers.
 
   Background:
     Given a running Gophenberg with an empty media directory
     And a signed in administrator
 
-  Scenario: Uploading a photo derives the editor renditions
+  Scenario: Uploading a photo derives the image sizes the editor offers
     When the administrator uploads a 2400 by 1600 pixel JPEG named "harbor.jpg"
     Then the library lists one image named "harbor"
-    And the image offers the renditions "thumbnail", "medium", "large" and "full"
-    And every rendition fits its bounding box
+    And the image offers the sizes "thumbnail", "medium", "large" and "full"
+    And every size fits its bounding box
 
   Scenario: A sideways phone photo is stored upright
     When the administrator uploads a JPEG carrying orientation tag 6
@@ -20,16 +20,16 @@ Feature: Uploading media files
 
   Scenario: An oversized photo gains a scaled display copy
     When the administrator uploads a 3000 by 2000 pixel JPEG named "cliff.jpg"
-    Then the full rendition is at most 2560 pixels wide
+    Then the full size is at most 2560 pixels wide
     And the original upload is kept on disk
 
   Scenario: An animated GIF keeps its animation
     When the administrator uploads an animated GIF named "loader.gif"
     Then the library lists one image named "loader"
-    And the image offers no renditions
+    And the image offers no sizes
     And the stored file is byte for byte the upload
 
-  Scenario: A plain file is stored without renditions
+  Scenario: A plain file is stored without image sizes
     When the administrator uploads a PDF named "manual.pdf"
     Then the library lists one file named "manual"
     And the stored file is byte for byte the upload

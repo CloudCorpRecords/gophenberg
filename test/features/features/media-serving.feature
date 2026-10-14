@@ -9,7 +9,7 @@ Feature: Serving media files
     When a visitor requests the stored image "harbor"
     Then the file is served with the content type "image/jpeg"
 
-  Scenario: A rendition is served like its original
+  Scenario: An image size is served like its original
     When a visitor requests the thumbnail of "harbor"
     Then the file is served with the content type "image/jpeg"
 

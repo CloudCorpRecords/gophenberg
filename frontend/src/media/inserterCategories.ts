@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n'
 
 import { listMedia, mediaSrc } from './api'
 import type { MediaItem } from './api'
-import { bestRendition, displayFile } from './format'
+import { bestSubSizeFile, displayFile } from './format'
 
 // previewWidth is the width the inserter draws a media preview at.
 const previewWidth = 300
@@ -26,7 +26,7 @@ export function toInserterItem(item: MediaItem): InserterMediaItem {
 		alt: item.altText,
 		caption: item.caption,
 		title: item.title,
-		previewUrl: mediaSrc(bestRendition(item, previewWidth)),
+		previewUrl: mediaSrc(bestSubSizeFile(item, previewWidth)),
 	}
 }
 

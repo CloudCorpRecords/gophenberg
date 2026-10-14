@@ -39,7 +39,7 @@ func storedImage(t *testing.T, store *fakeMediaStore, file, title string) media.
 	m.Description = "Taken from the eastern pier"
 	m.Width = 640
 	m.Height = 480
-	m.Sizes = media.RenditionMap{
+	m.Sizes = media.Sizes{
 		"large": {File: title + "-1024x768.jpg", Width: 1024, Height: 768, MimeType: "image/jpeg"},
 	}
 	created, err := store.Create(t.Context(), m)
@@ -123,7 +123,7 @@ func TestResolveServesTheCoverAsItsFile(t *testing.T) {
 		t.Errorf("served = %+v, want the title, alt text and caption", served)
 	}
 	if _, leaked := served.Sizes["large"]; !leaked {
-		t.Errorf("sizes = %v, want the stored renditions", served.Sizes)
+		t.Errorf("sizes = %v, want the stored sub-sizes", served.Sizes)
 	}
 	var loose map[string]any
 	if err := json.Unmarshal(raw, &loose); err != nil {
@@ -134,7 +134,7 @@ func TestResolveServesTheCoverAsItsFile(t *testing.T) {
 	}
 }
 
-func TestResolveServesTheRenditionAddress(t *testing.T) {
+func TestResolveServesTheSubSizeAddress(t *testing.T) {
 	t.Parallel()
 
 	handler, store := mediaTypedServer(t)
@@ -155,7 +155,7 @@ func TestResolveServesTheRenditionAddress(t *testing.T) {
 	}
 	large := served.Sizes["large"]
 	if large.Src != "/media/Sunrise-1024x768.jpg" || large.Width != 1024 {
-		t.Errorf("large = %+v, want the rendition addressed under the prefix", large)
+		t.Errorf("large = %+v, want the sub-size addressed under the prefix", large)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestResolveLeavesOutTheFieldWhoseMediaIsGone(t *testing.T) {
 	}
 }
 
-func TestResolveServesEmptySizesWhenAFileHasNoRenditions(t *testing.T) {
+func TestResolveServesEmptySizesWhenAFileHasNone(t *testing.T) {
 	t.Parallel()
 
 	handler, store := mediaTypedServer(t)

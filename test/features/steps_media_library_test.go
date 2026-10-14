@@ -39,21 +39,21 @@ const (
 
 // listedMedia is one media item as the admin list reports it.
 type listedMedia struct {
-	ID          int64                 `json:"id"`
-	Type        string                `json:"type"`
-	File        string                `json:"file"`
-	Title       string                `json:"title"`
-	AltText     string                `json:"alt_text"`
-	Caption     string                `json:"caption"`
-	Description string                `json:"description"`
-	Sizes       map[string]listedSize `json:"sizes"`
-	AuthorID    string                `json:"author_id"`
-	AuthorName  string                `json:"author_name"`
-	UpdatedAt   time.Time             `json:"updated_at"`
+	ID          int64                    `json:"id"`
+	Type        string                   `json:"type"`
+	File        string                   `json:"file"`
+	Title       string                   `json:"title"`
+	AltText     string                   `json:"alt_text"`
+	Caption     string                   `json:"caption"`
+	Description string                   `json:"description"`
+	Sizes       map[string]listedSubSize `json:"sizes"`
+	AuthorID    string                   `json:"author_id"`
+	AuthorName  string                   `json:"author_name"`
+	UpdatedAt   time.Time                `json:"updated_at"`
 }
 
-// listedSize is one rendition as the admin list reports it.
-type listedSize struct {
+// listedSubSize is one sub-size as the admin list reports it.
+type listedSubSize struct {
 	File string `json:"file"`
 }
 
@@ -520,16 +520,16 @@ func permanentlyDeletesTheImage(ctx context.Context, name string) error {
 		return err
 	}
 	w.mediaSubject = item.ID
-	w.mediaFilesGone = append([]string{item.File}, renditionFiles(item)...)
+	w.mediaFilesGone = append([]string{item.File}, subSizeFiles(item)...)
 	return w.do(http.MethodDelete, fmt.Sprintf("%s/%d", mediaPath, item.ID), "", nil)
 }
 
-// renditionFiles returns the files the item's renditions live in.
-func renditionFiles(item listedMedia) []string {
+// subSizeFiles returns the files the item's sub-sizes live in.
+func subSizeFiles(item listedMedia) []string {
 	files := make([]string, 0, len(item.Sizes))
-	for _, size := range item.Sizes {
-		if size.File != item.File {
-			files = append(files, size.File)
+	for _, subSize := range item.Sizes {
+		if subSize.File != item.File {
+			files = append(files, subSize.File)
 		}
 	}
 	return files

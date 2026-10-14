@@ -49,23 +49,23 @@ export function mediaName(item: MediaItem): string {
 /**
  * Returns the file a placed media item displays, preferring the display copy.
  * @param item - The media item to place.
- * @returns The full rendition's file, or the stored file without one.
+ * @returns The file of the full sub-size, or the stored file without one.
  */
 export function displayFile(item: MediaItem): string {
 	return item.sizes.full?.file ?? item.file
 }
 
 /**
- * Returns the file of the smallest rendition at least as wide as target.
+ * Returns the file of the smallest sub-size at least as wide as target.
  * @param item - The media item to draw.
  * @param target - The width the caller draws at.
- * @returns The file to load, the stored file when the item carries no renditions.
+ * @returns The file to load, the stored file when the item carries no sub-sizes.
  */
-export function bestRendition(item: MediaItem, target: number): string {
+export function bestSubSizeFile(item: MediaItem, target: number): string {
 	const widths = Object.values(item.sizes).sort((left, right) => left.width - right.width)
 	if (widths.length === 0) {
 		return item.file
 	}
-	const fitting = widths.find((rendition) => rendition.width >= target)
+	const fitting = widths.find((subSize) => subSize.width >= target)
 	return (fitting ?? widths[widths.length - 1]).file
 }

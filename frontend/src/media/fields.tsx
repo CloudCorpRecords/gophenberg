@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { mediaSrc } from './api'
 import { formatDate } from '@gopherium/gottext'
 import type { MediaItem } from './api'
-import { bestRendition, fileSize, imageDimensions, mediaName } from './format'
+import { bestSubSizeFile, fileSize, imageDimensions, mediaName } from './format'
 
 // previewWidth is the width a grid tile draws a picture at.
 const previewWidth = 230
@@ -39,7 +39,7 @@ function ThumbnailCell({ item }: { item: MediaItem }) {
 	return (
 		<img
 			className="gophenberg-media__thumbnail"
-			src={mediaSrc(bestRendition(item, previewWidth))}
+			src={mediaSrc(bestSubSizeFile(item, previewWidth))}
 			alt={item.altText === '' ? mediaName(item) : item.altText}
 			loading="lazy"
 			onError={() => setBroken(true)}

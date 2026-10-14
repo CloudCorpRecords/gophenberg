@@ -21,11 +21,11 @@ import (
 // mediaPath is the admin route uploads arrive over.
 const mediaPath = "/api/media"
 
-// quotedName pulls the quoted rendition names out of a step's list.
+// quotedName pulls the quoted size names out of a step's list.
 var quotedName = regexp.MustCompile(`"([^"]+)"`)
 
-// renditionBounds caps each rendition's dimensions by its slug.
-var renditionBounds = map[string]int{"thumbnail": 150, "medium": 300, "large": 1024, "full": 2560}
+// sizeBounds caps each image size's dimensions by its slug.
+var sizeBounds = map[string]int{"thumbnail": 150, "medium": 300, "large": 1024, "full": 2560}
 
 // uploadsMedia posts data as a media file, remembering the raw upload.
 func uploadsMedia(ctx context.Context, filename string, data []byte) error {
@@ -207,8 +207,8 @@ func theLibraryListsOneFileNamed(ctx context.Context, name string) error {
 	return err
 }
 
-// theImageOffersRenditions asserts the single image carries exactly the named renditions.
-func theImageOffersRenditions(ctx context.Context, names string) error {
+// theImageOffersSubSizes asserts the single image carries exactly the named sub-sizes.
+func theImageOffersSubSizes(ctx context.Context, names string) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func theImageOffersRenditions(ctx context.Context, names string) error {
 	}
 	wanted := quotedName.FindAllStringSubmatch(names, -1)
 	if len(wanted) != len(items[0].Sizes) {
-		return fmt.Errorf("the image offers %v, want %d renditions", items[0].Sizes, len(wanted))
+		return fmt.Errorf("the image offers %v, want %d sub-sizes", items[0].Sizes, len(wanted))
 	}
 	for _, name := range wanted {
 		if _, offered := items[0].Sizes[name[1]]; !offered {
@@ -232,8 +232,8 @@ func theImageOffersRenditions(ctx context.Context, names string) error {
 	return nil
 }
 
-// everyRenditionFitsItsBoundingBox asserts each rendition obeys its slug's bound and exists on disk.
-func everyRenditionFitsItsBoundingBox(ctx context.Context) error {
+// everySubSizeFitsItsBoundingBox asserts each sub-size obeys its slug's bound and exists on disk.
+func everySubSizeFitsItsBoundingBox(ctx context.Context) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -245,27 +245,27 @@ func everyRenditionFitsItsBoundingBox(ctx context.Context) error {
 	if len(items) != 1 {
 		return fmt.Errorf("the library holds %d items, want the uploaded image alone", len(items))
 	}
-	for slug, rendition := range items[0].Sizes {
-		if err := renditionFits(w, slug, rendition); err != nil {
+	for slug, subSize := range items[0].Sizes {
+		if err := subSizeFits(w, slug, subSize); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// renditionFits asserts one rendition obeys its slug's bound and exists on disk.
-func renditionFits(w *world, slug string, rendition media.Rendition) error {
-	bound, known := renditionBounds[slug]
+// subSizeFits asserts one sub-size obeys its slug's bound and exists on disk.
+func subSizeFits(w *world, slug string, subSize media.SubSize) error {
+	bound, known := sizeBounds[slug]
 	if !known {
-		return fmt.Errorf("the image offers a rendition %q no bound is set for", slug)
+		return fmt.Errorf("the image offers a sub-size %q no bound is set for", slug)
 	}
-	if rendition.Width > bound || rendition.Height > bound {
-		return fmt.Errorf("%q measures %dx%d, want it within %d", slug, rendition.Width, rendition.Height, bound)
+	if subSize.Width > bound || subSize.Height > bound {
+		return fmt.Errorf("%q measures %dx%d, want it within %d", slug, subSize.Width, subSize.Height, bound)
 	}
-	if slug == "thumbnail" && (rendition.Width != 150 || rendition.Height != 150) {
-		return fmt.Errorf("the thumbnail measures %dx%d, want an exact 150x150 crop", rendition.Width, rendition.Height)
+	if slug == "thumbnail" && (subSize.Width != 150 || subSize.Height != 150) {
+		return fmt.Errorf("the thumbnail measures %dx%d, want an exact 150x150 crop", subSize.Width, subSize.Height)
 	}
-	if _, err := w.storedBytes(rendition.File); err != nil {
+	if _, err := w.storedBytes(subSize.File); err != nil {
 		return err
 	}
 	return nil
@@ -310,8 +310,8 @@ func theStoredImageCarriesNoOrientationTag(ctx context.Context) error {
 	return nil
 }
 
-// theFullRenditionIsAtMost asserts the display copy is bounded to the given width.
-func theFullRenditionIsAtMost(ctx context.Context, width int) error {
+// theFullSubSizeIsAtMost asserts the display copy is bounded to the given width.
+func theFullSubSizeIsAtMost(ctx context.Context, width int) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -325,10 +325,10 @@ func theFullRenditionIsAtMost(ctx context.Context, width int) error {
 	}
 	full, offered := items[0].Sizes["full"]
 	if !offered {
-		return fmt.Errorf("the image offers %v, want a full rendition", items[0].Sizes)
+		return fmt.Errorf("the image offers %v, want a full sub-size", items[0].Sizes)
 	}
 	if full.Width > width {
-		return fmt.Errorf("the full rendition is %d pixels wide, want at most %d", full.Width, width)
+		return fmt.Errorf("the full sub-size is %d pixels wide, want at most %d", full.Width, width)
 	}
 	return nil
 }
@@ -338,8 +338,8 @@ func theOriginalUploadIsKeptOnDisk(ctx context.Context) error {
 	return theStoredFileIsByteForByte(ctx)
 }
 
-// theImageOffersNoRenditions asserts the single image carries no derived copies.
-func theImageOffersNoRenditions(ctx context.Context) error {
+// theImageOffersNoSubSizes asserts the single image carries no sub-sizes.
+func theImageOffersNoSubSizes(ctx context.Context) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -352,7 +352,7 @@ func theImageOffersNoRenditions(ctx context.Context) error {
 		return fmt.Errorf("the library holds %d items, want the uploaded image alone", len(items))
 	}
 	if len(items[0].Sizes) != 0 {
-		return fmt.Errorf("the image offers %v, want no renditions", items[0].Sizes)
+		return fmt.Errorf("the image offers %v, want no sub-sizes", items[0].Sizes)
 	}
 	return nil
 }
@@ -494,13 +494,13 @@ func initializeMediaUpload(sc *godog.ScenarioContext) {
 	sc.Then(`^the upload is refused explaining (.+)$`, theUploadIsRefused)
 	sc.Then(`^the library lists one image named "([^"]*)"$`, theLibraryListsOneImageNamed)
 	sc.Then(`^the library lists one file named "([^"]*)"$`, theLibraryListsOneFileNamed)
-	sc.Then(`^the image offers the renditions (.+)$`, theImageOffersRenditions)
-	sc.Then(`^every rendition fits its bounding box$`, everyRenditionFitsItsBoundingBox)
+	sc.Then(`^the image offers the sizes (.+)$`, theImageOffersSubSizes)
+	sc.Then(`^every size fits its bounding box$`, everySubSizeFitsItsBoundingBox)
 	sc.Then(`^the stored image is taller than it is wide$`, theStoredImageIsTallerThanWide)
 	sc.Then(`^the stored image carries no orientation tag$`, theStoredImageCarriesNoOrientationTag)
-	sc.Then(`^the full rendition is at most (\d+) pixels wide$`, theFullRenditionIsAtMost)
+	sc.Then(`^the full size is at most (\d+) pixels wide$`, theFullSubSizeIsAtMost)
 	sc.Then(`^the original upload is kept on disk$`, theOriginalUploadIsKeptOnDisk)
-	sc.Then(`^the image offers no renditions$`, theImageOffersNoRenditions)
+	sc.Then(`^the image offers no sizes$`, theImageOffersNoSubSizes)
 	sc.Then(`^the stored file is byte for byte the upload$`, theStoredFileIsByteForByte)
 	sc.Then(`^the library lists two images named "([^"]*)"$`, theLibraryListsTwoImagesNamed)
 	sc.Then(`^their stored files differ$`, theirStoredFilesDiffer)

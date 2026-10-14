@@ -2,7 +2,7 @@
 
 import { expect, test } from 'vitest'
 
-import { bestRendition, fileSize, imageDimensions, mediaName } from '../media/format'
+import { bestSubSizeFile, fileSize, imageDimensions, mediaName } from '../media/format'
 import type { MediaItem } from '../media/api'
 
 /**
@@ -65,7 +65,7 @@ test('names a media item that has no title by its file', () => {
 	expect(mediaName(item({ title: '' }))).toBe('harbor.jpg')
 })
 
-test('picks the rendition closest above the size a grid asks for', () => {
+test('picks the sub-size closest above the width a grid asks for', () => {
 	const sized = item({
 		sizes: {
 			thumbnail: { file: 'a-150.jpg', width: 150, height: 150, mimeType: 'image/jpeg', filesize: 1 },
@@ -74,11 +74,11 @@ test('picks the rendition closest above the size a grid asks for', () => {
 		},
 	})
 
-	expect(bestRendition(sized, 200)).toBe('a-300.jpg')
-	expect(bestRendition(sized, 150)).toBe('a-150.jpg')
+	expect(bestSubSizeFile(sized, 200)).toBe('a-300.jpg')
+	expect(bestSubSizeFile(sized, 150)).toBe('a-150.jpg')
 })
 
-test('falls back to the largest rendition when every one is too small', () => {
+test('falls back to the largest sub-size when every one is too small', () => {
 	const sized = item({
 		sizes: {
 			thumbnail: { file: 'a-150.jpg', width: 150, height: 150, mimeType: 'image/jpeg', filesize: 1 },
@@ -86,9 +86,9 @@ test('falls back to the largest rendition when every one is too small', () => {
 		},
 	})
 
-	expect(bestRendition(sized, 4000)).toBe('a-300.jpg')
+	expect(bestSubSizeFile(sized, 4000)).toBe('a-300.jpg')
 })
 
-test('falls back to the stored file when there are no renditions', () => {
-	expect(bestRendition(item(), 200)).toBe('2026/08/harbor.jpg')
+test('falls back to the stored file when there are no sub-sizes', () => {
+	expect(bestSubSizeFile(item(), 200)).toBe('2026/08/harbor.jpg')
 })

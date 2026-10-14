@@ -17,6 +17,7 @@ import (
 var mediaCases = []Case{
 	{"CreateAndReadBack", createAndReadBack},
 	{"AssignsRisingIdentifiers", assignsRisingIdentifiers},
+	{"NeverHandsOutADeletedIdentityAgain", neverHandsOutADeletedIdentityAgain},
 	{"CreateRefusesAnAuthorWithoutAnAccount", createRefusesAnAuthorWithoutAnAccount},
 	{"ByIDReportsAMissingItem", byIDReportsAMissingItem},
 	{"UpdateEditsDescriptions", updateEditsDescriptions},
@@ -32,10 +33,11 @@ var mediaCases = []Case{
 	{"TouchesOnlyTheNamedItem", touchesOnlyTheNamedItem},
 }
 
-// createAndReadBack reads a created item back with its descriptions, measurements, renditions and author.
+// createAndReadBack reads a created item back with its descriptions, measurements, sub-sizes and author.
 func createAndReadBack(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	m := MustImage(t, "2026/08/harbor.jpg", "harbor", author)
+	m.AltText, m.Caption, m.Description = "Boats at the quay", "The harbor at dawn", "Taken from the pier"
 
 	created := MustCreate(t, s.Media, m)
 
@@ -51,11 +53,15 @@ func createAndReadBack(t *testing.T, s Stores) {
 	if got.Type != media.TypeImage || got.File != m.File || got.Title != m.Title {
 		t.Errorf("ByID() = %+v, want the created item", got)
 	}
+	if got.AltText != m.AltText || got.Caption != m.Caption || got.Description != m.Description {
+		t.Errorf("ByID() = alt %q, caption %q, description %q, want %q, %q and %q",
+			got.AltText, got.Caption, got.Description, m.AltText, m.Caption, m.Description)
+	}
 	if got.MimeType != m.MimeType || got.Width != m.Width || got.Height != m.Height || got.Filesize != m.Filesize {
 		t.Errorf("ByID() measurements = %+v, want the created ones", got)
 	}
 	if !maps.Equal(got.Sizes, m.Sizes) {
-		t.Errorf("Sizes = %v, want the stored renditions", got.Sizes)
+		t.Errorf("Sizes = %v, want the stored sub-sizes", got.Sizes)
 	}
 	if got.AuthorID != author {
 		t.Errorf("AuthorID = %v, want the uploading author", got.AuthorID)
@@ -74,6 +80,23 @@ func assignsRisingIdentifiers(t *testing.T, s Stores) {
 
 	if second.ID <= first.ID {
 		t.Errorf("identifiers = %d then %d, want them rising", first.ID, second.ID)
+	}
+}
+
+// neverHandsOutADeletedIdentityAgain gives a new item a larger identifier than a deleted newest item held.
+func neverHandsOutADeletedIdentityAgain(t *testing.T, s Stores) {
+	author := s.AddAuthor(t, DefaultAuthor)
+	day := func(month time.Month) time.Time { return time.Date(2026, month, 10, 0, 0, 0, 0, time.UTC) }
+	mustCreateMediaAt(t, s.Media, "harbor", author, day(time.March), day(time.March))
+	newest := mustCreateMediaAt(t, s.Media, "cliff", author, day(time.May), day(time.May))
+	if _, err := s.Media.Delete(t.Context(), newest.ID); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
+	}
+
+	next := mustCreateMediaAt(t, s.Media, "pier", author, day(time.July), day(time.July))
+
+	if next.ID <= newest.ID {
+		t.Errorf("ID = %d after deleting %d, want a larger identifier than the deleted item held", next.ID, newest.ID)
 	}
 }
 
@@ -102,7 +125,7 @@ func byIDReportsAMissingItem(t *testing.T, s Stores) {
 	}
 }
 
-// updateEditsDescriptions stores edited descriptions and a later stamp and keeps the file, renditions and upload date.
+// updateEditsDescriptions stores edited descriptions and a later stamp and keeps the file, sub-sizes and upload date.
 func updateEditsDescriptions(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	created := MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author))
@@ -112,7 +135,7 @@ func updateEditsDescriptions(t *testing.T, s Stores) {
 	edited.Caption = "The harbor before the market opens"
 	edited.Description = "Taken from the eastern pier"
 	edited.UpdatedAt = created.UpdatedAt.Add(time.Second)
-	edited.File, edited.Sizes = "2026/08/other.jpg", media.RenditionMap{}
+	edited.File, edited.Sizes = "2026/08/other.jpg", media.Sizes{}
 	edited.CreatedAt = created.CreatedAt.Add(-time.Hour)
 
 	updated, err := s.Media.Update(t.Context(), edited, created.UpdatedAt)
@@ -226,7 +249,7 @@ func savedNamesOnlyTheFilesAStoredItemHolds(t *testing.T, s Stores) {
 	}
 }
 
-// readsSeveralByTheirIdentities reads every item named by its identity with its file, title and renditions.
+// readsSeveralByTheirIdentities reads every item named by its identity with its file, title and sub-sizes.
 func readsSeveralByTheirIdentities(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	first := MustCreate(t, s.Media, MustImage(t, "2026/08/first.jpg", "first", author))
@@ -248,7 +271,7 @@ func readsSeveralByTheirIdentities(t *testing.T, s Stores) {
 		t.Errorf("first = %+v, want the stored file and title read back", byID[first.ID])
 	}
 	if len(byID[second.ID].Sizes) != 2 {
-		t.Errorf("second sizes = %v, want the renditions read back", byID[second.ID].Sizes)
+		t.Errorf("second sizes = %v, want the sub-sizes read back", byID[second.ID].Sizes)
 	}
 }
 

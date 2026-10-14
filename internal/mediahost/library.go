@@ -38,20 +38,20 @@ const maxPixels = 80_000_000
 // bigImageBound is the longest side the full display copy of an image may keep.
 const bigImageBound = 2560
 
-// thumbnailSize is the side of the square thumbnail crop.
-const thumbnailSize = 150
+// thumbnailSide is the side of the square thumbnail crop.
+const thumbnailSide = 150
 
 // maxNameAttempts bounds the suffixes tried when a file name is taken.
 const maxNameAttempts = 10000
 
-// fitBounds lists the derived sizes bounded by their longest side.
+// fitBounds lists the image sizes bounded by their longest side.
 var fitBounds = []struct {
 	slug  string
 	bound int
 }{{"large", 1024}, {"medium", 300}}
 
-// rendition is one derived copy of an image waiting to be written.
-type rendition struct {
+// pendingSubSize is one sub-size encoded and waiting to be written.
+type pendingSubSize struct {
 	slug   string
 	data   []byte
 	width  int
@@ -144,7 +144,7 @@ func (l *Library) quality(ctx context.Context) int {
 	return ResolveJPEGQuality(held, found)
 }
 
-// ingestImage decodes an upload, uprights it, and stores it with its renditions.
+// ingestImage decodes an upload, uprights it, and stores it with its sub-sizes.
 func (l *Library) ingestImage(
 	ctx context.Context, name string, k kind, data []byte, authorID uuid.UUID,
 ) (media.Media, error) {
@@ -161,17 +161,17 @@ func (l *Library) ingestImage(
 			return l.store(name, k, data, cfg.Width, cfg.Height, nil, authorID)
 		}
 	}
-	img, data, renditions, err := l.process(ctx, k, data, l.quality(ctx))
+	img, data, pending, err := l.process(ctx, k, data, l.quality(ctx))
 	if err != nil {
 		return media.Media{}, err
 	}
-	return l.store(name, k, data, img.Bounds().Dx(), img.Bounds().Dy(), renditions, authorID)
+	return l.store(name, k, data, img.Bounds().Dx(), img.Bounds().Dy(), pending, authorID)
 }
 
-// process decodes an upload, uprights it, and derives its renditions while it holds one of the library's slots.
+// process decodes an upload, uprights it, and makes its sub-sizes while it holds one of the library's slots.
 func (l *Library) process(
 	ctx context.Context, k kind, data []byte, quality int,
-) (image.Image, []byte, []rendition, error) {
+) (image.Image, []byte, []pendingSubSize, error) {
 	if err := l.slots.take(ctx); err != nil {
 		return nil, nil, nil, fmt.Errorf("mediahost: wait for an image slot: %w", err)
 	}
@@ -181,7 +181,7 @@ func (l *Library) process(
 		return nil, nil, nil, refuse("image_unreadable", "the image cannot be read", "decoding: %w", err)
 	}
 	img, data = uprightJPEG(k, img, data, quality)
-	return img, data, deriveRenditions(img, k, quality), nil
+	return img, data, makeSubSizes(img, k, quality), nil
 }
 
 // decodeBudget reads the image header and refuses what is too big to decode.
@@ -230,45 +230,45 @@ func uprightJPEG(k kind, img image.Image, data []byte, quality int) (image.Image
 	return upright, mustEncode(upright, "jpeg", quality)
 }
 
-// deriveRenditions returns the derived copies an upright image needs.
-func deriveRenditions(img image.Image, k kind, quality int) []rendition {
-	format := renditionFormat(k.ext, img)
-	out := scaledFull(img, format, quality)
-	out = fitRenditions(out, img, format, quality)
-	return thumbRendition(out, img, format, quality)
+// makeSubSizes returns the sub-sizes an upright image needs.
+func makeSubSizes(img image.Image, k kind, quality int) []pendingSubSize {
+	format := subSizeFormat(k.ext, img)
+	out := scaleFullSubSize(img, format, quality)
+	out = fitSubSizes(out, img, format, quality)
+	return cropThumbnailSubSize(out, img, format, quality)
 }
 
-// scaledFull returns the display copy of an image beyond the big image bound.
-func scaledFull(img image.Image, format string, quality int) []rendition {
-	out := make([]rendition, 0, 4)
+// scaleFullSubSize returns the full sub-size of an image beyond the big image bound, scaled down to it.
+func scaleFullSubSize(img image.Image, format string, quality int) []pendingSubSize {
+	out := make([]pendingSubSize, 0, 4)
 	if img.Bounds().Dx() <= bigImageBound && img.Bounds().Dy() <= bigImageBound {
 		return out
 	}
-	return append(out, encodedRendition("full", resizeFit(img, bigImageBound), format, quality))
+	return append(out, encodeSubSize("full", resizeFit(img, bigImageBound), format, quality))
 }
 
-// fitRenditions appends the renditions bounded by their longest side.
-func fitRenditions(out []rendition, img image.Image, format string, quality int) []rendition {
+// fitSubSizes appends the sub-sizes bounded by their longest side.
+func fitSubSizes(out []pendingSubSize, img image.Image, format string, quality int) []pendingSubSize {
 	for _, size := range fitBounds {
 		if img.Bounds().Dx() <= size.bound && img.Bounds().Dy() <= size.bound {
 			continue
 		}
-		out = append(out, encodedRendition(size.slug, resizeFit(img, size.bound), format, quality))
+		out = append(out, encodeSubSize(size.slug, resizeFit(img, size.bound), format, quality))
 	}
 	return out
 }
 
-// thumbRendition appends the square thumbnail crop of a large enough image.
-func thumbRendition(out []rendition, img image.Image, format string, quality int) []rendition {
-	if img.Bounds().Dx() <= thumbnailSize || img.Bounds().Dy() <= thumbnailSize {
+// cropThumbnailSubSize appends the square thumbnail sub-size of a large enough image.
+func cropThumbnailSubSize(out []pendingSubSize, img image.Image, format string, quality int) []pendingSubSize {
+	if img.Bounds().Dx() <= thumbnailSide || img.Bounds().Dy() <= thumbnailSide {
 		return out
 	}
-	return append(out, encodedRendition("thumbnail", resizeCrop(img, thumbnailSize), format, quality))
+	return append(out, encodeSubSize("thumbnail", resizeCrop(img, thumbnailSide), format, quality))
 }
 
-// encodedRendition returns img encoded as the named rendition.
-func encodedRendition(slug string, img image.Image, format string, quality int) rendition {
-	return rendition{
+// encodeSubSize returns img encoded as the named sub-size.
+func encodeSubSize(slug string, img image.Image, format string, quality int) pendingSubSize {
+	return pendingSubSize{
 		slug:   slug,
 		data:   mustEncode(img, format, quality),
 		width:  img.Bounds().Dx(),
@@ -279,7 +279,7 @@ func encodedRendition(slug string, img image.Image, format string, quality int) 
 
 // store claims a name for the upload, writes its files, and builds the media item.
 func (l *Library) store(
-	name string, k kind, original []byte, width, height int, renditions []rendition, authorID uuid.UUID,
+	name string, k kind, original []byte, width, height int, pending []pendingSubSize, authorID uuid.UUID,
 ) (media.Media, error) {
 	subdir := time.Now().UTC().Format("2006/01")
 	rel, err := l.claim(subdir, stemOf(name), k.ext, original, "")
@@ -292,10 +292,10 @@ func (l *Library) store(
 		return media.Media{}, err
 	}
 	m.Width, m.Height, m.Filesize = width, height, int64(len(original))
-	if renditions == nil {
+	if pending == nil {
 		return m, nil
 	}
-	sizes, written, err := l.writeRenditions(rel, k, original, width, height, renditions)
+	sizes, written, err := l.writeSubSizes(rel, k, original, width, height, pending)
 	if err != nil {
 		l.removeFiles(append(written, rel)...)
 		return media.Media{}, fmt.Errorf("mediahost: store %q: %w", name, err)
@@ -304,41 +304,41 @@ func (l *Library) store(
 	return m, nil
 }
 
-// writeRenditions claims a file for each rendition beside the original and maps them by slug.
-func (l *Library) writeRenditions(
-	rel string, k kind, original []byte, width, height int, renditions []rendition,
-) (media.RenditionMap, []string, error) {
-	sizes := media.RenditionMap{}
+// writeSubSizes claims a file for each sub-size beside the original and maps them by slug.
+func (l *Library) writeSubSizes(
+	rel string, k kind, original []byte, width, height int, pending []pendingSubSize,
+) (media.Sizes, []string, error) {
+	sizes := media.Sizes{}
 	stem := strings.TrimSuffix(path.Base(rel), path.Ext(rel))
-	written := make([]string, 0, len(renditions))
-	for _, r := range renditions {
-		target, err := l.claim(path.Dir(rel), renditionStem(stem, r), formatExt(r.format), r.data, rel)
+	written := make([]string, 0, len(pending))
+	for _, p := range pending {
+		target, err := l.claim(path.Dir(rel), subSizeStem(stem, p), formatExt(p.format), p.data, rel)
 		if err != nil {
 			return nil, written, err
 		}
 		written = append(written, target)
-		sizes[r.slug] = media.Rendition{
+		sizes[p.slug] = media.SubSize{
 			File:     target,
-			Width:    r.width,
-			Height:   r.height,
-			MimeType: formatMime(r.format),
-			Filesize: int64(len(r.data)),
+			Width:    p.width,
+			Height:   p.height,
+			MimeType: formatMime(p.format),
+			Filesize: int64(len(p.data)),
 		}
 	}
 	if _, scaled := sizes["full"]; !scaled {
-		sizes["full"] = media.Rendition{
+		sizes["full"] = media.SubSize{
 			File: rel, Width: width, Height: height, MimeType: k.mime, Filesize: int64(len(original)),
 		}
 	}
 	return sizes, written, nil
 }
 
-// renditionStem returns the stem a rendition of the given stem stores under.
-func renditionStem(stem string, r rendition) string {
-	if r.slug == "full" {
+// subSizeStem returns the stem a sub-size of the given stem stores under.
+func subSizeStem(stem string, p pendingSubSize) string {
+	if p.slug == "full" {
 		return stem + "-scaled"
 	}
-	return fmt.Sprintf("%s-%dx%d", stem, r.width, r.height)
+	return fmt.Sprintf("%s-%dx%d", stem, p.width, p.height)
 }
 
 // claim notes and writes the upload under the first free name from stem, for the item at main or at that name.
@@ -383,7 +383,7 @@ func writeExclusive(target string, data []byte) error {
 	return f.Close()
 }
 
-// Remove deletes the item's stored file and every rendition it owns, with the notes of the ones it deletes.
+// Remove deletes the item's stored file and every sub-size it owns, with the notes of the ones it deletes.
 func (l *Library) Remove(m media.Media) error {
 	var failures []error
 	for _, file := range filesOf(m) {
@@ -394,13 +394,13 @@ func (l *Library) Remove(m media.Media) error {
 	return errors.Join(failures...)
 }
 
-// filesOf returns the item's stored file and every rendition file it owns.
+// filesOf returns the item's stored file and every sub-size file it owns.
 func filesOf(m media.Media) []string {
 	files := make([]string, 0, len(m.Sizes)+1)
 	files = append(files, m.File)
-	for _, r := range m.Sizes {
-		if r.File != m.File {
-			files = append(files, r.File)
+	for _, subSize := range m.Sizes {
+		if subSize.File != m.File {
+			files = append(files, subSize.File)
 		}
 	}
 	return files
