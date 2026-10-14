@@ -283,7 +283,7 @@ func listFiltersByType(t *testing.T, s Stores) {
 	}
 }
 
-// listFiltersByContentTypePrefix keeps the items whose content type starts with any named prefix, each once.
+// listFiltersByContentTypePrefix keeps each item once when its content type starts with a named prefix, matching case.
 func listFiltersByContentTypePrefix(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	MustCreate(t, s.Media, MustImage(t, "2026/08/harbor.jpg", "harbor", author))
@@ -354,6 +354,18 @@ func listFiltersByContentTypePrefix(t *testing.T, s Stores) {
 	if innerTotal != 0 || len(inner) != 0 {
 		t.Errorf("List(mp4) = %d items with total %d, want nothing, as a prefix matches from the start of the type",
 			len(inner), innerTotal)
+	}
+
+	upper, upperTotal, err := s.Media.List(
+		t.Context(), media.Filter{Mimes: []string{"VIDEO"}, Page: 1, PerPage: 10},
+	)
+
+	if err != nil {
+		t.Fatalf("List(VIDEO) error = %v, want nil", err)
+	}
+	if upperTotal != 0 || len(upper) != 0 {
+		t.Errorf("List(VIDEO) = %d items with total %d, want nothing, as a prefix matches in its exact case",
+			len(upper), upperTotal)
 	}
 }
 
@@ -440,6 +452,18 @@ func listTreatsPatternCharactersAsText(t *testing.T, s Stores) {
 	if plainTotal != 1 || len(plain) != 1 {
 		t.Errorf("List(h, image/) = %d items with total %d, want the stored image found", len(plain), plainTotal)
 	}
+
+	patterned := MustImage(t, "2026/08/sale.jpg", `50% off_sale c:\files`, author)
+	patterned.CreatedAt = time.Date(2026, time.August, 10, 0, 0, 0, 0, time.UTC)
+	patterned.UpdatedAt = patterned.CreatedAt
+	MustCreate(t, s.Media, patterned)
+	for _, search := range []string{"50% off_", `c:\files`} {
+		got := narrowedTitles(t, s.Media, media.Filter{Search: search})
+
+		if want := []string{patterned.Title}; !slices.Equal(got, want) {
+			t.Errorf("List(%s) = %q, want %q, with the pattern characters read as text", search, got, want)
+		}
+	}
 }
 
 // listPaginates fills a page to its size, counts every item across pages and lists the remainder on the last page.
@@ -503,10 +527,20 @@ func listSearchesWithoutRegardToCaseBeyondASCII(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	MustCreate(t, s.Media, MustImage(t, "2026/08/pier.jpg", "Café at the pier", author))
 	MustCreate(t, s.Media, MustImage(t, "2026/08/cliff.jpg", "Cliff", author))
+	upperCased := MustImage(t, "2026/08/stand.jpg", "ÉCLAIR stand", author)
+	upperCased.CreatedAt = time.Date(2026, time.August, 10, 0, 0, 0, 0, time.UTC)
+	upperCased.UpdatedAt = upperCased.CreatedAt
+	MustCreate(t, s.Media, upperCased)
 
 	got := narrowedTitles(t, s.Media, media.Filter{Search: "CAFÉ"})
 
 	if want := []string{"Café at the pier"}; !slices.Equal(got, want) {
 		t.Errorf("List(CAFÉ) = %q, want %q, so the search folds only ASCII letters", got, want)
+	}
+
+	lowered := narrowedTitles(t, s.Media, media.Filter{Search: "éclair"})
+
+	if want := []string{upperCased.Title}; !slices.Equal(lowered, want) {
+		t.Errorf("List(éclair) = %q, want %q, so the stored title folds only its ASCII letters", lowered, want)
 	}
 }
