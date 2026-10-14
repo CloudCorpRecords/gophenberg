@@ -397,7 +397,7 @@ test('draws the author icon 4px into a 24px box before the name on a site showin
 	expect(getComputedStyle(icon).getPropertyValue('margin-inline-start')).toBe('-4px')
 })
 
-test('cuts a long author name with an ellipsis across the whole cell, as WordPress does', async () => {
+test('gives the author name the WordPress ellipsis rules and its row the whole cell', async () => {
 	serveRows([PUBLISHED], 1, 20)
 	renderAt('/content/post')
 
