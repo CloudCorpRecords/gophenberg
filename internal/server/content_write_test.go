@@ -5,6 +5,7 @@ package server_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -296,6 +297,24 @@ func TestPostPatchNormalizesAnEditedSlug(t *testing.T) {
 	body := decodeBody[postBody](t, recorder)
 	if body.Slug != "a-new-slug" {
 		t.Errorf("Slug = %q, want it normalized", body.Slug)
+	}
+}
+
+func TestPostPatchKeepsASavedSlugItSendsBack(t *testing.T) {
+	t.Parallel()
+
+	handler, posts, ada := authedPostServer(t)
+	saved := newPost(t, "Original", ada.ID)
+	saved.Path = strings.TrimSuffix(saved.Path, saved.Slug) + "café"
+	saved.Slug = "café"
+	stored := posts.add(saved)
+
+	recorder := doRequest(t, handler, http.MethodPatch, "/api/content/"+stored.ID.String(),
+		versionedBody(t, stored.UpdatedAt, map[string]any{"slug": "café", "title": "Edited"}))
+
+	body := decodeBody[postBody](t, recorder)
+	if body.Slug != "café" || body.Path != stored.Path {
+		t.Errorf("slug, path = %q, %q, want %q, %q", body.Slug, body.Path, "café", stored.Path)
 	}
 }
 

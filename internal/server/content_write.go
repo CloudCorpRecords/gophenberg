@@ -52,7 +52,7 @@ func (req contentPatchRequest) nesting() (*uuid.UUID, bool, error) {
 func (req contentPatchRequest) applyTo(c *content.Content) (changed, contentChanged bool, err error) {
 	contentChanged = req.applySnapshotted(c)
 	changed = contentChanged
-	if req.Slug != nil {
+	if req.Slug != nil && *req.Slug != c.Slug {
 		if slug := content.Slugify(*req.Slug); slug != c.Slug {
 			renamed, err := c.Rename(slug)
 			if err != nil {

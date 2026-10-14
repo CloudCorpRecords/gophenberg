@@ -224,6 +224,29 @@ func TestApplyStandsANewDefaultTypeBesideTheRootTheSiteHas(t *testing.T) {
 	}
 }
 
+func TestApplyGivesATypeBesideTheRootAPlainWordFromAnAccentedLabel(t *testing.T) {
+	t.Parallel()
+
+	registry := planningSite(t)
+	envelope := exported(t, registry)
+	for i := range envelope.Types {
+		if envelope.Types[i].Key == content.TypePost {
+			envelope.Types[i].Default, envelope.Types[i].RouteWord = false, "posts"
+		}
+	}
+	envelope.Types = append(envelope.Types, definitions.TypeDefinition{
+		Key: "resume", SingularLabel: "Résumé", PluralLabel: "Résumés",
+		PageKind: "single", Default: true, Active: true,
+	})
+
+	applied(t, registry, importing(envelope))
+
+	held, err := registry.ByKey(t.Context(), "resume")
+	if err != nil || held.Default || held.RouteWord != "resumes" {
+		t.Errorf("the resume type = %+v, %v, want it beside the root under a plain word", held, err)
+	}
+}
+
 func TestApplyTakesAwayATypeTheAdminConfirmed(t *testing.T) {
 	t.Parallel()
 

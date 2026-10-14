@@ -97,7 +97,7 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 func Slugify(title string) string {
 	var b strings.Builder
 	separated := false
-	for _, r := range strings.ToLower(title) {
+	for _, r := range foldAccents(strings.ToLower(title)) {
 		switch {
 		case r == '\'' || r == '’':
 			continue
