@@ -195,7 +195,7 @@ async function goToEditor(router: Router) {
 async function trashTheListedPost() {
 	await userEvent.click(await screen.findByRole('button', { name: 'Actions' }))
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
-	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Trash' }))
+	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Move to trash' }))
 	await screen.findByText('"Old Notes" moved to the trash.', { selector: '.godmin-toast' })
 }
 

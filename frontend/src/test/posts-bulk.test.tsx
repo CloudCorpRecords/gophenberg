@@ -72,7 +72,7 @@ async function selectBoth() {
 async function trashTheTicked() {
 	await userEvent.click(screen.getByRole('button', { name: 'Trash…' }))
 	const dialog = await screen.findByRole('dialog')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Trash' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
 }
 
 test('trashes every selected post behind one confirm', async () => {
@@ -83,7 +83,7 @@ test('trashes every selected post behind one confirm', async () => {
 	const dialog = await screen.findByRole('dialog')
 	expect(dialog).toHaveTextContent('Move 2 items to the trash?')
 	expect(trashed).toEqual([])
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Trash' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
 
 	await waitFor(() => expect(trashed).toHaveLength(2))
 	expect(trashed).toEqual(expect.arrayContaining([FIRST.id, SECOND.id]))
@@ -161,7 +161,7 @@ test('keeps the tick on a row a run did not reach', async () => {
 
 	await userEvent.click(within(first as HTMLElement).getByRole('button', { name: 'Actions' }))
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
-	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Trash' }))
+	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Move to trash' }))
 
 	await screen.findByText('"Welcome to Gophenberg" moved to the trash.', { selector: '.godmin-toast' })
 	expect(screen.getByRole('checkbox', { name: 'Second Thoughts' })).toBeChecked()
