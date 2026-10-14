@@ -139,6 +139,8 @@ type runConfig struct {
 	mediaUploadCap     int64
 	uploadTimeout      time.Duration
 
+	mediaConcurrentImages int
+
 	definitionsImportCap int64
 	fieldDepth           int
 
@@ -224,7 +226,7 @@ func cachePolicyFrom(settings runConfig) server.CachePolicy {
 	}
 }
 
-// timingsFrom reads the durations, the attempt count and the upload cap the environment names.
+// timingsFrom reads the durations, the attempt count, the caps and the image limit the environment names.
 func timingsFrom(env gonsole.Env) (runConfig, error) {
 	held := runConfig{}
 	for _, asked := range []struct {
@@ -253,8 +255,7 @@ func timingsFrom(env gonsole.Env) (runConfig, error) {
 	if err != nil {
 		return runConfig{}, err
 	}
-	uploadCap, err := env.Count("MEDIA_UPLOAD_CAP_MB", 128, gonsole.AtMost(maxUploadCapMB))
-	if err != nil {
+	if err := mediaLimitsFrom(env, &held); err != nil {
 		return runConfig{}, err
 	}
 	importCap, err := env.Count("DEFINITIONS_IMPORT_CAP_KB", int(server.DefaultDefinitionsImportCap>>10),
@@ -263,7 +264,7 @@ func timingsFrom(env gonsole.Env) (runConfig, error) {
 		return runConfig{}, err
 	}
 	held.themeStartAttempts = attempts
-	held.mediaUploadCap, held.definitionsImportCap = int64(uploadCap)<<20, int64(importCap)<<10
+	held.definitionsImportCap = int64(importCap) << 10
 	if err := cacheWindowsFrom(env, &held); err != nil {
 		return runConfig{}, err
 	}
@@ -273,9 +274,27 @@ func timingsFrom(env gonsole.Env) (runConfig, error) {
 // maxUploadCapMB is the most megabytes an upload cap may name and still be held in bytes.
 const maxUploadCapMB int64 = math.MaxInt64 >> 20
 
+// mediaLimitsFrom reads the upload cap and how many images decode at once into held.
+func mediaLimitsFrom(env gonsole.Env, held *runConfig) error {
+	uploadCap, err := env.Count("MEDIA_UPLOAD_CAP_MB", 128, gonsole.AtMost(maxUploadCapMB))
+	if err != nil {
+		return err
+	}
+	images, err := env.Count("MEDIA_CONCURRENT_IMAGES", mediahost.DefaultConcurrentImages,
+		gonsole.AtMost(mediahost.MaxConcurrentImages))
+	if err != nil {
+		return err
+	}
+	held.mediaUploadCap, held.mediaConcurrentImages = int64(uploadCap)<<20, images
+	return nil
+}
+
 // mediaConfigFrom returns the media library settings the environment named and the site chose.
 func mediaConfigFrom(settings runConfig, store mediahost.Settings) mediahost.Config {
-	return mediahost.Config{Dir: settings.mediaDir, MaxSize: settings.mediaUploadCap, Settings: store}
+	return mediahost.Config{
+		Dir: settings.mediaDir, MaxSize: settings.mediaUploadCap, Settings: store,
+		ConcurrentImages: settings.mediaConcurrentImages,
+	}
 }
 
 // recoveredLibrary returns the media library once it deletes the files of the uploads a stop left unsaved.
