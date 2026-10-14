@@ -34,8 +34,11 @@ so it takes the default.
 | `GOPHENBERG_FIELD_DEPTH` | No | `32` | How many containers a field may stand inside, from 1 to 1000. A Flexible content layout counts as one |
 | `GOPHENBERG_PLUGIN_DB_CONNS` | No | `4` | How many statements, open result sets and transactions each plugin adds to the plugins' database share, from 1 to 1000 |
 | `GOPHENBERG_PLUGIN_DB_RESERVE` | No | `2` | How many of the database pool's connections the plugins' share always leaves to the site, from 1 to 1000. The share holds at most the pool's size less this reserve. The pool's size is the `pool_max_conns` of `GOPHENBERG_DATABASE_URL`, the larger of 4 and the number of CPUs when unset. The server refuses to start when the reserve leaves plugins no connection |
-| `GOPHENBERG_PLUGIN_QUERY_TIMEOUT` | No | `5s` | How long one plugin statement may run, its wait for a slot included |
+| `GOPHENBERG_PLUGIN_QUERY_TIMEOUT` | No | `5s` | How long one plugin statement may run, its wait for a slot included. It also ends a plugin's read of account names |
 | `GOPHENBERG_PLUGIN_TX_TIMEOUT` | No | `30s` | How long one plugin transaction may stay open |
+| `GOPHENBERG_AVATARS` | No | `initials` | How the site draws avatars: `initials`, `gravatar` or `off`, see [avatars](#avatars) |
+| `GOPHENBERG_AVATAR_DEFAULT` | No | `mystery` | The picture Gravatar shows for an email address it does not know: `mystery`, `blank`, `gravatar_default`, `identicon`, `wavatar`, `monsterid`, `retro`, `robohash` or `color`. WordPress's `initials` is refused, see [avatars](#avatars) |
+| `GOPHENBERG_AVATAR_RATING` | No | `G` | The most mature Gravatar picture an avatar may show: `G`, `PG`, `R` or `X` |
 | `GOPHENBERG_LIST_PAGE_SIZES` | No | `10,20,50,100` | The page sizes an admin list offers in its Items per page menu, from 2 to 6 of them, see [the admin lists](#the-admin-lists) |
 | `GOPHENBERG_LIST_PAGE_SIZE` | No | `20` | The page size an admin list opens at, one of the sizes above |
 | `GOPHENBERG_LIST_PAGE_CAP` | No | `100` | The most items one admin list page carries. A request for more gets this many |
@@ -116,6 +119,34 @@ change them. They shape every list the same way:
   WordPress, it writes the date the way WordPress does in the
   reader's language, with a short month in English and Spanish and
   a whole one in French.
+
+## Avatars
+
+An avatar is the small round picture beside a person's name. The
+three avatar settings copy the Avatars part of WordPress's Discussion
+settings. The server reads them when it starts. The author column of
+the admin's content lists follows them, and so does every plugin that
+shows who wrote something.
+
+- **`initials`**, the default, draws the first letter of the name in
+  a coloured circle. The site draws it, so nothing is sent to another
+  service and the browser makes no extra request.
+- **`gravatar`** shows the picture [Gravatar](https://gravatar.com)
+  keeps for the person's email address. The site never sends the
+  address itself, only a hash of it, but Gravatar still learns which
+  of its pictures your visitors load. That is why it is not the
+  default. `GOPHENBERG_AVATAR_DEFAULT` picks the picture Gravatar
+  shows for an address it does not know, and
+  `GOPHENBERG_AVATAR_RATING` the most mature picture it may show.
+  WordPress also offers Initials as the default picture, which asks
+  Gravatar to draw the letters and so sends it up to two letters of
+  the name. Gophenberg leaves that choice out and refuses it, since
+  the `initials` mode draws the same letters on the site.
+- **`off`** shows no avatar. The admin's author column shows the
+  author icon before the name, as WordPress does when Show Avatars
+  is unticked.
+
+The two Gravatar settings change nothing in the other modes.
 
 ## Which theme serves
 
@@ -273,6 +304,9 @@ The server refuses to start, and says why, when:
 - `GOPHENBERG_TOAST_NAME_LENGTH` is not a positive whole number.
 - `GOPHENBERG_FORMAT_LOCALE` is not a language tag such as `es-ES` or
   `en-GB`.
+- `GOPHENBERG_AVATARS`, `GOPHENBERG_AVATAR_DEFAULT` or
+  `GOPHENBERG_AVATAR_RATING` names a value outside its list. The
+  message names the setting and the value.
 - `GOPHENBERG_THEME` pins a theme that fails to load, see
   [installing a theme](/themes/installing-a-theme/). A theme chosen
   in the admin does not stop startup.
