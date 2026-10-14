@@ -23,9 +23,11 @@ test('installs a theme, serves the site through it, and rolls back', async ({ pa
 		page.getByText(`${starterTheme.name} ${starterTheme.version} is serving the public site.`),
 	).toBeVisible()
 
-	await page.getByLabel('Theme archive').setInputFiles(uploadArchive)
-	await page.getByRole('button', { name: 'Install theme' }).click()
+	const chooser = page.waitForEvent('filechooser')
+	await page.getByRole('main').getByRole('button', { name: 'Upload theme' }).click()
+	await (await chooser).setFiles(uploadArchive)
 
+	await expect(page.locator('#root').getByText(`${uploadedTheme.name} was installed.`)).toBeVisible(READY)
 	const installed = page.getByRole('row', { name: new RegExp(uploadedTheme.name) })
 	await expect(installed).toBeVisible(READY)
 	await expect(installed.getByText(uploadedTheme.version)).toBeVisible()
@@ -63,8 +65,7 @@ test('refuses a theme built on a kit this site does not serve', async ({ page })
 
 	await page.goto('/admin/themes')
 
-	await page.getByLabel('Theme archive').setInputFiles(staleArchive)
-	await page.getByRole('button', { name: 'Install theme' }).click()
+	await page.getByLabel('Upload theme').setInputFiles(staleArchive)
 
 	const notice = page.getByRole('alert')
 	await expect(notice).toContainText(builtOn)
@@ -84,12 +85,11 @@ test('refuses a theme built on a kit this site does not serve', async ({ page })
 test('refuses an archive that is not a theme and leaves the site alone', async ({ page }) => {
 	await page.goto('/admin/themes')
 
-	await page.getByLabel('Theme archive').setInputFiles({
+	await page.getByLabel('Upload theme').setInputFiles({
 		name: 'riverbed.zip',
 		mimeType: 'application/zip',
 		buffer: Buffer.from('this is not an archive'),
 	})
-	await page.getByRole('button', { name: 'Install theme' }).click()
 
 	await expect(page.getByRole('alert')).toHaveText(
 		'This file could not be opened as a zip. Package the theme again and upload the new file.',

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Badge, Button, Stack, Text } from '@gophenberg/frontend-sdk'
+import { Badge, Button, Stack, Text, uploadIcon } from '@gophenberg/frontend-sdk'
 import { __, _x, sprintf } from '@wordpress/i18n'
-import { ErrorNotice, LoadingRows, Page, useToaster } from '@gopherium/godmin'
+import { ErrorNotice, FileButton, LoadingRows, Page, useToaster } from '@gopherium/godmin'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -83,15 +83,6 @@ export function rollbackLabel(target: string): string {
 }
 
 /**
- * Returns the archive a file field holds.
- * @param files - What the file field holds.
- * @returns The chosen archive, or null when the field holds none.
- */
-export function chosenArchive(files: FileList | null): File | null {
-	return files?.[0] ?? null
-}
-
-/**
  * Returns the sentence reporting that a theme now serves the public site.
  * @param name - The theme now serving, empty for the built-in renderer.
  * @returns The sentence to report.
@@ -140,10 +131,13 @@ export function ThemesScreen() {
 	const report: Reporter = { done, failed }
 	const listed = themes.data ?? EMPTY_LIST
 	return (
-		<Page title={__('Themes', 'gophenberg')} subtitle={servingLine(themes.data)}>
+		<Page
+			title={__('Themes', 'gophenberg')}
+			subtitle={servingLine(themes.data)}
+			actions={<UploadTheme onOutcome={report} />}
+		>
 			<Stack direction="column" gap="md">
 				{notice !== '' && <ErrorNotice>{notice}</ErrorNotice>}
-				<UploadControl onOutcome={report} />
 				{listed.rollback !== null && (
 					<RollbackControl target={listed.rollback} onOutcome={report} />
 				)}
@@ -226,7 +220,7 @@ function ThemeRow(props: { theme: Theme; onOutcome: Reporter }) {
 			<td>{theme.name}</td>
 			<td>{theme.version}</td>
 			<td>
-				<Stack direction="column" gap="xs">
+				<Stack direction="column" gap="xs" align="flex-start">
 					<ThemeBadge theme={theme} />
 					{theme.broken !== '' && <Text>{theme.broken}</Text>}
 				</Stack>
@@ -254,7 +248,7 @@ function ThemeBadge(props: { theme: Theme }) {
 	if (theme.active) {
 		return <Badge intent="high">{__('Not serving', 'gophenberg')}</Badge>
 	}
-	return <Badge intent="draft">{__('Installed', 'gophenberg')}</Badge>
+	return <Badge intent="none">{__('Installed', 'gophenberg')}</Badge>
 }
 
 /**
@@ -305,12 +299,11 @@ function RollbackControl(props: { target: string; onOutcome: Reporter }) {
 }
 
 /**
- * Renders the control installing a packaged theme archive.
+ * Renders the header control installing a packaged theme archive as soon as the reader picks it.
  * @param props - The outcome reporter.
- * @returns The upload element.
+ * @returns The upload button.
  */
-function UploadControl(props: { onOutcome: Reporter }) {
-	const [archive, setArchive] = useState<File | null>(null)
+function UploadTheme(props: { onOutcome: Reporter }) {
 	const install = useMutation({
 		mutationFn: (chosen: File) => uploadTheme(chosen),
 		onSuccess: (outcome) =>
@@ -319,24 +312,16 @@ function UploadControl(props: { onOutcome: Reporter }) {
 			),
 		onError: props.onOutcome.failed,
 	})
+	const label = __('Upload theme', 'gophenberg')
 	return (
-		<Stack direction="row" gap="sm">
-			<label htmlFor="theme-archive">{__('Theme archive', 'gophenberg')}</label>
-			<input
-				id="theme-archive"
-				type="file"
-				accept=".zip"
-				onChange={(event) => setArchive(chosenArchive(event.target.files))}
-			/>
-			{archive !== null && (
-				<Button
-					disabled={install.isPending}
-					loading={install.isPending}
-					onClick={() => install.mutate(archive)}
-				>
-					{__('Install theme', 'gophenberg')}
-				</Button>
-			)}
-		</Stack>
+		<FileButton
+			accept=".zip"
+			icon={uploadIcon}
+			busy={install.isPending}
+			inputLabel={label}
+			onChoose={([archive]) => install.mutate(archive)}
+		>
+			{label}
+		</FileButton>
 	)
 }
