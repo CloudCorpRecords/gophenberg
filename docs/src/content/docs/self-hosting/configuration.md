@@ -140,8 +140,9 @@ shows who wrote something.
   `GOPHENBERG_AVATAR_RATING` the most mature picture it may show.
   WordPress also offers Initials as the default picture, which asks
   Gravatar to draw the letters and so sends it up to two letters of
-  the name. Gophenberg leaves that choice out and refuses it, since
-  the `initials` mode draws the same letters on the site.
+  the name. Gophenberg leaves that choice out and refuses it, so the
+  name never reaches Gravatar. For letters drawn without Gravatar, use
+  the `initials` mode, which draws the first letter on the site.
 - **`off`** shows no avatar. The admin's author column shows the
   author icon before the name, as WordPress does when Show Avatars
   is unticked.
