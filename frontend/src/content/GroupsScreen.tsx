@@ -36,6 +36,7 @@ import { GroupFieldsDialog } from './GroupFieldsDialog'
 import { ImportDefinitions } from './ImportDefinitions'
 import { PluginFieldsDialog } from './PluginFieldsDialog'
 import { RulesDialog } from './RulesDialog'
+import { pluralOf } from './typeText'
 import { listTypes } from './types'
 import type { FieldGroup, GroupEdit, Location, LocationRule } from './groups'
 import type { ContentType } from './types'
@@ -44,6 +45,7 @@ import type { ContentType } from './types'
 interface NamedType {
 	key: string
 	pluralLabel: string
+	origin?: string
 }
 
 /**
@@ -70,9 +72,10 @@ function ruleSentence(rule: { source: string; operator: string; value: string },
 	if (rule.source !== typeSource) {
 		return sprintf(__('%(source)s is %(value)s', 'gophenberg'), { source: rule.source, value: rule.value })
 	}
+	const found = types.find((held) => held.key === rule.value)
 	const named = rule.value === anyType
 		? __('Every content type', 'gophenberg')
-		: (types.find((held) => held.key === rule.value)?.pluralLabel ?? rule.value)
+		: (found === undefined ? rule.value : pluralOf(found))
 	if (rule.operator === '!=') {
 		return sprintf(__('Not %(type)s', 'gophenberg'), { type: named })
 	}
@@ -166,7 +169,7 @@ function collectOverlaps(
 				winners.set(f.key, held)
 				continue
 			}
-			noteOverlap(noted, found, f.key, winner, held, listed.pluralLabel)
+			noteOverlap(noted, found, f.key, winner, held, pluralOf(listed))
 		}
 	}
 }
@@ -417,6 +420,7 @@ function GroupRow(
 						<RulesDialog
 							held={held}
 							groups={props.groups}
+							types={props.types}
 							onDone={props.onDone}
 							onRefused={props.onRefused}
 						/>
@@ -547,7 +551,8 @@ function ExportDefinitions() {
 function AddGroup(props: Reporter & { types: ContentType[] }) {
 	const [open, setOpen] = useState(false)
 	const [title, setTitle] = useState('')
-	const seeded = props.types[0]?.key ?? ''
+	const firstType = props.types.at(0)
+	const seeded = firstType?.key ?? ''
 	const add = useMutation({
 		mutationFn: () =>
 			createGroup(title, [[{ source: typeSource, operator: '==', value: seeded }]]),
@@ -583,7 +588,7 @@ function AddGroup(props: Reporter & { types: ContentType[] }) {
 							<Text variant="body-sm">
 								{sprintf(
 									__('It starts on %(type)s, and the rules may be edited afterwards.', 'gophenberg'),
-									{ type: props.types[0]?.pluralLabel ?? __('a content type', 'gophenberg') },
+									{ type: firstType === undefined ? __('a content type', 'gophenberg') : pluralOf(firstType) },
 								)}
 							</Text>
 						</Stack>

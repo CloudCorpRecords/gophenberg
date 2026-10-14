@@ -2,10 +2,12 @@
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { act, screen, within } from '@testing-library/react'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { shadowings } from '../content/GroupsScreen'
 import { typesQueryKey } from '../content/nav'
+import { catalogFor } from '../i18n/catalog'
 import { listenAt } from './announcements'
 import { renderAt } from './render'
 import type { Location } from '../content/groups'
@@ -234,4 +236,20 @@ test('names the overlaps a listing carries from its rules alone', () => {
 	expect(
 		shadowings([holding(1, 'First', onPost, ['a', 'b']), holding(2, 'Second', onPost, ['b'])], types),
 	).toEqual([{ key: 'b', winner: 'First', loser: 'Second', loserID: 2, where: ['Posts'] }])
+})
+
+test('names the built-in type an overlap sits on in the words of WordPress es_ES for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	const types = [
+		{ key: 'post', pluralLabel: 'Posts' },
+		{ key: 'recipe', pluralLabel: 'Recipes' },
+	]
+	const anywhere = [[{ source: 'content_type', operator: '==', value: '*' }]]
+	const first = { id: 1, title: 'First', active: true, location: anywhere, fields: [{ key: 'a' }] }
+	const second = { id: 2, title: 'Second', active: true, location: anywhere, fields: [{ key: 'a' }] }
+
+	expect(shadowings([first, second], types)).toEqual([
+		{ key: 'a', winner: 'First', loser: 'Second', loserID: 2, where: ['Entradas', 'Recipes'] },
+	])
 })

@@ -17,7 +17,7 @@ import {
 	registerMediaLibrary,
 } from '@gophenberg/frontend-sdk/editor'
 import { useSession } from '@gopherium/react-auth'
-import { __, _x } from '@wordpress/i18n'
+import { __ } from '@wordpress/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
 
@@ -33,6 +33,7 @@ import { EDITOR_SETTINGS, canvasClass } from './editorSetup'
 import { EditorHeader } from './EditorHeader'
 import { EditorSidebar } from './EditorSidebar'
 import { RestoreBanner } from './RestoreBanner'
+import { singularOf } from './typeText'
 import { useAutosave } from './useAutosave'
 import { useContentType } from './useContentType'
 import { useEditorBuffer } from './useEditorBuffer'
@@ -124,7 +125,7 @@ function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 							</div>
 						</div>
 						<div className="gophenberg-editor__foot">
-							<BlockBreadcrumb rootLabelText={_x('Post', 'breadcrumb root', 'gophenberg')} />
+							<BlockBreadcrumb rootLabelText={singularOf(listed)} />
 						</div>
 					</div>
 				</BlockEditorProvider>

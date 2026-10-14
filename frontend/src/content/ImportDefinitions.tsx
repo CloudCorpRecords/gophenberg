@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { applyDefinitions, planDefinitions } from './definitions'
 import { groupsQueryKey } from './groups'
 import { typesQueryKey } from './nav'
+import { typeText } from './typeText'
 import type { Confirmed, DefinitionsPlan, ImportOutcome, PlanChange, PlanWarning } from './definitions'
 
 /**
@@ -21,18 +22,28 @@ export function chosenDefinitions(files: FileList | null): File | null {
 }
 
 /**
+ * Returns the name a change goes by, a built-in type named in the reader's language.
+ * @param change - The change the plan holds.
+ * @returns The name to show.
+ */
+function changeName(change: PlanChange): string {
+	return change.subject === 'type' ? typeText(change, 'singular', change.label) : change.label
+}
+
+/**
  * Returns the sentence naming what an import would do to one definition.
  * @param change - The change the plan holds.
  * @returns The sentence to show.
  */
 function changeSentence(change: PlanChange): string {
+	const name = changeName(change)
 	if (change.action === 'create') {
-		return sprintf(__('Add %(name)s', 'gophenberg'), { name: change.label })
+		return sprintf(__('Add %(name)s', 'gophenberg'), { name })
 	}
 	if (change.action === 'delete') {
-		return sprintf(__('Remove %(name)s', 'gophenberg'), { name: change.label })
+		return sprintf(__('Remove %(name)s', 'gophenberg'), { name })
 	}
-	return sprintf(__('Change %(name)s', 'gophenberg'), { name: change.label })
+	return sprintf(__('Change %(name)s', 'gophenberg'), { name })
 }
 
 /**

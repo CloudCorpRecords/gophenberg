@@ -9,6 +9,7 @@ test.describe('the admin read in the proof locale', () => {
 		await page.goto('/admin/')
 
 		const nav = page.getByRole('navigation', { name: 'Navegación' })
+		await expect(nav.getByRole('link', { name: 'Entradas' })).toBeVisible()
 		await expect(nav.getByRole('link', { name: 'Medios' })).toBeVisible()
 		await expect(nav.getByRole('link', { name: 'Temas' })).toBeVisible()
 		await expect(nav.getByRole('link', { name: 'Tipos de contenido' })).toBeVisible()
@@ -26,9 +27,11 @@ test.describe('the admin read in the proof locale', () => {
 	test('names the content list and its controls in the reader language', async ({ page }) => {
 		await page.goto('/admin/content/post')
 
+		await expect(page.getByRole('heading', { level: 1, name: 'Entradas' })).toBeVisible()
+		await expect(page.getByText('Gestiona las entradas de este sitio.')).toBeVisible()
 		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Ver opciones' })).toBeVisible()
-		await expect(page.getByRole('searchbox', { name: 'Buscar posts…', exact: true })).toBeVisible()
+		await expect(page.getByRole('searchbox', { name: 'Buscar entradas…', exact: true })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Añadir filtro' })).toBeVisible()
 	})
 
@@ -59,6 +62,8 @@ test.describe('the admin read in the proof locale', () => {
 
 		await expect(page.getByRole('heading', { name: 'Tipos de contenido' })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Añadir tipo nuevo' })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Tipos de contenido' }).getByText('Entradas', { exact: true }))
+			.toBeVisible()
 	})
 
 	test('names the media screen in the reader language', async ({ page }) => {
@@ -95,6 +100,7 @@ test.describe('the admin read in the proof locale', () => {
 
 		await expect(page.getByRole('button', { name: 'Guardar el borrador' })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Publicar' })).toBeVisible()
+		await expect(page.getByTestId('document-bar')).toHaveText(/·\s*Entrada$/)
 	})
 
 	test('leaves the English account reading English', async ({ browser }) => {

@@ -3,8 +3,10 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test } from 'vitest'
 
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 import { siteSettings } from './siteSettings'
 
@@ -122,6 +124,36 @@ test('removes a type the registry lets go once the confirm is accepted, and says
 	await waitFor(() => expect(asked).toEqual(['/api/types/page']))
 	expect(await screen.findByText('Pages removed.', { selector: '.godmin-toast' })).toBeInTheDocument()
 	await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+})
+
+test.each([
+	{
+		locale: 'es-ES',
+		region: 'Tipos de contenido',
+		pages: /Páginas/,
+		remove: 'Borrar',
+		removed: 'Tipo de contenido Páginas eliminado.',
+	},
+	{
+		locale: 'fr-FR',
+		region: 'Types de contenu',
+		pages: /Pages/,
+		remove: 'Supprimer',
+		removed: 'Type de contenu Pages retiré.',
+	},
+])('names a removed built-in type by its kind for a $locale reader', async (reader) => {
+	setLocaleData(await catalogFor(reader.locale), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	recordDeletes()
+	renderAt('/content-types')
+	const table = await screen.findByRole('region', { name: reader.region })
+
+	const pages = within(table).getByRole('row', { name: reader.pages })
+	await userEvent.click(within(pages).getByRole('button', { name: reader.remove }))
+	const dialog = await screen.findByRole('alertdialog')
+	await userEvent.click(within(dialog).getByRole('button', { name: reader.remove }))
+
+	expect(await screen.findByText(reader.removed, { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
 test('lands the focus on the types table once the deleted type has left it', async () => {

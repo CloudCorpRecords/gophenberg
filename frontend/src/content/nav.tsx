@@ -4,6 +4,7 @@ import type { NavItem } from '@gophenberg/frontend-sdk'
 import { __ } from '@wordpress/i18n'
 import { useQuery } from '@tanstack/react-query'
 
+import { pluralOf } from './typeText'
 import { listTypes } from './types'
 import type { ContentType } from './types'
 
@@ -55,7 +56,7 @@ export const groupsNavItem: NavItem = {
  */
 function typeNavItem(registered: ContentType): NavItem {
 	return {
-		label: registered.pluralLabel,
+		label: pluralOf(registered),
 		to: `/content/${registered.key}`,
 		icon: contentIcon,
 	}

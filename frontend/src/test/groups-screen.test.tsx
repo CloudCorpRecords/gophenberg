@@ -4,10 +4,12 @@ import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { placementOf } from '../content/GroupsScreen'
 import { groupErrorMessage } from '../content/groups'
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 import { siteSettings } from './siteSettings'
 
@@ -454,4 +456,38 @@ test('phrases where a group appears from its rules alone', () => {
 		'vanished',
 	)
 	expect(placementOf([[{ source: 'elsewhere', operator: '==', value: 'x' }]], types)).toBe('elsewhere is x')
+})
+
+test('phrases where a group appears with the built-in types in the words of WordPress es_ES', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	const types = [
+		{ key: 'post', pluralLabel: 'Posts' },
+		{ key: 'page', pluralLabel: 'Leaflets' },
+		{ key: 'recipe', pluralLabel: 'Recipes' },
+	]
+
+	expect(
+		placementOf(
+			[
+				[{ source: 'content_type', operator: '==', value: 'post' }],
+				[{ source: 'content_type', operator: '!=', value: 'page' }],
+				[{ source: 'content_type', operator: '==', value: 'recipe' }],
+			],
+			types,
+		),
+	).toBe('Entradas o Excepto Leaflets o Recipes')
+})
+
+test('names the built-in type a new group starts on for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/field-groups')
+	await screen.findByText('Article details')
+
+	await userEvent.click(screen.getByRole('button', { name: 'Añadir grupo nuevo' }))
+
+	expect(
+		await screen.findByText('Empieza en Entradas, y las reglas se pueden editar después.'),
+	).toBeInTheDocument()
 })

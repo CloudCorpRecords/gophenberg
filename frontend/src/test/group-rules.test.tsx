@@ -3,9 +3,11 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test } from 'vitest'
 
 import { operatorLabel } from '../content/RulesDialog'
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 
 const POST_TYPE = {
@@ -96,6 +98,47 @@ test('shows a stored rule under the source, condition and value it carries', asy
 	expect(within(rule).getByLabelText('Source')).toHaveTextContent('Content type')
 	expect(within(rule).getByLabelText('Condition')).toHaveTextContent('is')
 	expect(within(rule).getByLabelText('Value')).toHaveTextContent('Posts')
+})
+
+test('offers the built-in types as rule values in the words of WordPress es_ES for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/field-groups')
+
+	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
+	const row = within(table).getByRole('row', { name: /Article details/ })
+	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
+	const dialog = await screen.findByRole('dialog')
+	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
+
+	expect(within(rule).getByLabelText('Valor')).toHaveTextContent('Entradas')
+	await userEvent.click(within(rule).getByLabelText('Valor'))
+	expect(await screen.findByRole('option', { name: 'Entradas' })).toBeInTheDocument()
+	expect(screen.getByRole('option', { name: 'Recipes' })).toBeInTheDocument()
+})
+
+test('offers a type a plugin declared under a built-in key as a rule value by the name it declared', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	const declared = { ...RECIPE_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', origin: 'shop' }
+	const [offered] = SOURCES.items
+	server.use(
+		http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, declared] })),
+		http.get('/api/groups/params', () =>
+			HttpResponse.json({ items: [{ ...offered, values: [...offered.values, { value: 'page', label: 'Pages' }] }] }),
+		),
+	)
+	renderAt('/field-groups')
+
+	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
+	const row = within(table).getByRole('row', { name: /Article details/ })
+	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
+	const dialog = await screen.findByRole('dialog')
+	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
+	await userEvent.click(within(rule).getByLabelText('Valor'))
+
+	expect(await screen.findByRole('option', { name: 'Pages' })).toBeInTheDocument()
+	expect(screen.getByRole('option', { name: 'Entradas' })).toBeInTheDocument()
 })
 
 test('shows each alternative as its own rule set', async () => {
