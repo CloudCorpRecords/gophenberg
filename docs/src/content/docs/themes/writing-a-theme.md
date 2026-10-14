@@ -244,7 +244,7 @@ const pictured = mediaFields(post)
 Always pass `mediaUrl`, which is what lets a theme running on its
 own address during development still load files from the instance.
 Giving `width` and `height` stops the page jumping as images
-arrive. `item.sizes` holds the other renditions when you want a
+arrive. `item.sizes` holds the other image sizes when you want a
 `srcset`, and it can be empty, so check before reaching into it.
 
 A Section groups fields under one key, and a Repeater holds rows of
