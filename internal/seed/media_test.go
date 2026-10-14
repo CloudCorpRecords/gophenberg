@@ -431,7 +431,7 @@ func TestDemoMediaCarriesReadableImages(t *testing.T) {
 			t.Errorf("%q is a %s, want a jpeg", scripted.file, format)
 		}
 		if cfg.Width < 600 || cfg.Height < 400 {
-			t.Errorf("%q measures %dx%d, want a picture big enough to derive renditions", scripted.file, cfg.Width, cfg.Height)
+			t.Errorf("%q measures %dx%d, want a picture big enough to derive sub-sizes", scripted.file, cfg.Width, cfg.Height)
 		}
 	}
 }
