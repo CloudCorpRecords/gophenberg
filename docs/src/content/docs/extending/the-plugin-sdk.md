@@ -525,7 +525,7 @@ version your plugin requires, or a later one.
 
 ### v0.5.0
 
-Not tagged yet. A plugin can show who wrote something.
+Tagged 2026-10-14. A plugin can show who wrote something.
 
 - New: the `Accounts` field on `Deps`, an `AccountReader`. Its
   `People` method takes many account ids and an avatar size, and
