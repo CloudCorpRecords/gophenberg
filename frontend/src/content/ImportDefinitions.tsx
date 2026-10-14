@@ -270,7 +270,7 @@ export function ImportDefinitions() {
 	}
 	return (
 		<>
-			<Button variant="outline" onClick={() => setOpen(true)}>
+			<Button variant="outline" size="compact" onClick={() => setOpen(true)}>
 				{__('Import definitions', 'gophenberg')}
 			</Button>
 			<Dialog.Root open={open} onOpenChange={setOpen}>

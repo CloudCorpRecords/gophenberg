@@ -27,7 +27,9 @@ export function UsersScreen() {
 		<Page
 			title={__('Users', 'gophenberg')}
 			actions={
-				<Button render={<Link to="/users/new" />}>{__('New user', 'gophenberg')}</Button>
+				<Button variant="solid" size="compact" render={<Link to="/users/new" />}>
+					{__('New user', 'gophenberg')}
+				</Button>
 			}
 		>
 			<UsersBody
@@ -124,7 +126,7 @@ function UserRow({ user, isSelf, grantable }: { user: User, isSelf: boolean, gra
  */
 function UserStatus({ disabled }: { disabled: boolean }) {
 	return (
-		<Badge intent={disabled ? 'draft' : 'stable'}>
+		<Badge intent={disabled ? 'none' : 'stable'}>
 			{disabled ? __('Disabled', 'gophenberg') : __('Active', 'gophenberg')}
 		</Badge>
 	)

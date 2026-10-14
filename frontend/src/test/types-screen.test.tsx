@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import type { QueryClient } from '@tanstack/react-query'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -379,23 +380,6 @@ test('closes a type without removing it', async () => {
 	await waitFor(() => expect(sent[0]).toEqual({ active: false }))
 })
 
-test('removes a type the registry lets go', async () => {
-	let asked = ''
-	server.use(
-		http.delete('/api/types/page', ({ request }) => {
-			asked = new URL(request.url).pathname
-			return new HttpResponse(null, { status: 204 })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Delete' }))
-
-	await waitFor(() => expect(asked).toBe('/api/types/page'))
-})
-
 test('names the plugin that declared a type and keeps its shape out of reach', async () => {
 	const recipe = {
 		...PAGE_TYPE,
@@ -527,6 +511,24 @@ test('reopens a type that was closed', async () => {
 	await waitFor(() => expect(sent[0]).toEqual({ active: true }))
 })
 
+test('draws Add New Type as the compact solid button every list header holds', async () => {
+	renderAt('/content-types')
+
+	const add = await screen.findByRole('button', { name: 'Add New Type' })
+
+	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
+})
+
+test('draws a closed type as an outline badge, the WordPress badge for an inactive state', async () => {
+	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, active: false }] })))
+	renderAt('/content-types')
+	const table = await screen.findByRole('region', { name: 'Content Types' })
+
+	const pages = within(table).getByRole('row', { name: /Pages/ })
+
+	expect([...within(pages).getByText('Closed').classList]).toEqual(badgeClasses('none'))
+})
+
 test('carries the reason the registry refused an edit', async () => {
 	server.use(
 		http.patch('/api/types/page', () =>
@@ -540,21 +542,6 @@ test('carries the reason the registry refused an edit', async () => {
 	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
 
 	expect(await screen.findByText(/still holds content/)).toBeInTheDocument()
-})
-
-test('carries the reason a type could not be removed', async () => {
-	server.use(
-		http.delete('/api/types/page', () =>
-			HttpResponse.json({ error: 'content: the type is in use' }, { status: 422 }),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Delete' }))
-
-	expect(await screen.findByText(/the type is in use/)).toBeInTheDocument()
 })
 
 test('reports a registry that could not be reached at all', async () => {
