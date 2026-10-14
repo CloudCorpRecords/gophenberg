@@ -11,7 +11,6 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"golang.org/x/text/unicode/norm"
 )
 
 // ErrInvalidType reports that a content type is not registered.
@@ -94,12 +93,11 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 }
 
 // Slugify returns title as a URL slug, or [untitledSlug] when it holds no
-// slug characters. Accented Latin letters become their plain forms, as in
-// WordPress, so "Café" gives "cafe" however the accent is encoded.
+// slug characters.
 func Slugify(title string) string {
 	var b strings.Builder
 	separated := false
-	for _, r := range foldAccents(strings.ToLower(norm.NFC.String(title))) {
+	for _, r := range foldAccents(strings.ToLower(title)) {
 		switch {
 		case r == '\'' || r == '’':
 			continue

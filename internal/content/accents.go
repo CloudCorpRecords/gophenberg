@@ -3,7 +3,6 @@
 package content
 
 import (
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -11,8 +10,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// letterFolds maps the lowercase Latin letters that have no canonical decomposition to the plain letters WordPress
-// swaps them for when it saves a slug.
+// letterFolds maps the lowercase Latin letters that do not decompose to their plain spelling.
 var letterFolds = map[rune]string{
 	'ß': "ss",
 	'æ': "ae",
@@ -31,44 +29,32 @@ var letterFolds = map[rune]string{
 	'ŉ': "n",
 	'ŋ': "n",
 	'ſ': "s",
+	'ª': "a",
+	'º': "o",
+	'ɑ': "a",
+	'ǝ': "e",
+	'ə': "e",
 }
 
-// foldAccents returns s with accented Latin letters replaced by their plain forms, the way WordPress does when it
-// saves a slug. It expects s in NFC form, lowercased. Combining marks that follow a Latin letter are dropped, including
-// ones NFC could not compose, so "x" followed by a separate acute accent folds to "x". Letters of other scripts and
-// the marks that follow them, such as Cyrillic "й" or CJK characters, are left exactly as they are.
+// foldAccents returns lowercase s with its accented Latin letters written as plain ones.
 func foldAccents(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	afterLatin := false
-	for _, r := range s {
-		if afterLatin && unicode.Is(unicode.Mn, r) {
-			continue
-		}
-		plain := plainLatin(r)
+	for _, r := range norm.NFD.String(s) {
+		fold, folds := letterFolds[r]
 		switch {
-		case letterFolds[plain] != "":
-			b.WriteString(letterFolds[plain])
-		default:
-			b.WriteRune(plain)
+		case folds:
+			b.WriteString(fold)
+			afterLatin = true
+		case !unicode.Is(unicode.M, r):
+			b.WriteRune(r)
+			afterLatin = isLatinLetter(r)
+		case !afterLatin || !unicode.Is(unicode.Mn, r):
+			b.WriteRune(r)
 		}
-		afterLatin = isLatinLetter(plain)
 	}
-	return b.String()
-}
-
-// plainLatin returns the Latin letter r is built from when r is a Latin letter carrying only combining marks, and r
-// itself otherwise.
-func plainLatin(r rune) rune {
-	if r < utf8.RuneSelf || !unicode.Is(unicode.Latin, r) {
-		return r
-	}
-	decomposed := []rune(norm.NFD.String(string(r)))
-	if len(decomposed) < 2 || !unicode.Is(unicode.Latin, decomposed[0]) ||
-		slices.ContainsFunc(decomposed[1:], func(mark rune) bool { return !unicode.Is(unicode.Mn, mark) }) {
-		return r
-	}
-	return decomposed[0]
+	return norm.NFC.String(b.String())
 }
 
 // isLatinLetter reports whether r is a letter of the Latin script.
