@@ -7,6 +7,9 @@ import { screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test } from 'vitest'
 
 import { adminCapabilities, renderAt } from './render'
+import { warmPostsScreen } from './warm'
+
+warmPostsScreen()
 
 /** The gated screens, each behind the capability it asks for. */
 const GATED = ['Users', 'Themes', 'Content Types', 'Settings']
@@ -28,6 +31,7 @@ beforeEach(() =>
 	server.use(
 		http.get('/api/users', () => HttpResponse.json([])),
 		http.get('/api/themes', () => HttpResponse.json({ themes: [] })),
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
 	),
 )
 
@@ -91,24 +95,24 @@ test('leaves a role carrying only the themes capability on the themes screen it 
 	expect(await screen.findByRole('heading', { name: 'Themes' })).toBeInTheDocument()
 })
 
-test('answers a deep link into a gated screen by returning to the dashboard', async () => {
+test('answers a deep link into a gated screen by opening the default list', async () => {
 	renderAt('/users', holding('author', []))
 
-	expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
 	await waitFor(() => expect(screen.queryByRole('heading', { name: 'Users' })).toBeNull())
 })
 
 test('returns a role named admin that carries no capability from a deep link the same way', async () => {
 	renderAt('/users', holding('admin', []))
 
-	expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
 	await waitFor(() => expect(screen.queryByRole('heading', { name: 'Users' })).toBeNull())
 })
 
 test('answers a deep link into the new user form the same way', async () => {
 	renderAt('/users/new', holding('editor', [CHANGE_OTHERS_WORK]))
 
-	expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
 })
 
 test('leaves an administrator on the gated screen it asked for', async () => {

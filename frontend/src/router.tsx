@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { LoadingScreen } from '@gopherium/godmin'
+import { ErrorNotice, LoadingScreen, Page } from '@gopherium/godmin'
 import { listSearch } from '@gopherium/godmin/router'
+import { useQuery } from '@tanstack/react-query'
 import {
+	Navigate,
 	createRootRoute,
 	createRoute,
 	createRouter,
@@ -15,11 +17,11 @@ import { MANAGE_SETTINGS, MANAGE_THEMES, MANAGE_TYPES, MANAGE_USERS } from '@gop
 
 import { adminBasepath } from './basepath'
 import { CapabilityGate } from './CapabilityGate'
-import { Home } from './Home'
 import { Layout } from './Layout'
 import { plugins } from './plugins'
-import { ContentSidebar } from './content/ContentSidebar'
+import { typesQueryKey } from './content/nav'
 import { statusSearch } from './content/StatusTabs'
+import { listTypes } from './content/types'
 
 const rootRoute = createRootRoute()
 
@@ -29,17 +31,36 @@ const framedRoute = createRoute({
 	component: Layout,
 })
 
+/**
+ * Sends the root to the list of the default content type, replacing the root in the history.
+ * @returns The redirect once a default type is held, else the registry failure under a title, or the loading ghost.
+ */
+function DefaultList() {
+	const types = useQuery({ queryKey: typesQueryKey, queryFn: listTypes })
+	const landing = types.data?.find((registered) => registered.isDefault)
+	if (landing !== undefined) {
+		return <Navigate to="/content/$typeKey" params={{ typeKey: landing.key }} replace />
+	}
+	if (types.isError) {
+		return (
+			<Page title={__('Content', 'gophenberg')}>
+				<ErrorNotice>{__('The content types could not be loaded.', 'gophenberg')}</ErrorNotice>
+			</Page>
+		)
+	}
+	return <RoutePending />
+}
+
 const homeRoute = createRoute({
 	getParentRoute: () => framedRoute,
 	path: '/',
-	component: Home,
+	component: DefaultList,
 })
 
 const contentRoute = createRoute({
 	getParentRoute: () => framedRoute,
 	path: '/content/$typeKey',
 	validateSearch: (raw: Record<string, unknown>) => ({ ...listSearch(raw), ...statusSearch(raw) }),
-	staticData: { Sidebar: ContentSidebar },
 	component: lazyRouteComponent(() => import('./content/PostsScreen'), 'PostsScreen'),
 })
 

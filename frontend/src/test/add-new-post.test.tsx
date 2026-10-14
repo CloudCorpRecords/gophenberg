@@ -42,29 +42,12 @@ function captureCreate(): { bodies: unknown[] } {
 }
 
 /**
- * Returns the Add New of the rail, apart from the one the list header holds.
- * @returns The rail's Add New button.
- */
-async function railAddNew(): Promise<HTMLElement> {
-	return within(await screen.findByRole('navigation', { name: 'Navigation' })).findByRole('button', { name: 'Add New' })
-}
-
-/**
  * Returns the Add New the list header holds, apart from the rail's.
  * @returns The header's Add New button.
  */
 async function headerAddNew(): Promise<HTMLElement> {
 	return within(await screen.findByRole('main')).findByRole('button', { name: 'Add New' })
 }
-
-test('add new creates a draft and opens it in the editor', async () => {
-	captureCreate()
-	renderAt('/content/post')
-
-	await userEvent.click(await railAddNew())
-
-	expect(await screen.findByTitle('Editor canvas')).toBeInTheDocument()
-})
 
 test('the Add New of the list header creates a draft and opens it in the editor', async () => {
 	const recorded = captureCreate()
@@ -92,16 +75,6 @@ test('the Add New of the list header reports a failure above the list without na
 	expect(notice).toHaveTextContent('The draft could not be created.')
 	expect(screen.queryByTitle('Editor canvas')).not.toBeInTheDocument()
 	expect(await headerAddNew()).toHaveFocus()
-})
-
-test('add new asks for a post of the default type', async () => {
-	const recorded = captureCreate()
-	renderAt('/content/post')
-
-	await userEvent.click(await railAddNew())
-	await screen.findByTitle('Editor canvas')
-
-	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: {} }])
 })
 
 /** The post type whose rating field names a default of 5. */
@@ -139,20 +112,20 @@ const RATED_TYPE = {
 }
 
 test('add new starts a draft on the defaults its fields name', async () => {
-	server.use(http.get('/api/types', () => HttpResponse.json({ items: [RATED_TYPE] })))
+	server.use(
+		http.get('/api/types', () => HttpResponse.json({ items: [RATED_TYPE] })),
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
+	)
 	const recorded = captureCreate()
 	renderAt('/content/post')
 
-	await userEvent.click(await railAddNew())
+	await userEvent.click(await headerAddNew())
 	await screen.findByTitle('Editor canvas')
 
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: { rating: 5 } }])
 })
 
-test.each([
-	{ where: 'of the list header', addNew: headerAddNew },
-	{ where: 'of the rail', addNew: railAddNew },
-])('keeps the Add New $where off until the type registry answers, then drafts on its defaults', async ({ addNew }) => {
+test('keeps Add New off until the type registry answers, then drafts on its defaults', async () => {
 	const registry = gate()
 	server.use(
 		http.get('/api/types', async () => {
@@ -163,7 +136,7 @@ test.each([
 	)
 	const recorded = captureCreate()
 	renderAt('/content/post')
-	const button = await addNew()
+	const button = await headerAddNew()
 	expect(button).toHaveAttribute('aria-disabled', 'true')
 
 	await userEvent.click(button)
@@ -174,21 +147,4 @@ test.each([
 	await userEvent.click(button)
 	await screen.findByTitle('Editor canvas')
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: { rating: 5 } }])
-})
-
-test('add new reports a failure without navigating away', async () => {
-	vi.spyOn(console, 'error').mockImplementation(() => {})
-	server.use(
-		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
-		http.post('/api/content', () =>
-			HttpResponse.json({ error: 'nope' }, { status: 500 }),
-		),
-	)
-	renderAt('/content/post')
-
-	await userEvent.click(await railAddNew())
-
-	const rail = await screen.findByRole('navigation', { name: 'Navigation' })
-	expect(await within(rail).findByText('The draft could not be created.')).toBeInTheDocument()
-	expect(screen.queryByTitle('Editor canvas')).not.toBeInTheDocument()
 })

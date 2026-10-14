@@ -19,23 +19,12 @@ function stylesheet(): string {
 		.join('\n')
 }
 
-test('dresses a section entry like every other rail row', async () => {
-	renderAt('/content/post')
-
-	expect(await screen.findByRole('link', { name: 'All Posts' })).toHaveClass(ROW)
-})
-
-test('dresses a section action like every other rail row', async () => {
+test('dresses a content type row like every other rail row', async () => {
 	renderAt('/content/post')
 
 	const rail = await screen.findByRole('navigation', { name: 'Navigation' })
-	expect(await within(rail).findByRole('button', { name: 'Add New' })).toHaveClass(ROW)
-})
-
-test('dresses the top level rows the same way', async () => {
-	renderAt('/')
-
-	expect(await screen.findByRole('link', { name: 'Posts' })).toHaveClass(ROW)
+	expect(await within(rail).findByRole('link', { name: 'Posts' })).toHaveClass(ROW)
+	expect(within(rail).getByRole('link', { name: 'Media' })).toHaveClass(ROW)
 })
 
 test('gives a rail row its own colour rather than the browser default', () => {

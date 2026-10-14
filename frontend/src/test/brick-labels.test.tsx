@@ -14,7 +14,6 @@ import { renderAt } from './render'
 setLocaleData(
 	{
 		Dismiss: ['Descartar'],
-		Back: ['Atras'],
 		'Open navigation': ['Abrir navegacion'],
 	},
 	'gophenberg',
@@ -50,14 +49,6 @@ test('names the menu button in the language the reader loaded', async () => {
 	expect(
 		await screen.findByRole('button', { name: 'Abrir navegacion' }),
 	).toBeInTheDocument()
-})
-
-test('names the back link in the language the reader loaded', async () => {
-	setViewport({ matches: false })
-
-	renderAt('/content/post')
-
-	expect(await screen.findByRole('link', { name: 'Atras' })).toBeInTheDocument()
 })
 
 test('describes how to dismiss a toast in the language the reader loaded', async () => {
