@@ -33,17 +33,17 @@ func newMediaStoreWithPool(t *testing.T) (*postgres.MediaStore, uuid.UUID, *pgxp
 	return postgres.NewMediaStore(pool), addAuthor(t, pool, mediatest.DefaultAuthor), pool
 }
 
-func TestMediaStoreSurfacesACorruptRenditionMap(t *testing.T) {
+func TestMediaStoreSurfacesCorruptSizes(t *testing.T) {
 	t.Parallel()
 
 	store, author, pool := newMediaStoreWithPool(t)
 	created := mustCreateMedia(t, store, mustImage(t, "2026/08/harbor.jpg", "harbor", author))
 	if _, err := pool.Exec(t.Context(), `UPDATE core.media SET sizes = '[]' WHERE id = $1`, created.ID); err != nil {
-		t.Fatalf("corrupting the rendition map: %v", err)
+		t.Fatalf("corrupting the sizes: %v", err)
 	}
 
 	if _, err := store.ByID(t.Context(), created.ID); err == nil {
-		t.Error("ByID() over a corrupt rendition map error = nil, want a failure")
+		t.Error("ByID() over corrupt sizes error = nil, want a failure")
 	}
 }
 
