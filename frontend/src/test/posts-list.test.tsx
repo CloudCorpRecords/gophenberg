@@ -397,6 +397,16 @@ test('draws the author icon 4px into a 24px box before the name on a site showin
 	expect(getComputedStyle(icon).getPropertyValue('margin-inline-start')).toBe('-4px')
 })
 
+test('cuts a long author name with an ellipsis across the whole cell, as WordPress does', async () => {
+	serveRows([PUBLISHED], 1, 20)
+	renderAt('/content/post')
+
+	const name = (await rowOf('Welcome to Gophenberg')).getByText('Maria Perez')
+	const row = name.parentElement as HTMLElement
+	expect([getComputedStyle(name).overflow, getComputedStyle(name).textOverflow]).toEqual(['hidden', 'ellipsis'])
+	expect(getComputedStyle(row).width).toBe('100%')
+})
+
 test('shows the excerpt under the title', async () => {
 	serveRows([{ ...PUBLISHED, excerpt: 'A short tour of the editor.' }], 1, 20)
 	renderAt('/content/post')

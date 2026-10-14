@@ -85,6 +85,12 @@
 .gophenberg-author {
 	display: flex;
 	align-items: center;
+	width: 100%;
+}
+
+.gophenberg-author__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .gophenberg-author__avatar {

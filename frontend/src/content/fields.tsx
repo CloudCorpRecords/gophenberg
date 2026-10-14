@@ -101,7 +101,7 @@ function AuthorCell({ item }: { item: Post }) {
 					<InitialsAvatar name={item.authorName} size={16} src={item.authorAvatar} />
 				</span>
 			)}
-			<span>{item.authorName}</span>
+			<span className="gophenberg-author__name">{item.authorName}</span>
 		</span>
 	)
 }
