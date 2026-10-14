@@ -63,9 +63,6 @@ msgstr "Añadir bloque"
 msgid "Add field"
 msgstr "Añadir campo"
 
-msgid "Add media"
-msgstr "Añadir medio"
-
 msgid "Add title"
 msgstr "Añadir título"
 
@@ -104,9 +101,6 @@ msgstr "agosto"
 
 msgid "Author"
 msgstr "Autor"
-
-msgid "Back"
-msgstr "Atrás"
 
 msgid "Back to the latest posts"
 msgstr "Volver a las últimas entradas"
@@ -278,14 +272,8 @@ msgstr "Gophenberg reserva esta palabra para sí mismo, así que ningún tipo de
 msgid "Hand over the root"
 msgstr "Ceder la raíz"
 
-msgid "Home"
-msgstr "Inicio"
-
 msgid "Images"
 msgstr "Imágenes"
-
-msgid "Install theme"
-msgstr "Instalar tema"
 
 msgid "Installed"
 msgstr "Instalado"
@@ -703,9 +691,6 @@ msgstr "No se han podido leer estos archivos."
 msgid "Theme"
 msgstr "Tema"
 
-msgid "Theme archive"
-msgstr "Archivo del tema"
-
 msgid "Themes"
 msgstr "Temas"
 
@@ -726,9 +711,6 @@ msgstr "No existe ningún tipo de página llamado %(value)s. Elige uno de estos:
 
 msgid "There is no status called %(value)s. Pick one of these instead: %(allowed)s."
 msgstr "No existe ningún estado llamado %(value)s. Elige uno de estos: %(allowed)s."
-
-msgid "There is nothing at this address. Check the link, or go back to the dashboard."
-msgstr "No hay nada en esta dirección. Comprueba el enlace, o vuelve al escritorio."
 
 msgid "There is nothing to roll back to, because your site has not been through a theme change yet. Install a theme first, then a rollback has somewhere to go."
 msgstr "No hay nada a lo que retornar, porque tu sitio todavía no ha cambiado de tema. Instala un tema primero y así el retorno tendrá adónde ir."
@@ -858,9 +840,6 @@ msgstr "Versión"
 msgid "Videos"
 msgstr "Vídeos"
 
-msgid "Welcome to Gophenberg."
-msgstr "Te damos la bienvenida a Gophenberg."
-
 msgid "Yes or no"
 msgstr "Sí o no"
 
@@ -931,9 +910,6 @@ msgstr "Activar %(theme)s"
 
 msgid "Add %(type)s"
 msgstr "Añadir %(type)s"
-
-msgid "All %(type)s"
-msgstr "Todo: %(type)s"
 
 msgid "Back to %(type)s"
 msgstr "Volver a %(type)s"
@@ -2072,11 +2048,6 @@ msgid "The item could not be permanently deleted."
 msgstr "No se ha podido borrar permanentemente el elemento."
 
 #, fuzzy
-msgctxt "verb"
-msgid "Trash"
-msgstr "Papelera"
-
-#, fuzzy
 msgid "Permanently delete"
 msgstr "Borrar permanentemente"
 
@@ -2481,3 +2452,58 @@ msgstr "Lo siento, no tienes permisos para acceder a esta página."
 #, fuzzy
 msgid "Visit Site"
 msgstr "Visitar el sitio"
+
+#, fuzzy
+msgid "Upload media"
+msgstr "Subir medios"
+
+#, fuzzy
+msgid "Upload theme"
+msgstr "Subir tema"
+
+#, fuzzy
+msgid "Drop files to upload"
+msgstr "Arrastra los archivos para subirlos"
+
+#, fuzzy
+msgid "\"%s\" uploaded."
+msgstr "«%s» subido."
+
+#, fuzzy
+msgid "Uploaded %s file."
+msgid_plural "Uploaded %s files."
+msgstr[0] "%s archivo subido."
+msgstr[1] "%s de archivos subidos."
+msgstr[2] "%s archivos subidos."
+
+#, fuzzy
+msgid "%(file)s: %(reason)s"
+msgstr "%(file)s: %(reason)s"
+
+#, fuzzy
+msgid "No media items found."
+msgstr "No se han encontrado archivos de medios."
+
+#, fuzzy
+msgid "No media items yet."
+msgstr "Todavía no hay archivos de medios."
+
+#, fuzzy
+msgid "Add one with Upload media."
+msgstr "Añade uno con Subir medios."
+
+#, fuzzy
+msgid "Delete \"%(type)s\"?"
+msgstr "¿Borrar «%(type)s»?"
+
+#, fuzzy
+msgid "This cannot be undone."
+msgstr "Esto no se puede deshacer."
+
+#, fuzzy
+msgid "Manage the images and files this site holds."
+msgstr "Gestiona las imágenes y los archivos que hay en este sitio."
+
+#, fuzzy
+msgid "There is nothing at this address. Check the link and try again."
+msgstr "No hay nada en esta dirección. Comprueba el enlace e inténtalo de nuevo."

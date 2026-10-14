@@ -201,10 +201,6 @@ msgid "Add field"
 msgstr "Ajouter un champ"
 
 #, fuzzy
-msgid "Add media"
-msgstr "Ajouter un média"
-
-#, fuzzy
 msgid "Add rule set"
 msgstr "Ajouter un ensemble de règles"
 
@@ -281,10 +277,6 @@ msgstr "août"
 #, fuzzy
 msgid "Author"
 msgstr "Auteur"
-
-#, fuzzy
-msgid "Back"
-msgstr "Retour"
 
 #, fuzzy
 msgid "Back to the latest posts"
@@ -577,20 +569,12 @@ msgid "Highest"
 msgstr "Maximum"
 
 #, fuzzy
-msgid "Home"
-msgstr "Accueil"
-
-#, fuzzy
 msgid "Images"
 msgstr "Images"
 
 #, fuzzy
 msgid "Inactive"
 msgstr "Inactif"
-
-#, fuzzy
-msgid "Install theme"
-msgstr "Installer le thème"
 
 #, fuzzy
 msgid "Installed"
@@ -1350,10 +1334,6 @@ msgid "Theme"
 msgstr "Thème"
 
 #, fuzzy
-msgid "Theme archive"
-msgstr "Archive du thème"
-
-#, fuzzy
 msgid "Themes"
 msgstr "Thèmes"
 
@@ -1380,10 +1360,6 @@ msgstr "Il n'existe aucun genre de page appelé %(value)s. Choisissez plutôt pa
 #, fuzzy
 msgid "There is no status called %(value)s. Pick one of these instead: %(allowed)s."
 msgstr "Il n'existe aucun état appelé %(value)s. Choisissez plutôt parmi ceux-ci : %(allowed)s."
-
-#, fuzzy
-msgid "There is nothing at this address. Check the link, or go back to the dashboard."
-msgstr "Il n'y a rien à cette adresse. Vérifiez le lien, ou revenez au tableau de bord."
 
 #, fuzzy
 msgid "There is nothing to roll back to, because your site has not been through a theme change yet. Install a theme first, then a rollback has somewhere to go."
@@ -1554,10 +1530,6 @@ msgid "Web address"
 msgstr "Adresse web"
 
 #, fuzzy
-msgid "Welcome to Gophenberg."
-msgstr "Bienvenue sur Gophenberg."
-
-#, fuzzy
 msgid "Where %(group)s appears"
 msgstr "Où apparaît %(group)s"
 
@@ -1668,10 +1640,6 @@ msgstr "Activer %(theme)s"
 #, fuzzy
 msgid "Add %(type)s"
 msgstr "Ajouter %(type)s"
-
-#, fuzzy
-msgid "All %(type)s"
-msgstr "Tous les %(type)s"
 
 #, fuzzy
 msgid "Back to %(type)s"
@@ -2460,11 +2428,6 @@ msgid "The item could not be permanently deleted."
 msgstr "L'élément n'a pas pu être supprimé définitivement."
 
 #, fuzzy
-msgctxt "verb"
-msgid "Trash"
-msgstr "Mettre à la corbeille"
-
-#, fuzzy
 msgid "Permanently delete"
 msgstr "Supprimer définitivement"
 
@@ -2869,3 +2832,58 @@ msgstr "Désolé, vous n’avez pas l’autorisation d’accéder à cette page.
 #, fuzzy
 msgid "Visit Site"
 msgstr "Aller sur le site"
+
+#, fuzzy
+msgid "Upload media"
+msgstr "Téléverser des médias"
+
+#, fuzzy
+msgid "Upload theme"
+msgstr "Téléverser un thème"
+
+#, fuzzy
+msgid "Drop files to upload"
+msgstr "Déposez vos fichiers pour les téléverser"
+
+#, fuzzy
+msgid "\"%s\" uploaded."
+msgstr "« %s » téléversé."
+
+#, fuzzy
+msgid "Uploaded %s file."
+msgid_plural "Uploaded %s files."
+msgstr[0] "%s fichier téléversé."
+msgstr[1] "%s fichiers téléversés."
+msgstr[2] "%s fichiers téléversés."
+
+#, fuzzy
+msgid "%(file)s: %(reason)s"
+msgstr "%(file)s : %(reason)s"
+
+#, fuzzy
+msgid "No media items found."
+msgstr "Aucun fichier média trouvé."
+
+#, fuzzy
+msgid "No media items yet."
+msgstr "Aucun fichier média pour l’instant."
+
+#, fuzzy
+msgid "Add one with Upload media."
+msgstr "Ajoutez-en un avec Téléverser des médias."
+
+#, fuzzy
+msgid "Delete \"%(type)s\"?"
+msgstr "Supprimer « %(type)s » ?"
+
+#, fuzzy
+msgid "This cannot be undone."
+msgstr "Cette action est irréversible."
+
+#, fuzzy
+msgid "Manage the images and files this site holds."
+msgstr "Gérez les images et les fichiers que ce site contient."
+
+#, fuzzy
+msgid "There is nothing at this address. Check the link and try again."
+msgstr "Il n'y a rien à cette adresse. Vérifiez le lien et réessayez."

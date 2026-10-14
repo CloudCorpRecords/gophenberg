@@ -16,17 +16,17 @@ test.describe('the admin read in the proof locale', () => {
 		await expect(nav.getByRole('link', { name: 'Usuarios' })).toBeVisible()
 	})
 
-	test('greets the reader in the reader language', async ({ page }) => {
+	test('opens the default list from the root in the reader language', async ({ page }) => {
 		await page.goto('/admin/')
 
-		await expect(page.getByText('Te damos la bienvenida a Gophenberg.')).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true })).toBeVisible()
+		await expect(page).toHaveURL(/\/admin\/content\/post$/)
 	})
 
 	test('names the content list and its controls in the reader language', async ({ page }) => {
 		await page.goto('/admin/content/post')
 
 		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true })).toBeVisible()
-		await expect(page.getByRole('link', { name: 'Atrás' })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Ver opciones' })).toBeVisible()
 		await expect(page.getByRole('searchbox', { name: 'Buscar posts…', exact: true })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Añadir filtro' })).toBeVisible()
@@ -65,14 +65,14 @@ test.describe('the admin read in the proof locale', () => {
 		await page.goto('/admin/media')
 
 		await expect(page.getByRole('heading', { name: 'Medios' })).toBeVisible()
-		await expect(page.getByText('Añadir medio')).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Subir medios' })).toBeVisible()
 	})
 
 	test('names the themes screen in the reader language', async ({ page }) => {
 		await page.goto('/admin/themes')
 
 		await expect(page.getByRole('heading', { name: 'Temas' })).toBeVisible()
-		await expect(page.getByText('Archivo del tema')).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Subir tema' })).toBeVisible()
 	})
 
 	test('names the users screen in the reader language', async ({ page }) => {
@@ -103,7 +103,7 @@ test.describe('the admin read in the proof locale', () => {
 
 		await page.goto('/admin/')
 
-		await expect(page.getByText('Welcome to Gophenberg.')).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Add New', exact: true })).toBeVisible()
 		await english.close()
 	})
 })
