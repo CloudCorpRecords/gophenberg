@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import { EmailTakenError, ValidationError } from '@gopherium/react-auth/admin'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -76,15 +77,34 @@ test('offers to let a shut out account back in', async () => {
 	expect(within(row).getByText('Disabled')).toBeInTheDocument()
 })
 
+test('draws New user as the compact solid button every list header holds', async () => {
+	renderAt('/users')
+
+	const add = await within(await screen.findByRole('main')).findByText('New user')
+
+	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
+})
+
+test('draws a shut out account as an outline badge, the WordPress badge for an inactive state', async () => {
+	server.use(
+		http.get('/api/users', () => HttpResponse.json([account(OTHER, 'Maria Perez', true)])),
+	)
+	renderAt('/users')
+
+	const row = await screen.findByRole('row', { name: /Maria Perez/ })
+
+	expect([...within(row).getByText('Disabled').classList]).toEqual(badgeClasses('none'))
+})
+
 test('leaves the signed in account without a way to shut itself out', async () => {
 	server.use(
 		http.get('/api/users', () =>
-			HttpResponse.json([account(SIGNED_IN, 'Grace Hopper', false)]),
+			HttpResponse.json([account(SIGNED_IN, 'Maria Perez', false)]),
 		),
 	)
 	renderAt('/users')
 
-	const row = await screen.findByRole('row', { name: /Grace Hopper/ })
+	const row = await screen.findByRole('row', { name: /Maria Perez/ })
 
 	expect(within(row).queryByRole('button')).toBeNull()
 })

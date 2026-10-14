@@ -48,16 +48,19 @@ export {
 	backup as backupIcon,
 	chevronDown as downIcon,
 	listView as listViewIcon,
+	media as mediaIcon,
 	post as postIcon,
 	redo as redoIcon,
 	trash as trashIcon,
 	undo as undoIcon,
 	chevronUp as upIcon,
+	upload as uploadIcon,
 } from '@wordpress/icons'
 export { Dialog } from './dialog'
 export { TextareaControl } from './TextareaControl'
 export {
 	CheckboxControl,
+	DropZone,
 	RadioControl,
 	RangeControl,
 	__experimentalStyleProvider as StyleProvider,

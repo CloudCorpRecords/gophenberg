@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Badge, Button, Dialog, InputControl, Stack, Text } from '@gophenberg/frontend-sdk'
+import { AlertDialog, Badge, Button, Dialog, InputControl, Stack, Text } from '@gophenberg/frontend-sdk'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import { ErrorNotice, LoadingRows, Page, useToaster } from '@gopherium/godmin'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 
 import { typesQueryKey } from './nav'
 import { createType, deleteType, listTypes, updateType } from './types'
@@ -101,6 +101,7 @@ interface Reporter {
  * @returns The registry body element.
  */
 function TypesBody(props: Reporter & { types: ContentType[]; loading: boolean; failed: boolean }) {
+	const landing = useRef<HTMLDivElement>(null)
 	if (props.failed) {
 		return <ErrorNotice>{__('The content types could not be loaded.', 'gophenberg')}</ErrorNotice>
 	}
@@ -109,6 +110,7 @@ function TypesBody(props: Reporter & { types: ContentType[]; loading: boolean; f
 	}
 	return (
 		<div
+			ref={landing}
 			className="godmin-table-scroll godmin-arrival"
 			role="region"
 			aria-label={__('Content Types', 'gophenberg')}
@@ -129,6 +131,7 @@ function TypesBody(props: Reporter & { types: ContentType[]; loading: boolean; f
 							key={registered.key}
 							registered={registered}
 							holder={props.types.find((listed) => listed.isDefault)}
+							landing={landing}
 							onDone={props.onDone}
 							onRefused={props.onRefused}
 						/>
@@ -160,24 +163,26 @@ function TypeBadges(props: { registered: ContentType }) {
 		<Stack direction="row" gap="xs">
 			{registered.isDefault && <Badge>{__('Default', 'gophenberg')}</Badge>}
 			{registered.hierarchical && <Badge>{__('Nests', 'gophenberg')}</Badge>}
-			{!registered.active && <Badge intent="draft">{__('Closed', 'gophenberg')}</Badge>}
+			{!registered.active && <Badge intent="none">{__('Closed', 'gophenberg')}</Badge>}
 			{origin !== '' && <Badge>{sprintf(__('From %(plugin)s', 'gophenberg'), { plugin: origin })}</Badge>}
 		</Stack>
 	)
 }
 
+/** The table a row's controls hand the focus to once their row has left it. */
+type Landing = RefObject<HTMLDivElement | null>
+
 /**
  * Renders the controls a type offers, holding back the ones its owner keeps.
- * @param props - The type, the root holder, the reporter, and what each control does.
+ * @param props - The type, the root holder, the table the focus lands on, the reporter, and what each control does.
  * @returns The controls element.
  */
 function TypeActions(
 	props: Reporter & {
 		registered: ContentType
 		holder?: ContentType
-		removing: boolean
+		landing: Landing
 		onEdit: (asked: TypeEdit) => void
-		onRemove: () => void
 	},
 ) {
 	const { registered } = props
@@ -209,12 +214,49 @@ function TypeActions(
 					{__('Activate', 'gophenberg')}
 				</Button>
 			)}
-			{demotable && (
-				<Button variant="outline" loading={props.removing} onClick={props.onRemove}>
-					{__('Delete', 'gophenberg')}
-				</Button>
-			)}
+			{demotable && <DeleteType registered={registered} landing={props.landing} onDone={props.onDone} />}
 		</Stack>
+	)
+}
+
+/**
+ * Renders the control deleting a type for good and the question it asks first.
+ * @param props - The type, the table the focus lands on once the type has gone, and what reports the delete.
+ * @returns The control and its confirm.
+ */
+function DeleteType(props: Pick<Reporter, 'onDone'> & { registered: ContentType; landing: Landing }) {
+	const name = useToaster().name
+	const [open, setOpen] = useState(false)
+	const deleted = useRef(false)
+	const { registered } = props
+	const change = (next: boolean) => {
+		if (next) {
+			deleted.current = false
+		}
+		setOpen(next)
+	}
+	const confirm = async () => {
+		try {
+			await deleteType(registered.key)
+		} catch (cause) {
+			return { close: false, error: errorMessage(cause) }
+		}
+		deleted.current = true
+		setOpen(false)
+		await props.onDone(sprintf(__('%(type)s removed.', 'gophenberg'), { type: registered.pluralLabel }))
+	}
+	return (
+		<AlertDialog.Root open={open} onOpenChange={change} onConfirm={confirm}>
+			<AlertDialog.Trigger render={<Button variant="outline" />}>{__('Delete', 'gophenberg')}</AlertDialog.Trigger>
+			<AlertDialog.Popup
+				intent="irreversible"
+				title={sprintf(__('Delete "%(type)s"?', 'gophenberg'), { type: name(registered.pluralLabel) })}
+				description={__('This cannot be undone.', 'gophenberg')}
+				confirmButtonText={__('Delete', 'gophenberg')}
+				cancelButtonText={__('Cancel', 'gophenberg')}
+				finalFocus={() => (deleted.current ? props.landing.current : true)}
+			/>
+		</AlertDialog.Root>
 	)
 }
 
@@ -323,19 +365,14 @@ function useTypeDraft(props: Reporter & { registered: ContentType }, stored: str
 
 /**
  * Renders one registered type and what may be done to it.
- * @param props - The type and the reporter.
+ * @param props - The type, the root holder, the table the focus lands on once the row has gone, and the reporter.
  * @returns The row element.
  */
 function TypeRow(
-	props: Reporter & { registered: ContentType; holder?: ContentType },
+	props: Reporter & { registered: ContentType; holder?: ContentType; landing: Landing },
 ): ReactNode {
 	const { registered } = props
 	const edit = useTypeEdit(props)
-	const remove = useMutation({
-		mutationFn: () => deleteType(registered.key),
-		onSuccess: () => props.onDone(sprintf(__('%(type)s removed.', 'gophenberg'), { type: registered.pluralLabel })),
-		onError: props.onRefused,
-	})
 	return (
 		<tr>
 			<td>
@@ -352,11 +389,10 @@ function TypeRow(
 				<TypeActions
 					registered={registered}
 					holder={props.holder}
+					landing={props.landing}
 					onDone={props.onDone}
 					onRefused={props.onRefused}
-					removing={remove.isPending}
 					onEdit={edit.mutate}
-					onRemove={remove.mutate}
 				/>
 			</td>
 		</tr>
@@ -580,7 +616,9 @@ function AddType(props: Reporter) {
 
 	return (
 		<>
-			<Button onClick={() => change(true)}>{__('Add New Type', 'gophenberg')}</Button>
+			<Button variant="solid" size="compact" onClick={() => change(true)}>
+				{__('Add New Type', 'gophenberg')}
+			</Button>
 			<Dialog.Root open={dialog.open} onOpenChange={change}>
 				<Dialog.Popup>
 					<Dialog.Header>

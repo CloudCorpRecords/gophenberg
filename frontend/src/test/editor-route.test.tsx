@@ -33,7 +33,7 @@ test('the editor route carries none of the admin chrome', async () => {
 test('framed routes still render the admin chrome', async () => {
 	renderAt('/')
 
-	expect(await screen.findByRole('navigation')).toBeInTheDocument()
+	expect(await screen.findByRole('navigation', { name: 'Navigation' })).toBeInTheDocument()
 	expect(document.querySelector('.godmin-layout')).not.toBeNull()
 })
 

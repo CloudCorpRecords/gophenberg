@@ -393,7 +393,7 @@ function GroupRow(
 			<td>{formatNumber(held.fields.length)}</td>
 			<td>
 				<Stack direction="row" gap="xs">
-					{!held.active && <Badge intent="draft">{__('Inactive', 'gophenberg')}</Badge>}
+					{!held.active && <Badge intent="none">{__('Inactive', 'gophenberg')}</Badge>}
 					{props.shadowed && <Badge intent="high">{__('Shadowed', 'gophenberg')}</Badge>}
 					{declared && (
 						<Badge>{sprintf(__('From %(plugin)s', 'gophenberg'), { plugin: origin })}</Badge>
@@ -533,7 +533,7 @@ function RemoveGroup(props: Reporter & { held: FieldGroup }) {
  */
 function ExportDefinitions() {
 	return (
-		<Button variant="outline" render={<a href={definitionsDownloadPath} download />}>
+		<Button variant="outline" size="compact" render={<a href={definitionsDownloadPath} download />}>
 			{__('Export definitions', 'gophenberg')}
 		</Button>
 	)
@@ -563,7 +563,9 @@ function AddGroup(props: Reporter & { types: ContentType[] }) {
 	})
 	return (
 		<>
-			<Button onClick={() => setOpen(true)}>{__('Add New Group', 'gophenberg')}</Button>
+			<Button variant="solid" size="compact" onClick={() => setOpen(true)}>
+				{__('Add New Group', 'gophenberg')}
+			</Button>
 			<Dialog.Root open={open} onOpenChange={setOpen}>
 				<Dialog.Popup>
 					<Dialog.Header>

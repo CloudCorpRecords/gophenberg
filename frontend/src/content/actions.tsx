@@ -147,7 +147,7 @@ function trashViewActions(mine: (post: Post) => boolean, run: RunOver, name: Nam
  *   that is not in the trash yet.
  */
 function listActions(mine: (post: Post) => boolean, run: RunOver, name: NameCut, served: boolean): Action<Post>[] {
-	const confirmLabel = _x('Trash', 'verb', 'gophenberg')
+	const confirmLabel = __('Move to trash', 'gophenberg')
 	const changeable = (post: Post) => post.status !== 'trash' && mine(post)
 	return [
 		viewAction(served),

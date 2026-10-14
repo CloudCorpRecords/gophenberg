@@ -29,11 +29,11 @@ type BadgeIntent = ComponentProps<typeof Badge>['intent']
  */
 function statusBadges(): Record<string, { label: string, intent: BadgeIntent }> {
 	return {
-		draft: { label: _x('Draft', 'post status', 'gophenberg'), intent: 'low' },
+		draft: { label: _x('Draft', 'post status', 'gophenberg'), intent: 'draft' },
 		scheduled: { label: __('Scheduled', 'gophenberg'), intent: 'informational' },
-		pending: { label: __('Pending Review', 'gophenberg'), intent: 'informational' },
-		private: { label: __('Private', 'gophenberg'), intent: 'draft' },
-		published: { label: _x('Published', 'post status', 'gophenberg'), intent: 'stable' },
+		pending: { label: __('Pending Review', 'gophenberg'), intent: 'low' },
+		private: { label: __('Private', 'gophenberg'), intent: 'informational' },
+		published: { label: _x('Published', 'post status', 'gophenberg'), intent: 'none' },
 		trash: { label: _x('Trash', 'post status', 'gophenberg'), intent: 'none' },
 	}
 }
@@ -159,14 +159,18 @@ export function levelOf(listed: ContentType): (post: Post) => number {
 /** The columns a list shows by default on a phone, which read alone. */
 export const PHONE_COLUMNS = ['status', 'date']
 
+/** The viewports below WordPress's huge breakpoint, where a table opens on its built-in columns alone. */
+export const BELOW_HUGE_QUERY = '(max-width: 1439px)'
+
 /**
  * Returns the ids of the columns a list shows before a reader picks any, the fields a type marks for the list last.
  * @param columns - The columns the list offers.
- * @returns The author, the status, the date and every listed field.
+ * @param roomy - Whether the viewport is wide enough for the listed fields to fit beside the built-in columns.
+ * @returns The author, the status, the date, and every listed field when there is room for them.
  */
-export function openingColumns(columns: Field<Post>[]): string[] {
+export function openingColumns(columns: Field<Post>[], roomy: boolean): string[] {
 	const listed = columns.filter((column) => column.id.startsWith(fieldColumnPrefix)).map((column) => column.id)
-	return ['author', 'status', 'date', ...listed]
+	return ['author', 'status', 'date', ...(roomy ? listed : [])]
 }
 
 /**

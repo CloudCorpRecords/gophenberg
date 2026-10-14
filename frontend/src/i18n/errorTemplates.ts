@@ -409,7 +409,7 @@ export function errorTemplates(): Record<string, string> {
 			'Another content type already lives at the root of your site, and only one can. Give this type a route word, or hand the root over with Make default.',
 			DOMAIN,
 		),
-		route_not_found: __('There is nothing at this address. Check the link, or go back to the dashboard.', DOMAIN),
+		route_not_found: __('There is nothing at this address. Check the link and try again.', DOMAIN),
 		route_word_malformed: __(
 			'A route word has to start with a lowercase letter and then hold only lowercase letters, numbers and hyphens. Change it and try again.',
 			DOMAIN,

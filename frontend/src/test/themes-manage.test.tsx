@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
-import { chosenArchive, rollbackLabel, servingLine } from '../themes/ThemesScreen'
+import { rollbackLabel, servingLine } from '../themes/ThemesScreen'
+import { gate } from './gate'
 import { renderAt } from './render'
 
 const ARCHIVE = new File(['a packaged theme'], 'aurora.zip', { type: 'application/zip' })
@@ -149,12 +151,6 @@ test('phrases what is serving from the themes alone', () => {
 	).toBe('aurora failed to start, so the built-in renderer is serving.')
 })
 
-test('reads the archive out of a file field that may hold none', () => {
-	expect(chosenArchive(null)).toBeNull()
-	expect(chosenArchive([] as unknown as FileList)).toBeNull()
-	expect(chosenArchive([ARCHIVE] as unknown as FileList)).toBe(ARCHIVE)
-})
-
 test('phrases a rollback by where it returns to', () => {
 	expect(rollbackLabel('')).toBe('Roll back to the built-in renderer')
 	expect(rollbackLabel('riverbed')).toBe('Roll back to riverbed')
@@ -170,6 +166,14 @@ test('lists each installed theme with its own version and state', async () => {
 	expect(within(serving).getByText('Serving')).toBeTruthy()
 	expect(within(idle).getByText('0.9.0')).toBeTruthy()
 	expect(within(idle).getByText('Installed')).toBeTruthy()
+})
+
+test('draws an installed theme as an outline badge, the WordPress badge for an inactive state', async () => {
+	renderAt('/themes')
+
+	const idle = await screen.findByRole('row', { name: /riverbed/ })
+
+	expect([...within(idle).getByText('Installed').classList]).toEqual(badgeClasses('none'))
 })
 
 test('marks a theme that will not load with the reason', async () => {
@@ -317,7 +321,29 @@ test('shows the reason a rollback was refused', async () => {
 	expect(await screen.findByRole('alert')).toHaveTextContent('the theme is pinned by the operator')
 })
 
-test('installs a theme the reader chose from their machine', async () => {
+test('offers Upload theme as the compact solid header button, drawn with the upload icon', async () => {
+	renderAt('/themes')
+
+	const button = await within(await screen.findByRole('main')).findByRole('button', { name: 'Upload theme' })
+
+	expect([...button.classList]).toEqual(buttonClasses('solid', 'compact'))
+	expect(button.querySelector('svg')).not.toBeNull()
+})
+
+test('keeps the file field out of the page body, behind Upload theme', async () => {
+	renderAt('/themes')
+
+	await screen.findByRole('button', { name: 'Upload theme' })
+	const input = screen.getByLabelText('Upload theme')
+
+	expect(input).toHaveAttribute('accept', '.zip')
+	expect(input).not.toHaveAttribute('multiple')
+	expect(input).not.toBeVisible()
+	expect(screen.queryByText('Theme archive')).toBeNull()
+	expect(screen.queryByRole('button', { name: 'Install theme' })).toBeNull()
+})
+
+test('installs a theme as soon as the reader picks its archive, and says so in a toast', async () => {
 	let uploaded = 0
 	server.use(
 		http.post('/api/themes', () => {
@@ -326,37 +352,49 @@ test('installs a theme the reader chose from their machine', async () => {
 		}),
 	)
 	renderAt('/themes')
+	await screen.findByRole('button', { name: 'Upload theme' })
 
-	await userEvent.upload(await screen.findByLabelText('Theme archive'), ARCHIVE)
-	await userEvent.click(screen.getByRole('button', { name: 'Install theme' }))
+	await userEvent.upload(screen.getByLabelText('Upload theme'), ARCHIVE)
 
 	await waitFor(() => expect(uploaded).toBe(1))
-	expect(await screen.findByText('aurora was installed.')).toBeTruthy()
+	expect(await screen.findByText('aurora was installed.', { selector: '.godmin-toast' })).toBeTruthy()
 })
 
-test('waits for an archive before it offers to install one', async () => {
+test('holds Upload theme busy while the archive uploads', async () => {
+	const held = gate()
+	server.use(
+		http.post('/api/themes', async () => {
+			await held.held
+			return HttpResponse.json({ name: 'aurora' }, { status: 201 })
+		}),
+	)
 	renderAt('/themes')
+	const button = await screen.findByRole('button', { name: 'Upload theme' })
 
-	await screen.findByLabelText('Theme archive')
+	await userEvent.upload(screen.getByLabelText('Upload theme'), ARCHIVE)
 
-	expect(screen.queryByRole('button', { name: 'Install theme' })).toBeNull()
+	await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
+	held.release()
+	await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled', 'true'))
 })
 
-test('shows the reason an upload was refused', async () => {
+test('shows the reason an upload was refused in a notice above the list', async () => {
 	server.use(
 		http.post('/api/themes', () =>
 			HttpResponse.json({ error: 'the manifest is missing' }, { status: 422 }),
 		),
 	)
 	renderAt('/themes')
+	const list = await screen.findByRole('region', { name: 'Themes' })
 
-	await userEvent.upload(await screen.findByLabelText('Theme archive'), ARCHIVE)
-	await userEvent.click(screen.getByRole('button', { name: 'Install theme' }))
+	await userEvent.upload(screen.getByLabelText('Upload theme'), ARCHIVE)
 
-	expect(await screen.findByRole('alert')).toHaveTextContent('the manifest is missing')
+	const notice = await screen.findByRole('alert')
+	expect(notice).toHaveTextContent('the manifest is missing')
+	expect(notice.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })
 
-test('takes a shown error back once the next action works', async () => {
+test('takes a shown error back once the next upload works', async () => {
 	let attempts = 0
 	server.use(
 		http.post('/api/themes', () => {
@@ -367,12 +405,20 @@ test('takes a shown error back once the next action works', async () => {
 		}),
 	)
 	renderAt('/themes')
-	await userEvent.upload(await screen.findByLabelText('Theme archive'), ARCHIVE)
-	await userEvent.click(screen.getByRole('button', { name: 'Install theme' }))
+	await screen.findByRole('button', { name: 'Upload theme' })
+	await userEvent.upload(screen.getByLabelText('Upload theme'), ARCHIVE)
 	await screen.findByRole('alert')
 
-	await userEvent.click(screen.getByRole('button', { name: 'Install theme' }))
+	await userEvent.upload(screen.getByLabelText('Upload theme'), ARCHIVE)
 
-	await screen.findByText('aurora was installed.')
+	await screen.findByText('aurora was installed.', { selector: '.godmin-toast' })
 	expect(screen.queryByText('the manifest is missing')).toBeNull()
+})
+
+test('draws a theme status badge at the width of its words, not stretched across its column', async () => {
+	renderAt('/themes')
+
+	const serving = await screen.findByRole('row', { name: /aurora/ })
+
+	expect(within(serving).getByText('Serving').parentElement).toHaveStyle({ alignItems: 'flex-start' })
 })

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
@@ -113,6 +114,20 @@ test('writes how many fields a group holds in the site format', async () => {
 	expect(within(details).getByText('१')).toBeInTheDocument()
 })
 
+test('draws one compact solid header button beside compact outline ones, as WordPress does', async () => {
+	renderAt('/field-groups')
+
+	const add = await screen.findByRole('button', { name: 'Add New Group' })
+
+	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
+	expect([...screen.getByRole('link', { name: 'Export definitions' }).classList]).toEqual(
+		buttonClasses('outline', 'compact'),
+	)
+	expect([...screen.getByRole('button', { name: 'Import definitions' }).classList]).toEqual(
+		buttonClasses('outline', 'compact'),
+	)
+})
+
 test('offers the definitions as a file download', async () => {
 	renderAt('/field-groups')
 
@@ -139,6 +154,7 @@ test('marks a group that is inactive', async () => {
 	const row = within(table).getByRole('row', { name: /Article details/ })
 
 	expect(within(row).getByText('Inactive')).toBeInTheDocument()
+	expect([...within(row).getByText('Inactive').classList]).toEqual(badgeClasses('none'))
 })
 
 test('names the plugin that declared a group and keeps its shape out of reach', async () => {

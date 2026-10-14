@@ -41,7 +41,7 @@ test.describe('an author', () => {
 
 	test('sees only the screens its role reaches', async ({ page }) => {
 		await page.goto('/admin/')
-		const menu = page.getByRole('navigation')
+		const menu = page.getByRole('navigation', { name: 'Navigation' })
 
 		await expect(menu.getByRole('link', { name: 'Media' })).toBeVisible()
 		await expect(menu.getByRole('link', { name: 'Language' })).toBeVisible()
@@ -50,10 +50,11 @@ test.describe('an author', () => {
 		await expect(menu.getByRole('link', { name: 'Content Types' })).toHaveCount(0)
 	})
 
-	test('is returned to the dashboard from a pasted admin link', async ({ page }) => {
+	test('is returned to the default list from a pasted admin link', async ({ page }) => {
 		await page.goto('/admin/users')
 
-		await expect(page.getByText('Welcome to Gophenberg.')).toBeVisible()
+		await expect(page.getByRole('heading', { name: 'Posts', level: 1 })).toBeVisible()
+		await expect(page).toHaveURL(/\/admin\/content\/post$/)
 		await expect(page.getByRole('heading', { name: 'Users' })).toHaveCount(0)
 	})
 
@@ -94,7 +95,7 @@ test.describe('an editor', () => {
 
 	test('sees the content screens and not the keys to the site', async ({ page }) => {
 		await page.goto('/admin/')
-		const menu = page.getByRole('navigation')
+		const menu = page.getByRole('navigation', { name: 'Navigation' })
 
 		await expect(menu.getByRole('link', { name: 'Media' })).toBeVisible()
 		await expect(menu.getByRole('link', { name: 'Users' })).toHaveCount(0)

@@ -7,7 +7,7 @@ const PHONE = { width: 390, height: 844 }
 test('pads the canvas and keeps the rail beside it on a desktop', async ({ page }) => {
 	await page.goto('/admin/')
 
-	await expect(page.getByRole('navigation')).toBeVisible()
+	await expect(page.getByRole('navigation', { name: 'Navigation' })).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden()
 	const padding = await page
 		.locator('.godmin-layout__canvas')
@@ -17,23 +17,30 @@ test('pads the canvas and keeps the rail beside it on a desktop', async ({ page 
 
 test('reads every rail row clearly against the chrome', async ({ page }) => {
 	await page.goto('/admin/content/post')
-	await expect(page.getByRole('link', { name: 'All Posts' })).toBeVisible()
+	await expect(page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Users' })).toBeVisible()
 
 	const rows = await page.locator('.gophenberg-menu__item').evaluateAll((found) =>
 		found.map((row) => {
-			const rgb = getComputedStyle(row).color.match(/\d+/g) ?? []
-			const channel = (raw: string) => {
-				const value = Number(raw) / 255
-				return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+			const luminance = (colour: string) => {
+				const [r = 0, g = 0, b = 0] = (colour.match(/\d+/g) ?? []).map((raw) => {
+					const value = Number(raw) / 255
+					return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+				})
+				return 0.2126 * r + 0.7152 * g + 0.0722 * b
 			}
-			const [r = 0, g = 0, b = 0] = rgb.map(channel)
-			return { text: row.textContent, luminance: 0.2126 * r + 0.7152 * g + 0.0722 * b }
+			let behind: Element | null = row
+			while (behind !== null && getComputedStyle(behind).backgroundColor === 'rgba(0, 0, 0, 0)') {
+				behind = behind.parentElement
+			}
+			const fill = behind === null ? 'rgb(255, 255, 255)' : getComputedStyle(behind).backgroundColor
+			const [light = 0, dark = 0] = [luminance(getComputedStyle(row).color), luminance(fill)].sort((a, b) => b - a)
+			return { text: row.textContent, contrast: (light + 0.05) / (dark + 0.05) }
 		}),
 	)
 
 	expect(rows.length).toBeGreaterThan(1)
 	for (const row of rows) {
-		expect(row.luminance, `${row.text} is too dark for the chrome`).toBeGreaterThan(0.5)
+		expect(row.contrast, `${row.text} is too faint for the chrome`).toBeGreaterThanOrEqual(4.5)
 	}
 })
 
@@ -71,6 +78,35 @@ test('folds the rail into a drawer on a phone', async ({ page }) => {
 	await page.getByRole('button', { name: 'Open navigation' }).click()
 	const drawer = page.getByRole('dialog')
 	await expect(drawer.getByRole('link', { name: 'Posts' })).toBeVisible()
+})
+
+test('marks the current row apart from the drawer surface on a phone', async ({ page }) => {
+	await page.setViewportSize(PHONE)
+
+	await page.goto('/admin/content/post')
+	await page.getByRole('button', { name: 'Open navigation' }).click()
+
+	const current = page.getByRole('dialog').getByRole('link', { name: 'Posts', exact: true })
+	await expect(current).toHaveAttribute('data-status', 'active')
+	const fills = await current.evaluate((row) => {
+		let surface = row.parentElement
+		while (surface !== null && getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') {
+			surface = surface.parentElement
+		}
+		return {
+			row: getComputedStyle(row).backgroundColor,
+			drawer: surface === null ? 'none' : getComputedStyle(surface).backgroundColor,
+		}
+	})
+	expect(fills.row).not.toBe(fills.drawer)
+})
+
+test('names the site beside the menu button on a phone', async ({ page }) => {
+	await page.setViewportSize(PHONE)
+
+	await page.goto('/admin/')
+
+	await expect(page.locator('.godmin-layout__topbar').getByText('Gophenberg', { exact: true })).toBeVisible()
 })
 
 test('meets the screen edges on a phone without spilling it', async ({ page }) => {

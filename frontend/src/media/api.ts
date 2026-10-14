@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { __ } from '@wordpress/i18n'
 import { z } from 'zod'
 
 import { errorText } from '../i18n/errors'
@@ -89,10 +90,6 @@ export interface MediaDescriptions {
 	caption?: string
 	description?: string
 }
-
-export type UploadOutcome =
-	| { kind: 'stored', item: MediaItem }
-	| { kind: 'refused', reason: string }
 
 export type DescribeOutcome =
 	| { kind: 'saved', item: MediaItem }
@@ -247,18 +244,34 @@ async function namedMedia(ids: number[]): Promise<MediaItem[]> {
 }
 
 /**
- * Stores an uploaded file in the media library.
+ * Stores an uploaded file in the media library, or throws the reason it was not stored in the reader's words.
  * @param file - The file the administrator chose.
- * @returns The stored item, or the reason it was refused.
+ * @returns The stored item.
  */
-export async function uploadMedia(file: File): Promise<UploadOutcome> {
+export async function uploadMedia(file: File): Promise<MediaItem> {
 	const body = new FormData()
 	body.append('file', file, file.name)
-	const response = await fetch('/api/media', { method: 'POST', body })
-	if (!response.ok) {
-		return { kind: 'refused', reason: await messageFrom(response) }
+	const response = await fetch('/api/media', { method: 'POST', body }).catch(() => null)
+	if (response === null) {
+		throw new Error(__('The server could not be reached, so nothing was uploaded.', 'gophenberg'))
 	}
-	return { kind: 'stored', item: toMedia(mediaSchema.parse(await response.json())) }
+	if (!response.ok) {
+		throw new Error(await messageFrom(response))
+	}
+	return storedItem(response)
+}
+
+/**
+ * Returns the item a stored upload answered with, or throws a stand in when the answer cannot be read.
+ * @param response - The answer the API stored the file with.
+ * @returns The stored item.
+ */
+async function storedItem(response: Response): Promise<MediaItem> {
+	const stored = mediaSchema.safeParse(await response.json().catch(() => null))
+	if (!stored.success) {
+		throw new Error(errorText({ error: '' }))
+	}
+	return toMedia(stored.data)
 }
 
 /**

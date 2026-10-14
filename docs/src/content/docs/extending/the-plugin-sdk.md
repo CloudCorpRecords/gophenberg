@@ -420,8 +420,10 @@ const manages = can(session, 'hello.manage')
 The frontend SDK, `@gophenberg/frontend-sdk`, passes on a few icons
 from `@wordpress/icons`, each named after the job it does in the
 admin: `backIcon`, `backupIcon`, `downIcon`, `listViewIcon`,
-`postIcon`, `redoIcon`, `trashIcon`, `undoIcon` and `upIcon`.
-`postIcon` is the one an empty content list shows. Import them from
+`mediaIcon`, `postIcon`, `redoIcon`, `trashIcon`, `undoIcon`, `upIcon`
+and `uploadIcon`. `postIcon` is the one an empty content list shows,
+`mediaIcon` the one an empty media library shows, and `uploadIcon`
+the one an upload button carries. Import them from
 the SDK, so the admin keeps one copy of the icon set:
 
 ```ts

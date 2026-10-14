@@ -17,11 +17,13 @@ function servePosts() {
 	server.use(http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })))
 }
 
-test('names the home screen with its only first level heading', async () => {
+test('names the list the root opens with its only first level heading', async () => {
+	servePosts()
+
 	renderAt('/')
 
 	const main = await screen.findByRole('main')
-	expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Home')
+	expect(await within(main).findByRole('heading', { level: 1 })).toHaveTextContent('Posts')
 	expect(within(main).getAllByRole('heading', { level: 1 })).toHaveLength(1)
 })
 
@@ -110,9 +112,11 @@ test('says nothing under the posts title until the type registry answers', async
 })
 
 test('leaves the rail out of the heading outline', async () => {
+	servePosts()
+
 	renderAt('/')
 
-	await screen.findByRole('main')
+	await screen.findByRole('heading', { level: 1, name: 'Posts' })
 	expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
 })
 

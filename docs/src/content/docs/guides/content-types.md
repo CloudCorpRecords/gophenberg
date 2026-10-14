@@ -84,5 +84,7 @@ its archive, and its items stop being served, and everything comes
 back with **Activate**.
 
 **Delete** removes a type for good, and is refused while the type
-still holds content. The default type can be neither deactivated nor
-deleted, so the root always answers.
+still holds content. It asks first, in a dialog naming the type, and
+Cancel has the focus when the dialog opens. When the server refuses,
+the dialog stays open and says why. The default type can be neither
+deactivated nor deleted, so the root always answers.

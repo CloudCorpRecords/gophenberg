@@ -411,13 +411,13 @@ test('dates a post in the trash with no caption', async () => {
 })
 
 test.each([
-	{ status: 'draft', label: 'Draft', intent: 'low' },
+	{ status: 'draft', label: 'Draft', intent: 'draft' },
 	{ status: 'scheduled', label: 'Scheduled', intent: 'informational' },
-	{ status: 'pending', label: 'Pending Review', intent: 'informational' },
-	{ status: 'private', label: 'Private', intent: 'draft' },
-	{ status: 'published', label: 'Published', intent: 'stable' },
+	{ status: 'pending', label: 'Pending Review', intent: 'low' },
+	{ status: 'private', label: 'Private', intent: 'informational' },
+	{ status: 'published', label: 'Published', intent: 'none' },
 	{ status: 'trash', label: 'Trash', intent: 'none' },
-] as const)('draws the $status status as a $label badge in the $intent colour, kept on one line', async ({
+] as const)('draws the $status status as a $label badge in the $intent colour of the WordPress badge guide', async ({
 	status,
 	label,
 	intent,

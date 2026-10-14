@@ -28,6 +28,9 @@ msgstr ""
 msgid "\"%s\" successfully created."
 msgstr ""
 
+msgid "\"%s\" uploaded."
+msgstr ""
+
 msgid "%(field)s address"
 msgstr ""
 
@@ -110,6 +113,9 @@ msgid "%(file)s is larger than one upload may be."
 msgstr ""
 
 msgid "%(file)s is not a file this block accepts."
+msgstr ""
+
+msgid "%(file)s: %(reason)s"
 msgstr ""
 
 msgid "%(group)s created."
@@ -347,10 +353,10 @@ msgstr ""
 msgid "Add layout to %(field)s"
 msgstr ""
 
-msgid "Add media"
+msgid "Add one with Add New."
 msgstr ""
 
-msgid "Add one with Add New."
+msgid "Add one with Upload media."
 msgstr ""
 
 msgid "Add row"
@@ -369,9 +375,6 @@ msgid "Address"
 msgstr ""
 
 msgid "Adopt"
-msgstr ""
-
-msgid "All %(type)s"
 msgstr ""
 
 msgid "Allow custom"
@@ -423,9 +426,6 @@ msgid "August"
 msgstr ""
 
 msgid "Author"
-msgstr ""
-
-msgid "Back"
 msgstr ""
 
 msgid "Back to %(type)s"
@@ -553,6 +553,9 @@ msgstr ""
 msgid "Delete \"%(title)s\" for good? This cannot be undone."
 msgstr ""
 
+msgid "Delete \"%(type)s\"?"
+msgstr ""
+
 msgid "Delete %(field)s"
 msgstr ""
 
@@ -618,6 +621,9 @@ msgid "Done. The site now holds what the file describes."
 msgstr ""
 
 msgid "Draft saved."
+msgstr ""
+
+msgid "Drop files to upload"
 msgstr ""
 
 msgid "Email"
@@ -755,9 +761,6 @@ msgstr ""
 msgid "Holds"
 msgstr ""
 
-msgid "Home"
-msgstr ""
-
 msgid "Images"
 msgstr ""
 
@@ -768,9 +771,6 @@ msgid "In list"
 msgstr ""
 
 msgid "Inactive"
-msgstr ""
-
-msgid "Install theme"
 msgstr ""
 
 msgid "Installed"
@@ -873,6 +873,9 @@ msgid "Make default"
 msgstr ""
 
 msgid "Make optional"
+msgstr ""
+
+msgid "Manage the images and files this site holds."
 msgstr ""
 
 msgid "Manage the items of this content type."
@@ -1001,6 +1004,12 @@ msgid "No media chosen"
 msgstr ""
 
 msgid "No media has been uploaded yet."
+msgstr ""
+
+msgid "No media items found."
+msgstr ""
+
+msgid "No media items yet."
 msgstr ""
 
 msgid "No page lives at this address."
@@ -1587,9 +1596,6 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
-msgid "Theme archive"
-msgstr ""
-
 msgid "Themes"
 msgstr ""
 
@@ -1611,7 +1617,7 @@ msgstr ""
 msgid "There is no status called %(value)s. Pick one of these instead: %(allowed)s."
 msgstr ""
 
-msgid "There is nothing at this address. Check the link, or go back to the dashboard."
+msgid "There is nothing at this address. Check the link and try again."
 msgstr ""
 
 msgid "There is nothing to roll back to, because your site has not been through a theme change yet. Install a theme first, then a rollback has somewhere to go."
@@ -1621,6 +1627,9 @@ msgid "These files could not be read."
 msgstr ""
 
 msgid "These were left alone, because nobody confirmed losing them."
+msgstr ""
+
+msgid "This cannot be undone."
 msgstr ""
 
 msgid "This content type does not exist any more. Reload the page to see the types your site holds now."
@@ -1779,6 +1788,17 @@ msgstr ""
 msgid "Update failed."
 msgstr ""
 
+msgid "Upload media"
+msgstr ""
+
+msgid "Upload theme"
+msgstr ""
+
+msgid "Uploaded %s file."
+msgid_plural "Uploaded %s files."
+msgstr[0] ""
+msgstr[1] ""
+
 msgid "Users"
 msgstr ""
 
@@ -1804,9 +1824,6 @@ msgid "Wed"
 msgstr ""
 
 msgid "Wednesday"
-msgstr ""
-
-msgid "Welcome to Gophenberg."
 msgstr ""
 
 msgid "What each Linked from field reads"
@@ -2092,10 +2109,6 @@ msgstr ""
 
 msgctxt "trash"
 msgid "Restore"
-msgstr ""
-
-msgctxt "verb"
-msgid "Trash"
 msgstr ""
 
 msgctxt "verb"

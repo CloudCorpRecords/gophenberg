@@ -51,20 +51,48 @@ test.afterEach(async ({ page }) => {
 	}
 })
 
-test('uploads a picture to the library and serves it publicly', async ({ page }) => {
+test('uploads two pictures chosen at once, counts them in a toast and serves them publicly', async ({ page }) => {
 	await page.goto('/admin/media')
 	await expect(page.getByRole('heading', { name: 'Media' })).toBeVisible()
 
-	await page.getByLabel('Add media').setInputFiles(photo(`${PICTURE}.jpg`))
+	const chooser = page.waitForEvent('filechooser')
+	await page.getByRole('main').getByRole('button', { name: 'Upload media' }).click()
+	await (await chooser).setFiles([photo(`${PICTURE}.jpg`), photo(`${PICTURE}-second.jpg`)])
 
-	await expect(page.getByText(PICTURE)).toBeVisible()
+	await expect(page.locator('#root').getByText('Uploaded 2 files.')).toBeVisible()
 	const listed = await page.request.get(`/api/media?search=${PICTURE}`)
 	const body = (await listed.json()) as { items: { file: string }[] }
-	expect(body.items).toHaveLength(1)
+	expect(body.items).toHaveLength(2)
 
 	const served = await page.request.get(`/media/${body.items[0].file}`)
 	expect(served.status()).toBe(200)
 	expect(served.headers()['content-type']).toContain('image/jpeg')
+})
+
+test('uploads a picture dropped on the library, over a zone reading Drop files to upload', async ({ page }) => {
+	const name = `${PICTURE}-dropped.jpg`
+	await page.goto('/admin/media')
+	await expect(page.getByRole('heading', { name: 'Media' })).toBeVisible()
+	const transfer = await page.evaluateHandle(
+		([base64, named]) => {
+			const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+			const carried = new DataTransfer()
+			carried.items.add(new File([bytes], named, { type: 'image/jpeg' }))
+			return carried
+		},
+		[PHOTO_BASE64, name],
+	)
+
+	await page.dispatchEvent('main', 'dragenter', { dataTransfer: transfer })
+	const zone = page.locator('.godmin-list-overlay')
+	await zone.dispatchEvent('dragenter', { dataTransfer: transfer })
+	await expect(zone).toHaveClass(/is-dragging-over-element/)
+	await expect(zone.locator('.components-drop-zone__content')).toHaveCSS('opacity', '1')
+	await expect(zone.locator('.components-drop-zone__content-inner')).toHaveCSS('opacity', '1')
+	await expect(zone.getByText('Drop files to upload')).toBeVisible()
+	await zone.dispatchEvent('drop', { dataTransfer: transfer })
+
+	await expect(page.locator('#root').getByText(`"${name}" uploaded.`)).toBeVisible()
 })
 
 test('places a picture already in the library through the media library picker', async ({

@@ -36,6 +36,12 @@ test('names the capability a refused request lacks', () => {
 	expect(held).toBe('Your role does not allow manage_themes.')
 })
 
+test('points a reader at an address that holds nothing back to the link, never to a screen the admin lacks', () => {
+	const held = errorText({ error: 'not found', code: 'route_not_found' })
+
+	expect(held).toBe('There is nothing at this address. Check the link and try again.')
+})
+
 test('falls back to the server message for a code it does not know', () => {
 	const held = errorText({ error: 'content: something new', code: 'a_code_from_the_future' })
 

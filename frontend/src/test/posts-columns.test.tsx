@@ -144,6 +144,42 @@ test('shows a column for every field the type marks for the list', async () => {
 	expect(within(table).queryByRole('columnheader', { name: 'Note' })).not.toBeInTheDocument()
 })
 
+/**
+ * Makes the viewport narrower than 1440px yet wider than a phone, for the rest of the test.
+ */
+function narrowerThanWide() {
+	const original = window.matchMedia
+	const spy = vi.spyOn(window, 'matchMedia').mockImplementation((media) =>
+		Object.defineProperty(original(media), 'matches', { get: () => media.includes('1439px') }),
+	)
+	onTestFinished(() => spy.mockRestore())
+}
+
+test('opens a table narrower than 1440px on the built-in columns, so it fits its card', async () => {
+	narrowerThanWide()
+	declaring([PRICE, ON_SALE])
+	renderAt('/content/post')
+
+	const table = await screen.findByRole('table')
+
+	expect(within(table).getByRole('columnheader', { name: 'Date' })).toBeInTheDocument()
+	expect(within(table).queryByRole('columnheader', { name: 'Price' })).not.toBeInTheDocument()
+	expect(within(table).queryByRole('columnheader', { name: 'On sale' })).not.toBeInTheDocument()
+})
+
+test('keeps a listed field one pick away in View options while the table is narrower than 1440px', async () => {
+	narrowerThanWide()
+	declaring([PRICE])
+	renderAt('/content/post')
+	await screen.findByRole('table')
+
+	await userEvent.click(screen.getByRole('button', { name: 'View options' }))
+	const properties = (await screen.findByText('Properties')).closest('.dataviews-field-control') as HTMLElement
+	await userEvent.click(within(properties).getByRole('button', { name: 'Price' }))
+
+	expect(await within(screen.getByRole('table')).findByRole('columnheader', { name: 'Price' })).toBeInTheDocument()
+})
+
 test('reads each value the way its kind is written', async () => {
 	declaring([PRICE, ON_SALE, SINCE, COLOUR])
 	renderAt('/content/post')

@@ -1,0 +1,288 @@
+// SPDX-License-Identifier: Apache-2.0
+
+import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { buttonClasses } from '@gopherium/godmin/testing'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, expect, test, vi } from 'vitest'
+
+import { gate } from './gate'
+import { renderAt } from './render'
+import { siteSettings } from './siteSettings'
+
+const HARBOR = {
+	id: 7,
+	type: 'image',
+	file: '2026/08/harbor.jpg',
+	title: 'Harbor at dawn',
+	mime_type: 'image/jpeg',
+	width: 1600,
+	height: 1000,
+	filesize: 254000,
+	sizes: {},
+	created_at: '2026-08-10T10:00:00Z',
+	updated_at: '2026-08-10T10:00:00Z',
+}
+
+/** The reason the server refuses a file of a type it does not take. */
+const REFUSAL = 'the file type is not allowed'
+
+/**
+ * Returns a file of the given name, a text file when the name says so and a picture otherwise.
+ * @param name - The file name.
+ * @returns The file.
+ */
+function file(name: string): File {
+	return new File(['bytes'], name, { type: name.endsWith('.txt') ? 'text/plain' : 'image/jpeg' })
+}
+
+/**
+ * Counts the reads of the library and serves it with one picture.
+ * @returns The count of reads so far.
+ */
+function listing(): { reads: number } {
+	const seen = { reads: 0 }
+	server.use(
+		http.get('/api/media', () => {
+			seen.reads += 1
+			return HttpResponse.json({ items: [HARBOR], total: 1, per_page: siteSettings.list_page_size })
+		}),
+	)
+	return seen
+}
+
+/**
+ * Stores every upload but a text file, which it refuses, recording the type of each file sent.
+ * @returns The types of the files sent, filled as requests arrive.
+ */
+function storing(): string[] {
+	const sent: string[] = []
+	server.use(
+		http.post('/api/media', async ({ request }) => {
+			const type = /Content-Type: (\S+)/.exec(await request.text())?.[1] ?? ''
+			sent.push(type)
+			if (type === 'text/plain') {
+				return HttpResponse.json({ error: REFUSAL }, { status: 422 })
+			}
+			return HttpResponse.json(HARBOR, { status: 201 })
+		}),
+	)
+	return sent
+}
+
+/**
+ * Hands the files to the hidden input behind Upload media once the library shows.
+ * @param files - The files to choose.
+ */
+async function choose(...files: File[]) {
+	await screen.findByText('Harbor at dawn')
+	await userEvent.upload(screen.getByLabelText('Upload media'), files)
+}
+
+/**
+ * Drops the files on the zone laid over the library, as a drag from the desktop would.
+ * @param files - The files the drag carries.
+ */
+function drop(...files: File[]) {
+	const zone = document.querySelector('.godmin-list-overlay') as HTMLElement
+	const transfer = { files, items: [], types: ['Files'], getData: () => '' }
+	document.dispatchEvent(Object.assign(new Event('dragenter', { bubbles: true }), { dataTransfer: transfer }))
+	zone.dispatchEvent(Object.assign(new Event('drop', { bubbles: true, cancelable: true }), { dataTransfer: transfer }))
+}
+
+beforeEach(() => {
+	listing()
+})
+
+test('offers Upload media as the compact solid header button, drawn with the upload icon', async () => {
+	renderAt('/media')
+
+	const button = await within(await screen.findByRole('main')).findByRole('button', { name: 'Upload media' })
+
+	expect([...button.classList]).toEqual(buttonClasses('solid', 'compact'))
+	expect(button.querySelector('svg')).not.toBeNull()
+	expect(screen.queryByText('Add media')).not.toBeInTheDocument()
+})
+
+test('takes several files at once from the file dialog', async () => {
+	renderAt('/media')
+
+	await screen.findByText('Harbor at dawn')
+
+	expect(screen.getByLabelText('Upload media')).toHaveAttribute('multiple')
+	expect(screen.getByLabelText('Upload media')).not.toBeVisible()
+})
+
+test('sends one upload for each file chosen', async () => {
+	const sent = storing()
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'), file('notes.txt'))
+
+	await waitFor(() => expect(sent.sort()).toEqual(['image/jpeg', 'text/plain']))
+})
+
+test('names the one file it stored in a toast', async () => {
+	storing()
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'))
+
+	expect(await screen.findByText('"harbor.jpg" uploaded.', { selector: '.godmin-toast' })).toBeInTheDocument()
+})
+
+test('cuts a long file name in the upload toast at the length the site serves', async () => {
+	server.use(http.get('/api/settings', () => HttpResponse.json({ ...siteSettings, toast_name_length: 5 })))
+	storing()
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'))
+
+	expect(await screen.findByText('"harbo…" uploaded.', { selector: '.godmin-toast' })).toBeInTheDocument()
+})
+
+test('counts the files it stored in a toast when several were chosen', async () => {
+	storing()
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'), file('market.jpg'))
+
+	expect(await screen.findByText('Uploaded 2 files.', { selector: '.godmin-toast' })).toBeInTheDocument()
+})
+
+test('counts no refused file as uploaded, and names each refused file with its reason above the list', async () => {
+	storing()
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'), file('notes.txt'), file('market.jpg'))
+
+	expect(await screen.findByText('Uploaded 2 files.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	const notice = await within(screen.getByRole('region', { name: 'Media' })).findByRole('alert')
+	expect(notice).toHaveTextContent(`notes.txt: ${REFUSAL}`)
+	expect(notice).not.toHaveTextContent('harbor.jpg')
+})
+
+test('reports the reason the one file chosen was refused, and raises no toast', async () => {
+	storing()
+	renderAt('/media')
+
+	await choose(file('notes.txt'))
+
+	const notice = await within(screen.getByRole('region', { name: 'Media' })).findByRole('alert')
+	expect(notice).toHaveTextContent(REFUSAL)
+	expect(notice).not.toHaveTextContent('notes.txt')
+	expect(document.querySelector('.godmin-toast')).toBeNull()
+})
+
+test('reports an upload that never reached the server', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(http.post('/api/media', () => HttpResponse.error()))
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'))
+
+	expect(await screen.findByRole('alert')).toHaveTextContent('The server could not be reached, so nothing was uploaded.')
+})
+
+test('clears the last failure when the next upload starts', async () => {
+	storing()
+	renderAt('/media')
+	await choose(file('notes.txt'))
+	await screen.findByRole('alert')
+
+	await choose(file('harbor.jpg'))
+
+	await screen.findByText('"harbor.jpg" uploaded.', { selector: '.godmin-toast' })
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('holds Upload media busy while the files upload', async () => {
+	const held = gate()
+	server.use(
+		http.post('/api/media', async () => {
+			await held.held
+			return HttpResponse.json(HARBOR, { status: 201 })
+		}),
+	)
+	renderAt('/media')
+
+	await choose(file('harbor.jpg'))
+
+	const button = screen.getByRole('button', { name: 'Upload media' })
+	await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
+	held.release()
+	await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled', 'true'))
+})
+
+test('reloads the library and moves the focus to it once a file landed', async () => {
+	const seen = listing()
+	storing()
+	renderAt('/media')
+	await screen.findByText('Harbor at dawn')
+	const before = seen.reads
+
+	await choose(file('harbor.jpg'))
+
+	await waitFor(() => expect(seen.reads).toBeGreaterThan(before))
+	await waitFor(() => expect(screen.getByRole('region', { name: 'Media' })).toHaveFocus())
+})
+
+test('uploads every file dropped on the library', async () => {
+	const sent = storing()
+	renderAt('/media')
+	await screen.findByText('Harbor at dawn')
+
+	drop(file('harbor.jpg'), file('market.jpg'))
+
+	await waitFor(() => expect(sent).toEqual(['image/jpeg', 'image/jpeg']))
+	expect(await screen.findByText('Uploaded 2 files.', { selector: '.godmin-toast' })).toBeInTheDocument()
+})
+
+test('keeps the refusal of a drop made while an earlier upload still runs, naming the file once both end', async () => {
+	const held = gate()
+	let refused = 0
+	server.use(
+		http.post('/api/media', async ({ request }) => {
+			if ((await request.text()).includes('Content-Type: text/plain')) {
+				refused += 1
+				return HttpResponse.json({ error: REFUSAL }, { status: 422 })
+			}
+			await held.held
+			return HttpResponse.json(HARBOR, { status: 201 })
+		}),
+	)
+	renderAt('/media')
+	await choose(file('harbor.jpg'))
+
+	drop(file('notes.txt'))
+	await waitFor(() => expect(refused).toBe(1))
+	held.release()
+
+	await screen.findByText('"harbor.jpg" uploaded.', { selector: '.godmin-toast' })
+	const notice = await within(screen.getByRole('region', { name: 'Media' })).findByRole('alert')
+	expect(notice).toHaveTextContent(`notes.txt: ${REFUSAL}`)
+})
+
+test('holds Upload media busy until the last of two overlapping uploads ends', async () => {
+	const first = gate()
+	const second = gate()
+	const holds = [first.held, second.held]
+	server.use(
+		http.post('/api/media', async () => {
+			await holds.shift()
+			return HttpResponse.json(HARBOR, { status: 201 })
+		}),
+	)
+	renderAt('/media')
+	await choose(file('harbor.jpg'))
+	const button = screen.getByRole('button', { name: 'Upload media' })
+	await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
+
+	drop(file('market.jpg'))
+	first.release()
+	await screen.findByText('"harbor.jpg" uploaded.', { selector: '.godmin-toast' })
+
+	expect(button).toHaveAttribute('aria-disabled', 'true')
+	second.release()
+	await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled', 'true'))
+})

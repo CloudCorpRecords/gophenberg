@@ -3,10 +3,14 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test } from 'vitest'
+import { beforeEach, expect, test } from 'vitest'
 
 import { sessionQueryKey } from '@gopherium/react-auth'
 import { renderAt } from './render'
+
+beforeEach(() => {
+	server.use(http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })))
+})
 
 test('shows the signed-in user and a logout control', async () => {
 	renderAt('/')

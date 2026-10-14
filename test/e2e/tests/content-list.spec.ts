@@ -243,7 +243,7 @@ test('trashes two ticked items at once and counts them in a toast', async ({ pag
 	await page.getByRole('checkbox', { name: second, exact: true }).check()
 	await expect(page.getByText('2 Items selected')).toBeVisible()
 	await page.getByRole('button', { name: 'Trash…', exact: true }).click()
-	await page.getByRole('dialog').getByRole('button', { name: 'Trash', exact: true }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Move to trash', exact: true }).click()
 
 	await expect(page.locator('#root').getByText('2 items moved to the trash.')).toBeVisible()
 	await expect(page.getByRole('link', { name: first, exact: true })).toBeHidden()
@@ -300,7 +300,7 @@ test('refuses to trash a page that still holds pages, saying why above the list'
 
 	await team.getByRole('button', { name: 'Actions' }).click()
 	await page.getByRole('menuitem', { name: 'Trash…', exact: true }).click()
-	await page.getByRole('dialog').getByRole('button', { name: 'Trash', exact: true }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Move to trash', exact: true }).click()
 
 	const list = page.getByRole('region', { name: 'Pages' })
 	await expect(list.getByText('This item still holds items nested inside it. Move or delete those first.')).toBeVisible()

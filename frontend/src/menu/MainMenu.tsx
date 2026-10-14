@@ -76,7 +76,7 @@ export function MainMenu() {
 			),
 		)
 	return (
-		<Stack direction="column" gap="xs">
+		<Stack direction="column">
 			{reachable(contentNav).map((item) => (
 				<MenuItem key={item.to} item={item} />
 			))}

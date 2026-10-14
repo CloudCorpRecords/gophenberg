@@ -158,6 +158,19 @@ test('quotes the name in the Spanish trash confirm as the Spanish toasts do', as
 	expect(trashQuestion([WELCOME], (title) => title)).toBe('¿Mover «Welcome to Gophenberg» a la papelera?')
 })
 
+test('confirms the Spanish trash with the verb WordPress es_ES uses, not the noun', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/content/post')
+	await openRowActions()
+
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Papelera…' }))
+
+	const dialog = await screen.findByRole('dialog')
+	expect(within(dialog).getByRole('button', { name: 'Mover a la papelera' })).toBeInTheDocument()
+	expect(within(dialog).queryByRole('button', { name: 'Papelera' })).not.toBeInTheDocument()
+})
+
 test('opens the public address of a published item in a new tab', async () => {
 	const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
 	renderAt('/content/post')
@@ -197,7 +210,7 @@ test('offers no trash on a post already in the trash', async () => {
 	expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument()
 })
 
-test('asks the trash confirm under no header, as WordPress does, and confirms with the action', async () => {
+test('asks the trash confirm under no header, as WordPress does, and confirms with a verb', async () => {
 	renderAt('/content/post')
 	await openRowActions()
 
@@ -206,7 +219,8 @@ test('asks the trash confirm under no header, as WordPress does, and confirms wi
 	const dialog = await screen.findByRole('dialog')
 	expect(within(dialog).queryByRole('heading')).not.toBeInTheDocument()
 	expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
-	expect(within(dialog).getByRole('button', { name: 'Trash' })).toBeInTheDocument()
+	expect(within(dialog).getByRole('button', { name: 'Move to trash' })).toBeInTheDocument()
+	expect(within(dialog).queryByRole('button', { name: 'Trash' })).not.toBeInTheDocument()
 })
 
 test('opens the trash confirm at the medium width WordPress gives it', async () => {
@@ -239,7 +253,7 @@ test('names a post that has no title yet in the confirm', async () => {
 async function trashTheListedPost() {
 	await openRowActions()
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
-	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Trash' }))
+	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Move to trash' }))
 }
 
 test('trashes the post once confirmed', async () => {
