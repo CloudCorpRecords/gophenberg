@@ -109,6 +109,13 @@ func rootless() shelf {
 	return stocked
 }
 
+// accentedRoot returns the library shelf with the root type labelled with accented letters.
+func accentedRoot() shelf {
+	stocked := library()
+	stocked.types[0].PluralLabel = "Résumés"
+	return stocked
+}
+
 // The type keys the library shelf holds, in stored order, and the sweeps that spare one of them.
 var (
 	everyTypeKey  = []string{"page", "book", "person"}
@@ -222,6 +229,12 @@ func rootBookRow(hierarchical bool) TypeRow {
 // demotedPage is what writing the page type under a word of its own binds when it hands the root over.
 var demotedPage = TypeRow{
 	Key: "page", SingularLabel: "Page", PluralLabel: "Pages", RouteWord: "pages", PageKind: "single",
+	Hierarchical: true, Revisions: true, Active: true, RevisionCap: 100, UpdatedAt: editedAt,
+}
+
+// demotedResumes is what writing the accented root type under a plain word binds when it hands the root over.
+var demotedResumes = TypeRow{
+	Key: "page", SingularLabel: "Page", PluralLabel: "Résumés", RouteWord: "resumes", PageKind: "single",
 	Hierarchical: true, Revisions: true, Active: true, RevisionCap: 100, UpdatedAt: editedAt,
 }
 
@@ -343,6 +356,20 @@ var typeSequences = map[string]sequence{
 			sent("UpdateContentType", demotedPage), deferredAddresses,
 			sent("RetypeContentPaths", retyped{Key: "page", RouteWord: "pages", UpdatedAt: editedAt}),
 			sent("UpdateContentType", rootBookRow(false)), deferredAddresses,
+			sent("RetypeContentPaths", retyped{Key: "book", Was: "books", UpdatedAt: editedAt}),
+			committed,
+		},
+	},
+	"Update taking the root a type with an accented label holds": {
+		stocked: accentedRoot,
+		run: func(ctx context.Context, s *Store, _ content.Recheck) (any, error) {
+			return valued(s.Update(ctx, rootBook(true)))
+		},
+		golden: []step{
+			begun, sent("LockContentType", keyed{"book"}), lockedRoot,
+			sent("UpdateContentType", demotedResumes), deferredAddresses,
+			sent("RetypeContentPaths", retyped{Key: "page", RouteWord: "resumes", UpdatedAt: editedAt}),
+			sent("UpdateContentType", rootBookRow(true)), deferredAddresses,
 			sent("RetypeContentPaths", retyped{Key: "book", Was: "books", UpdatedAt: editedAt}),
 			committed,
 		},
