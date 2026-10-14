@@ -56,6 +56,7 @@ const OLD_NOTES: Post = {
 	excerpt: '',
 	authorId: TRASHED.author_id,
 	authorName: 'Maria Perez',
+	authorAvatar: '',
 	publishedAt: null,
 	createdAt: TRASHED.created_at,
 	updatedAt: TRASHED.updated_at,

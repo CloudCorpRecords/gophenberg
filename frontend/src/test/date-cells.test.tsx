@@ -48,6 +48,7 @@ const post: Post = {
 	excerpt: '',
 	authorId: '',
 	authorName: '',
+	authorAvatar: '',
 	publishedAt: NOON,
 	createdAt: NOON,
 	updatedAt: NOON,

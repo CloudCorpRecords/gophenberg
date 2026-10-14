@@ -45,6 +45,7 @@ const WELCOME: Post = {
 	excerpt: '',
 	authorId: PUBLISHED.author_id,
 	authorName: 'Maria Perez',
+	authorAvatar: '',
 	publishedAt: PUBLISHED.published_at,
 	createdAt: PUBLISHED.created_at,
 	updatedAt: PUBLISHED.updated_at,
