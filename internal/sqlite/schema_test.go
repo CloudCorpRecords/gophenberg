@@ -181,6 +181,9 @@ func TestSchemaNamesEachCheckAsPostgreSQLDoes(t *testing.T) {
 		"content_fields_relation_target": {"UPDATE core_content_fields SET kind = 'relation'", nil},
 		"content_fields_many_relational": {"UPDATE core_content_fields SET many = 1", nil},
 		"field_groups_location_is_array": {"UPDATE core_field_groups SET location = '{}'", nil},
+		"cron_jobs_lease_whole": {
+			"INSERT INTO core_cron_jobs (name, next_run_at, leased_until) VALUES ('core/session-sweep', 1, 2)", nil,
+		},
 	} {
 		err := classed(t, db, broken.statement, broken.args...)
 		if !errors.Is(err, dbkit.ErrCheck) || !strings.Contains(err.Error(), "CHECK constraint failed: "+name) {
