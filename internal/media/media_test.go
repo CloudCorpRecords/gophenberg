@@ -76,10 +76,10 @@ func TestNewStartsEmptyBeyondItsIdentity(t *testing.T) {
 		t.Error("measurements start set, want them zero until the pipeline fills them")
 	}
 	if m.Sizes == nil {
-		t.Error("Sizes = nil, want an empty rendition map")
+		t.Error("Sizes = nil, want an empty map")
 	}
 	if len(m.Sizes) != 0 {
-		t.Errorf("Sizes holds %d renditions, want none", len(m.Sizes))
+		t.Errorf("Sizes holds %d sub-sizes, want none", len(m.Sizes))
 	}
 }
 

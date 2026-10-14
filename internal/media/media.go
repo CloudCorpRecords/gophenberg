@@ -45,8 +45,8 @@ func ParseType(raw string) (Type, error) {
 	}
 }
 
-// Rendition is one derived copy of an image bounded to a size.
-type Rendition struct {
+// SubSize is one stored copy of an upload at an image size, with its file, measurements and byte count.
+type SubSize struct {
 	File     string `json:"file"`
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
@@ -54,8 +54,8 @@ type Rendition struct {
 	Filesize int64  `json:"filesize"`
 }
 
-// RenditionMap holds a media item's renditions keyed by size slug.
-type RenditionMap map[string]Rendition
+// Sizes holds a media item's sub-sizes keyed by size slug.
+type Sizes map[string]SubSize
 
 // Media is a stored upload with the descriptions the editor reads.
 type Media struct {
@@ -70,7 +70,7 @@ type Media struct {
 	Width       int
 	Height      int
 	Filesize    int64
-	Sizes       RenditionMap
+	Sizes       Sizes
 	AuthorID    uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -99,7 +99,7 @@ func New(file, title, mimeType string, authorID uuid.UUID) (Media, error) {
 		File:      file,
 		Title:     title,
 		MimeType:  mimeType,
-		Sizes:     RenditionMap{},
+		Sizes:     Sizes{},
 		AuthorID:  authorID,
 		CreatedAt: now,
 		UpdatedAt: now,
