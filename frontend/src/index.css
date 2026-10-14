@@ -31,12 +31,6 @@
 	background-color: var(--wpds-color-stroke-surface-neutral-strong);
 }
 
-.godmin-nav-screen ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
 .gophenberg-rail__brand {
 	color: inherit;
 	text-decoration: none;
@@ -56,27 +50,17 @@
 
 .gophenberg-menu__item {
 	display: block;
-	width: 100%;
 	box-sizing: border-box;
-	padding: 6px 8px;
-	border: none;
-	background: none;
+	min-height: 40px;
+	padding: 8px 6px 8px 16px;
 	border-radius: var(--wpds-border-radius-md);
-	color: var(--wpds-color-foreground-content-neutral);
-	font: inherit;
-	text-align: left;
+	color: var(--wpds-color-foreground-interactive-neutral-weak);
+	font-size: var(--wpds-typography-font-size-md);
 	text-decoration: none;
-	cursor: pointer;
 }
 
 .gophenberg-menu__item:hover {
-	background: var(--wpds-color-background-surface-neutral);
-	color: var(--wpds-color-foreground-content-neutral);
-}
-
-.gophenberg-menu__item:disabled {
-	opacity: 0.6;
-	cursor: default;
+	color: var(--wpds-color-foreground-interactive-neutral-weak-active);
 }
 
 .gophenberg-menu__item:focus-visible {
@@ -85,8 +69,9 @@
 }
 
 .gophenberg-menu__item[data-status='active'] {
-	background: var(--wpds-color-background-surface-neutral-strong);
-	color: var(--wpds-color-foreground-content-neutral);
+	background: var(--wpds-color-background-interactive-neutral-weak-active);
+	color: var(--wpds-color-foreground-interactive-neutral-weak-active);
+	font-weight: var(--wpds-typography-font-weight-emphasis);
 }
 
 .gophenberg-menu__label {
@@ -112,6 +97,16 @@
 
 .gophenberg-status {
 	white-space: nowrap;
+}
+
+.godmin-page__list .dataviews-view-table tbody .dataviews-view-table__primary-column-content {
+	flex-grow: 1;
+	contain: inline-size;
+}
+
+.godmin-page__list .dataviews-view-table tbody .dataviews-view-table__primary-column-content > .dataviews-title-field {
+	display: block;
+	overflow: hidden;
 }
 
 .gophenberg-types__actions > button {
