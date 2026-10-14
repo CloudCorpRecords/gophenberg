@@ -165,3 +165,7 @@ func TestPublicAddress(t *testing.T) {
 func TestCron(t *testing.T) {
 	runFeature(t, "features/cron.feature", initializeCron)
 }
+
+func TestPluginAccounts(t *testing.T) {
+	runFeature(t, "features/plugin-accounts.feature", initializePluginAccounts)
+}

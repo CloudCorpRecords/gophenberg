@@ -40,6 +40,7 @@ type Deps struct {
 	DatabaseURL string
 	DB          DB
 	Content     ContentReader
+	Accounts    AccountReader
 	Getenv      func(string) string
 	Env         Env
 }

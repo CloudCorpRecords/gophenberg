@@ -85,6 +85,12 @@
 .gophenberg-author {
 	display: flex;
 	align-items: center;
+	width: 100%;
+}
+
+.gophenberg-author__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .gophenberg-author__avatar {
@@ -93,6 +99,18 @@
 	align-items: center;
 	width: 24px;
 	height: 24px;
+}
+
+.gophenberg-author__icon {
+	display: flex;
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+}
+
+.gophenberg-author__icon svg {
+	margin-inline-start: -4px;
+	fill: currentColor;
 }
 
 .gophenberg-status {

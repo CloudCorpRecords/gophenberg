@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { APIRequest, Locator, Page } from '@playwright/test'
+
+import { baseURL, credentials } from '../env'
 
 const PHONE = { width: 390, height: 844 }
 
@@ -13,6 +15,54 @@ const LONG_TITLE =
 const UNBREAKABLE = 'W'.repeat(60)
 
 const RUN = Math.random().toString(36).slice(2, 8)
+
+const LONG_NAME = Array.from({ length: 11 }, () => 'Maria Perez').join(' ')
+
+const LONG_NAMES = [
+	{ reads: 'of many words', condition: 'spaced', name: LONG_NAME },
+	{ reads: 'with no spaces', condition: 'unspaced', name: LONG_NAME.replaceAll(' ', '') },
+]
+
+/**
+ * Creates an author under the name and a post that author writes, through the API the admin uses.
+ * @param page - The page of the signed in administrator, which creates the account.
+ * @param requests - The factory of request contexts, which opens the author's own session.
+ * @param condition - The condition the name stands for, naming the account and the post.
+ * @param name - The display name of the author.
+ * @returns The id and the title of the post.
+ */
+async function postWrittenBy(page: Page, requests: APIRequest, condition: string, name: string) {
+	const email = `${condition}-${RUN}@example.com`
+	const made = await page.request.post('/api/users', {
+		data: { email, name, password: credentials.password, role: 'author' },
+	})
+	expect(made.status()).toBe(201)
+	const author = await requests.newContext({ baseURL })
+	const login = await author.post('/api/auth/login', { data: { email, password: credentials.password } })
+	expect(login.ok()).toBe(true)
+	const title = `A post signed with the ${condition} long name ${RUN}`
+	const created = await author.post('/api/content', { data: { type: 'post', title } })
+	expect(created.status()).toBe(201)
+	const { id } = (await created.json()) as { id: string }
+	await author.dispose()
+	return { id, title }
+}
+
+/**
+ * Returns how the author name is drawn inside its table cell.
+ * @param name - The author name in its cell.
+ * @returns The text overflow of the name, whether its text runs past its box, and whether its box ends inside the cell.
+ */
+async function cutOf(name: Locator) {
+	return name.evaluate((element) => {
+		const cell = element.closest('td') as HTMLElement
+		return {
+			textOverflow: getComputedStyle(element).textOverflow,
+			clipped: element.scrollWidth > element.clientWidth,
+			insideCell: element.getBoundingClientRect().right <= cell.getBoundingClientRect().right,
+		}
+	})
+}
 
 /**
  * Returns how far the document and the canvas overflow the screen.
@@ -83,3 +133,21 @@ test('fits the posts table to its card at 1280 beside a long title, the listed f
 	await expect(page.locator('.dataviews-field-control').getByRole('button', { name: 'Featured' })).toBeVisible()
 	await page.request.delete(`/api/content/${id}?force=true`)
 })
+
+for (const { reads, condition, name } of LONG_NAMES) {
+	test(`cuts an author name ${reads} with an ellipsis inside its cell at 1280, as WordPress does`, async ({
+		page,
+		playwright,
+	}) => {
+		const post = await postWrittenBy(page, playwright.request, condition, name)
+		await page.setViewportSize(LAPTOP)
+
+		await page.goto(`/admin/content/post?search=${encodeURIComponent(post.title)}`)
+		const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: post.title, exact: true }) })
+		const author = row.getByText(name, { exact: true })
+		await expect(author).toBeVisible()
+
+		expect(await cutOf(author)).toEqual({ textOverflow: 'ellipsis', clipped: true, insideCell: true })
+		await page.request.delete(`/api/content/${post.id}?force=true`)
+	})
+}

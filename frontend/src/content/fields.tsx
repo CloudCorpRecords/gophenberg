@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Badge } from '@gophenberg/frontend-sdk'
+import { authorIcon, Badge, Icon } from '@gophenberg/frontend-sdk'
 import type { Field, Filter, View } from '@gophenberg/frontend-sdk/dataviews'
 import { InitialsAvatar } from '@gopherium/godmin'
 import { formatDate } from '@gopherium/gottext'
@@ -85,17 +85,23 @@ function DateCell({ item }: { item: Post }) {
 }
 
 /**
- * Renders the author of a post, its initials before its name as WordPress draws an author.
+ * Renders the author of a post as WordPress draws one, its avatar before its name, the author icon with no avatar.
  * @param props - The row being rendered.
  * @returns The author cell.
  */
 function AuthorCell({ item }: { item: Post }) {
 	return (
 		<span className="gophenberg-author">
-			<span className="gophenberg-author__avatar">
-				<InitialsAvatar name={item.authorName} size={16} />
-			</span>
-			<span>{item.authorName}</span>
+			{item.authorAvatar === '' ? (
+				<span className="gophenberg-author__icon">
+					<Icon icon={authorIcon} />
+				</span>
+			) : (
+				<span className="gophenberg-author__avatar">
+					<InitialsAvatar name={item.authorName} size={16} src={item.authorAvatar} />
+				</span>
+			)}
+			<span className="gophenberg-author__name">{item.authorName}</span>
 		</span>
 	)
 }

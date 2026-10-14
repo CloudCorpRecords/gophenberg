@@ -365,15 +365,46 @@ test('shows the author of each post', async () => {
 	expect(await screen.findAllByText('Maria Perez')).toHaveLength(2)
 })
 
-test('draws the initials of the author at 16px in a 24px box before the name', async () => {
-	renderAt('/content/post')
+/** The avatar address a site drawing initials sends for an author, the picture held in the address itself. */
+const INITIALS_AVATAR = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg"/>')}`
 
+/**
+ * Lists one published post whose author carries the given avatar address, and finds what its author cell draws.
+ * @param authorAvatar - The avatar address the server sends for the author.
+ * @returns The box drawn before the author name.
+ */
+async function authorBoxFor(authorAvatar: string): Promise<HTMLElement> {
+	serveRows([{ ...PUBLISHED, author_avatar: authorAvatar }], 1, 20)
+	renderAt('/content/post')
 	const author = (await rowOf('Welcome to Gophenberg')).getByText('Maria Perez')
-	const box = author.previousElementSibling as HTMLElement
+	return author.previousElementSibling as HTMLElement
+}
+
+test('draws the avatar of the author at 16px in a 24px box before the name', async () => {
+	const box = await authorBoxFor(INITIALS_AVATAR)
 
 	expect(getComputedStyle(box).width).toBe('24px')
-	expect(box.firstElementChild).toHaveTextContent('M')
+	expect(box.querySelector('img')).toHaveAttribute('src', INITIALS_AVATAR)
 	expect(box.firstElementChild).toHaveStyle({ inlineSize: '16px' })
+})
+
+test('draws the author icon 4px into a 24px box before the name on a site showing no avatars', async () => {
+	const box = await authorBoxFor('')
+
+	const icon = box.querySelector('svg') as SVGElement
+	expect(box.querySelector('.godmin-avatar')).toBeNull()
+	expect([getComputedStyle(box).width, getComputedStyle(box).height]).toEqual(['24px', '24px'])
+	expect(getComputedStyle(icon).getPropertyValue('margin-inline-start')).toBe('-4px')
+})
+
+test('gives the author name the WordPress ellipsis rules and its row the whole cell', async () => {
+	serveRows([PUBLISHED], 1, 20)
+	renderAt('/content/post')
+
+	const name = (await rowOf('Welcome to Gophenberg')).getByText('Maria Perez')
+	const row = name.parentElement as HTMLElement
+	expect([getComputedStyle(name).overflow, getComputedStyle(name).textOverflow]).toEqual(['hidden', 'ellipsis'])
+	expect(getComputedStyle(row).width).toBe('100%')
 })
 
 test('shows the excerpt under the title', async () => {

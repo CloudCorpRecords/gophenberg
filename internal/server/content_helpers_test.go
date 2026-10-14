@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gopherium/gouncer"
-	"github.com/gopherium/gouncer/authkit"
 	"github.com/gopherium/gouncer/authkit/testkit"
 
 	"github.com/gopherium/gophenberg/internal/content"
@@ -453,7 +452,7 @@ func typedPostServer(t *testing.T) (http.Handler, *fakePostStore, *fakeTypeStore
 }
 
 // serverConfig returns a server config over the given stores.
-func serverConfig(users authkit.AdminStore, posts content.Store) server.Config {
+func serverConfig(users server.UserStore, posts content.Store) server.Config {
 	return server.Config{Users: users, Content: posts, Types: newFakeTypeStore()}
 }
 
@@ -990,7 +989,7 @@ func (s *fakeTypeStore) Delete(_ context.Context, key string) error {
 }
 
 // serverWithStores returns an unauthenticated handler over the given stores.
-func serverWithStores(users authkit.AdminStore, posts content.Store) http.Handler {
+func serverWithStores(users server.UserStore, posts content.Store) http.Handler {
 	return server.NewServer(serverConfig(users, posts))
 }
 

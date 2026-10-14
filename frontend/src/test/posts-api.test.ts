@@ -118,6 +118,40 @@ test('reads a page of posts with its total', async () => {
 	expect(page.items[0].authorName).toBe('Maria Perez')
 })
 
+/** The avatar address the server builds for the author of an item on a site that shows avatars. */
+const AUTHOR_AVATAR = 'https://example.com/avatars/maria-perez-32.png'
+
+test('reads the avatar address of the author of each listed item', async () => {
+	server.use(
+		http.get('/api/content', () => HttpResponse.json({ items: [{ ...ROW, author_avatar: AUTHOR_AVATAR }], total: 1 })),
+	)
+
+	const page = await listPosts({})
+
+	expect(page.items[0].authorAvatar).toBe(AUTHOR_AVATAR)
+})
+
+test('reads the avatar address of the author of a fetched item', async () => {
+	server.use(
+		http.get(`/api/content/${ROW.id}`, () => HttpResponse.json({ ...ROW, content: '', author_avatar: AUTHOR_AVATAR })),
+	)
+
+	const post = await fetchPost(ROW.id)
+
+	expect(post.authorAvatar).toBe(AUTHOR_AVATAR)
+})
+
+test.each([
+	{ condition: 'sends an empty address, as a site showing no avatars does', row: { ...ROW, author_avatar: '' } },
+	{ condition: 'sends no address at all', row: ROW },
+])('reads no avatar for the author when the server $condition', async ({ row }) => {
+	server.use(http.get('/api/content', () => HttpResponse.json({ items: [row], total: 1 })))
+
+	const page = await listPosts({})
+
+	expect(page.items[0].authorAvatar).toBe('')
+})
+
 test('asks only for the parameters it was given', async () => {
 	const queries = captureList()
 

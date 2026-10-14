@@ -3,13 +3,16 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gopherium/framework/gonsole/testkit"
 	"github.com/gopherium/framework/pluginkit"
+	"github.com/gopherium/gouncer/avatar"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/definitions"
@@ -64,10 +67,74 @@ func TestComposeRegistersThePluginsWithoutMigrating(t *testing.T) {
 		t.Errorf("plugins were handed %q, %v and FEED_ITEMS %q, want the address, a content reader and the settings",
 			handed.DatabaseURL, handed.Content, handed.Env.Within("FEED_").Value("ITEMS"))
 	}
+	if handed.Accounts == nil {
+		t.Error("plugins were handed no account reader, want one")
+	}
 	for _, schema := range []string{"auth", "core"} {
 		if schemaHeld(t, databaseURL, schema) {
 			t.Errorf("the %s schema exists after compose, want nothing migrated", schema)
 		}
+	}
+}
+
+func TestComposeReadsTheAvatarSettingsWithTheirDefaults(t *testing.T) {
+	t.Parallel()
+
+	for name, asked := range map[string]struct {
+		env  map[string]string
+		want avatar.Options
+	}{
+		"nothing set": {
+			env:  map[string]string{},
+			want: avatar.Options{Mode: avatar.ModeInitials, Default: avatar.DefaultMystery, Rating: avatar.RatingG},
+		},
+		"each set": {
+			env: map[string]string{
+				"GOPHENBERG_AVATARS": "gravatar", "GOPHENBERG_AVATAR_DEFAULT": "identicon", "GOPHENBERG_AVATAR_RATING": "PG",
+			},
+			want: avatar.Options{Mode: avatar.ModeGravatar, Default: avatar.DefaultIdenticon, Rating: avatar.RatingPG},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			built, err := compose(t.Context(), composeConfig{
+				databaseURL: unreachableDatabaseURL, fieldDepth: 4, getenv: testkit.Getenv(asked.env),
+			}, noPlugins)
+			if err != nil {
+				t.Fatalf("compose() error = %v, want nil", err)
+			}
+			defer built.close()
+
+			if built.avatars != asked.want {
+				t.Errorf("avatars = %+v, want %+v", built.avatars, asked.want)
+			}
+		})
+	}
+}
+
+func TestComposeRefusesEachBadAvatarSetting(t *testing.T) {
+	t.Parallel()
+
+	for _, bad := range []struct{ name, value string }{
+		{"GOPHENBERG_AVATARS", "photos"},
+		{"GOPHENBERG_AVATAR_DEFAULT", "smiley"},
+		{"GOPHENBERG_AVATAR_DEFAULT", "initials"},
+		{"GOPHENBERG_AVATAR_RATING", "NC17"},
+	} {
+		t.Run(bad.name+"="+bad.value, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := compose(t.Context(), composeConfig{
+				databaseURL: unreachableDatabaseURL, fieldDepth: 4,
+				getenv: testkit.Getenv(map[string]string{bad.name: bad.value}),
+			}, noPlugins)
+
+			if message := fmt.Sprint(err); !strings.Contains(message, bad.name) || !strings.Contains(message, bad.value) {
+				t.Errorf("compose() with %s=%q = %v, want an error naming the setting and its value",
+					bad.name, bad.value, err)
+			}
+		})
 	}
 }
 
@@ -106,6 +173,7 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 		"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB": "64",
 		"GOPHENBERG_UPLOAD_TIMEOUT":            "9m",
 		"GOPHENBERG_CACHE_ASSET_MAX_AGE":       "2h",
+		"GOPHENBERG_AVATARS":                   "off",
 	})
 	settings, err := loadRunConfig(getenv)
 	if err != nil {
@@ -125,6 +193,9 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	}
 	if cfg.Roles != built.roles {
 		t.Error("serverConfig() serves other roles than the ones compose declared")
+	}
+	if cfg.Avatars != built.avatars || cfg.Avatars.Mode != avatar.ModeOff {
+		t.Errorf("Avatars = %+v, want the %+v compose read from the settings", cfg.Avatars, built.avatars)
 	}
 	if cfg.Cache != cachePolicyFrom(settings) || cfg.Cache.AssetMaxAge != 2*time.Hour {
 		t.Errorf("Cache = %+v, want the windows the settings name", cfg.Cache)

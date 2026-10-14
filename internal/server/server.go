@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -11,11 +12,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/pluginkit"
+	"github.com/gopherium/gouncer"
 	"github.com/gopherium/gouncer/authkit"
 	"github.com/gopherium/gouncer/authkit/ratelimit"
+	"github.com/gopherium/gouncer/avatar"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/definitions"
@@ -26,9 +30,16 @@ import (
 // sessionCookieName scopes the login cookie to this product.
 const sessionCookieName = "__Host-gophenberg_session"
 
+// UserStore persists the accounts the server signs in and administers.
+type UserStore interface {
+	authkit.AdminStore
+	// UsersByIDs returns the accounts holding the ids in one read.
+	UsersByIDs(ctx context.Context, ids []uuid.UUID) ([]gouncer.User, error)
+}
+
 // Config carries the stores and plugin surfaces the server serves.
 type Config struct {
-	Users authkit.AdminStore
+	Users UserStore
 	// Content persists the content the CMS serves.
 	Content content.Store
 	// Types persists the content type registry. Nil leaves the registry routes unhandled.
@@ -85,6 +96,8 @@ type Config struct {
 	CronSecret string
 	// CronOnVisits lets each answered request start the cron jobs.
 	CronOnVisits bool
+	// Avatars is how the site draws the author avatars the admin shows. A zero value draws initials.
+	Avatars avatar.Options
 }
 
 // rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
@@ -131,6 +144,7 @@ func NewServer(cfg Config) http.Handler {
 		declarations:   cfg.Declarations,
 		logger:         loggerOf(cfg),
 		lists:          listsOf(cfg),
+		avatars:        cfg.Avatars,
 	}
 	s.addresses = content.NewResolver(cfg.Content, s.types)
 	headers := headersFor(cfg.Cache)
@@ -282,7 +296,7 @@ func (s *server) mountThemes(r chi.Router) {
 
 type server struct {
 	auth       *authkit.Handlers
-	users      authkit.AdminStore
+	users      UserStore
 	content    content.Store
 	types      *content.Registry
 	addresses  *content.Resolver
@@ -299,4 +313,5 @@ type server struct {
 	declarations   definitions.Walked
 	logger         *slog.Logger
 	lists          ListSettings
+	avatars        avatar.Options
 }

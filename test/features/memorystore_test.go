@@ -5,6 +5,7 @@ package features_test
 import (
 	"context"
 	"encoding/hex"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ type memoryStore struct {
 	mu       sync.Mutex
 	users    map[string]gouncer.User
 	sessions map[string]gouncer.Session
+	byIDs    int
 }
 
 // newMemoryStore returns an empty account store.
@@ -106,6 +108,39 @@ func (m *memoryStore) holdsUser(id uuid.UUID) bool {
 		}
 	}
 	return false
+}
+
+// UsersByIDs returns the accounts carrying the ids in one read, counting the read.
+func (m *memoryStore) UsersByIDs(_ context.Context, ids []uuid.UUID) ([]gouncer.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.byIDs++
+	var found []gouncer.User
+	for _, user := range m.users {
+		if slices.Contains(ids, user.ID) {
+			found = append(found, user)
+		}
+	}
+	return found, nil
+}
+
+// readsByIDs returns how many reads of many ids the store answered.
+func (m *memoryStore) readsByIDs() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.byIDs
+}
+
+// idNamed returns the id of the account carrying the name, and whether one does.
+func (m *memoryStore) idNamed(name string) (uuid.UUID, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, user := range m.users {
+		if user.Name == name {
+			return user.ID, true
+		}
+	}
+	return uuid.UUID{}, false
 }
 
 // ListUsers returns every account in email order.

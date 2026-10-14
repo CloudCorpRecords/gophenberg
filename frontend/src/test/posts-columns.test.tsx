@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { authorIcon, Icon } from '@gophenberg/frontend-sdk'
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import type { ReactElement } from 'react'
@@ -116,6 +117,7 @@ function listedPost(): Post {
 		excerpt: '',
 		authorId: '',
 		authorName: '',
+		authorAvatar: '',
 		publishedAt: STAMP,
 		createdAt: STAMP,
 		updatedAt: STAMP,
@@ -403,6 +405,51 @@ test('names a scheduled item by the badge WordPress es_ES draws for a Spanish re
 	render(<Cell item={{ ...listedPost(), status: 'scheduled' }} />)
 
 	expect(screen.getByText('Programada')).toBeInTheDocument()
+})
+
+/** The avatar address the server builds for the author of an item on a site that shows avatars. */
+const AUTHOR_AVATAR = 'https://example.com/avatars/maria-perez-32.png'
+
+/**
+ * Renders the author cell of a listed item written by Maria Perez.
+ * @param authorAvatar - The avatar address the server sent for the author.
+ * @returns The cell the column drew.
+ */
+function renderAuthorCell(authorAvatar: string): HTMLElement {
+	const author = postFields(placeholderType('post')).find((column) => column.id === 'author')
+	const Cell = author?.render as (props: { item: Post }) => ReactElement
+	const { container } = render(<Cell item={{ ...listedPost(), authorName: 'Maria Perez', authorAvatar }} />)
+	return container.querySelector('.gophenberg-author') as HTMLElement
+}
+
+test('draws the avatar picture the server sent at 16px before the author name, as WordPress does', () => {
+	const cell = renderAuthorCell(AUTHOR_AVATAR)
+
+	const avatar = cell.querySelector('.gophenberg-author__avatar .godmin-avatar') as HTMLElement
+	expect(avatar.querySelector('img')?.getAttribute('src')).toBe(AUTHOR_AVATAR)
+	expect(avatar.style.inlineSize).toBe('16px')
+	expect(avatar.style.blockSize).toBe('16px')
+	expect(cell).toHaveTextContent('Maria Perez')
+})
+
+test('draws the author icon and no avatar before the name on a site showing no avatars, as WordPress does', () => {
+	const cell = renderAuthorCell('')
+	const { container: drawn } = render(<Icon icon={authorIcon} />)
+
+	expect(cell.querySelector('.godmin-avatar')).toBeNull()
+	expect(cell.querySelector('.gophenberg-author__icon')?.innerHTML).toBe(drawn.innerHTML)
+	expect(cell).toHaveTextContent('Maria Perez')
+})
+
+test('draws the initials of the author in place of an avatar picture that fails to load', () => {
+	const cell = renderAuthorCell(AUTHOR_AVATAR)
+
+	fireEvent.error(cell.querySelector('.godmin-avatar img') as HTMLImageElement)
+
+	const avatar = cell.querySelector('.gophenberg-author__avatar .godmin-avatar') as HTMLElement
+	expect(avatar.querySelector('img')).toBeNull()
+	expect(avatar).toHaveTextContent('M')
+	expect(avatar.style.backgroundColor).not.toBe('')
 })
 
 test('heads the columns of a nesting type as the WordPress page list does', () => {
