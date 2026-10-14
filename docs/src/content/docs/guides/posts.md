@@ -17,8 +17,12 @@ admin's own when the type has none.
 
 The table shows Title, Author, Status and Date. A post's title links
 to its editor, and an untitled post shows `(no title)`. When a post
-has an excerpt, it shows under the title. A small circle holding the
-first letter of the author's name sits before the name.
+has an excerpt, it shows under the title. A small round avatar sits
+before the author's name. By default it is a circle holding the
+first letter of the name. The site's
+[avatar settings](/self-hosting/configuration/#avatars) can show the
+Gravatar picture instead, or no avatar, and then the author icon
+sits there, as in WordPress.
 
 The Status column shows a badge such as Draft, Pending Review or
 Published. It shows only on the All tab, since every other tab holds
