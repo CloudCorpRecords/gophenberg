@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,12 @@ import (
 
 // DefaultMaxSize bounds an upload when the library is not given its own cap.
 const DefaultMaxSize = 128 << 20
+
+// DefaultConcurrentImages is how many images decode and resize at once when the library is not given its own limit.
+const DefaultConcurrentImages = 2
+
+// MaxConcurrentImages is the most images a site may let decode and resize at once.
+const MaxConcurrentImages = 64
 
 // maxPixels bounds the pixels an image may decode to.
 const maxPixels = 80_000_000
@@ -66,6 +73,8 @@ type Config struct {
 	MaxSize int64
 	// Settings answers the quality pictures encode at. Nil applies [DefaultJPEGQuality].
 	Settings Settings
+	// ConcurrentImages bounds how many images decode and resize at once. Zero applies [DefaultConcurrentImages].
+	ConcurrentImages int
 }
 
 // Library owns the media directory uploads land in.
@@ -73,6 +82,8 @@ type Library struct {
 	dir      string
 	maxSize  int64
 	settings Settings
+	slots    slots
+	decode   func(io.Reader) (image.Image, string, error)
 }
 
 // New returns a [Library] over the configured directory.
@@ -81,7 +92,13 @@ func New(cfg Config) *Library {
 	if size <= 0 {
 		size = DefaultMaxSize
 	}
-	return &Library{dir: cfg.Dir, maxSize: size, settings: cfg.Settings}
+	images := cfg.ConcurrentImages
+	if images <= 0 {
+		images = DefaultConcurrentImages
+	}
+	return &Library{
+		dir: cfg.Dir, maxSize: size, settings: cfg.Settings, slots: make(slots, images), decode: image.Decode,
+	}
 }
 
 // Dir returns the directory the library owns.
@@ -144,14 +161,27 @@ func (l *Library) ingestImage(
 			return l.store(name, k, data, cfg.Width, cfg.Height, nil, authorID)
 		}
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, data, renditions, err := l.process(ctx, k, data, l.quality(ctx))
 	if err != nil {
-		return media.Media{}, refuse("image_unreadable", "the image cannot be read", "decoding: %w", err)
+		return media.Media{}, err
 	}
-	quality := l.quality(ctx)
-	img, data = uprightJPEG(k, img, data, quality)
-	renditions := deriveRenditions(img, k, quality)
 	return l.store(name, k, data, img.Bounds().Dx(), img.Bounds().Dy(), renditions, authorID)
+}
+
+// process decodes an upload, uprights it, and derives its renditions while it holds one of the library's slots.
+func (l *Library) process(
+	ctx context.Context, k kind, data []byte, quality int,
+) (image.Image, []byte, []rendition, error) {
+	if err := l.slots.take(ctx); err != nil {
+		return nil, nil, nil, fmt.Errorf("mediahost: wait for an image slot: %w", err)
+	}
+	defer l.slots.give()
+	img, _, err := l.decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, nil, nil, refuse("image_unreadable", "the image cannot be read", "decoding: %w", err)
+	}
+	img, data = uprightJPEG(k, img, data, quality)
+	return img, data, deriveRenditions(img, k, quality), nil
 }
 
 // decodeBudget reads the image header and refuses what is too big to decode.

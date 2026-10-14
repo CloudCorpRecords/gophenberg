@@ -42,6 +42,8 @@ func TestRunConfigTrimsEverySetting(t *testing.T) {
 			func(c runConfig) string { return strconv.Itoa(c.themeStartAttempts) }, "7"},
 		{"GOPHENBERG_MEDIA_UPLOAD_CAP_MB", " 64 ",
 			func(c runConfig) string { return strconv.FormatInt(c.mediaUploadCap, 10) }, strconv.Itoa(64 << 20)},
+		{"GOPHENBERG_MEDIA_CONCURRENT_IMAGES", " 3 ",
+			func(c runConfig) string { return strconv.Itoa(c.mediaConcurrentImages) }, "3"},
 		{"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB", " 512 ",
 			func(c runConfig) string { return strconv.FormatInt(c.definitionsImportCap, 10) }, strconv.Itoa(512 << 10)},
 		{"GOPHENBERG_FIELD_DEPTH", " 4 ", func(c runConfig) string { return strconv.Itoa(c.fieldDepth) }, "4"},
@@ -103,6 +105,22 @@ func TestLoadRunConfigTakesTheMostStartAttemptsAllowed(t *testing.T) {
 	}
 }
 
+func TestLoadRunConfigTakesTheMostConcurrentImagesAllowed(t *testing.T) {
+	t.Parallel()
+
+	settings, err := loadRunConfig(testkit.Getenv(map[string]string{
+		"GOPHENBERG_DATABASE_URL":            unreachableDatabaseURL,
+		"GOPHENBERG_MEDIA_CONCURRENT_IMAGES": "64",
+	}))
+
+	if err != nil {
+		t.Fatalf("loadRunConfig() error = %v, want the largest image limit allowed taken", err)
+	}
+	if settings.mediaConcurrentImages != 64 {
+		t.Errorf("the image limit = %d, want 64", settings.mediaConcurrentImages)
+	}
+}
+
 func TestLoadRunConfigTakesTheDeepestFieldNestingAllowed(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +175,9 @@ func TestLoadRunConfigDefaultsTheTimingsToTodaysValues(t *testing.T) {
 	if settings.mediaUploadCap != 128<<20 {
 		t.Errorf("the upload cap = %d, want %d", settings.mediaUploadCap, 128<<20)
 	}
+	if settings.mediaConcurrentImages != 2 {
+		t.Errorf("the image limit = %d, want 2", settings.mediaConcurrentImages)
+	}
 	if settings.definitionsImportCap != server.DefaultDefinitionsImportCap {
 		t.Errorf("the definitions cap = %d, want %d",
 			settings.definitionsImportCap, server.DefaultDefinitionsImportCap)
@@ -195,6 +216,7 @@ func TestLoadRunConfigReadsTheTimingsFromTheEnvironment(t *testing.T) {
 		"GOPHENBERG_THEME_START_ATTEMPTS": "9",
 		"GOPHENBERG_MEDIA_UPLOAD_CAP_MB":  "64",
 
+		"GOPHENBERG_MEDIA_CONCURRENT_IMAGES":   "4",
 		"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB": "512",
 		"GOPHENBERG_FIELD_DEPTH":               "48",
 
@@ -238,6 +260,9 @@ func TestLoadRunConfigReadsTheTimingsFromTheEnvironment(t *testing.T) {
 	if settings.mediaUploadCap != 64<<20 {
 		t.Errorf("the upload cap = %d, want %d", settings.mediaUploadCap, 64<<20)
 	}
+	if settings.mediaConcurrentImages != 4 {
+		t.Errorf("the image limit = %d, want 4", settings.mediaConcurrentImages)
+	}
 	if settings.definitionsImportCap != 512<<10 {
 		t.Errorf("the definitions cap = %d, want %d", settings.definitionsImportCap, 512<<10)
 	}
@@ -267,6 +292,9 @@ func TestLoadRunConfigRefusesATimingItCannotStand(t *testing.T) {
 		"an upload cap that is not a number":     {"GOPHENBERG_MEDIA_UPLOAD_CAP_MB", "big"},
 		"an upload cap standing at zero":         {"GOPHENBERG_MEDIA_UPLOAD_CAP_MB", "0"},
 		"an upload cap below zero":               {"GOPHENBERG_MEDIA_UPLOAD_CAP_MB", "-8"},
+		"an image limit that is not a number":    {"GOPHENBERG_MEDIA_CONCURRENT_IMAGES", "several"},
+		"an image limit standing at zero":        {"GOPHENBERG_MEDIA_CONCURRENT_IMAGES", "0"},
+		"an image limit below zero":              {"GOPHENBERG_MEDIA_CONCURRENT_IMAGES", "-1"},
 		"a definitions cap that is not a number": {"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB", "roomy"},
 		"a definitions cap standing at zero":     {"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB", "0"},
 		"a definitions cap below zero":           {"GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB", "-4"},
@@ -284,6 +312,9 @@ func TestLoadRunConfigRefusesATimingItCannotStand(t *testing.T) {
 		},
 		"start attempts one past the most allowed": {
 			"GOPHENBERG_THEME_START_ATTEMPTS", "1001",
+		},
+		"an image limit one past the most allowed": {
+			"GOPHENBERG_MEDIA_CONCURRENT_IMAGES", "65",
 		},
 		"a field depth that is not a number":    {"GOPHENBERG_FIELD_DEPTH", "deep"},
 		"a field depth standing at zero":        {"GOPHENBERG_FIELD_DEPTH", "0"},

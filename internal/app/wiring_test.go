@@ -33,6 +33,8 @@ func timedConfig() runConfig {
 		mediaUploadCap:     64 << 20,
 		fieldDepth:         7,
 
+		mediaConcurrentImages: 3,
+
 		cacheAssetMaxAge:                 2 * time.Hour,
 		cacheMediaMaxAge:                 90 * time.Second,
 		cacheContentSharedMaxAge:         30 * time.Second,
@@ -132,6 +134,18 @@ func TestMediaConfigCarriesTheUploadCapTheEnvironmentNamed(t *testing.T) {
 	}
 	if held.Dir != settings.mediaDir {
 		t.Errorf("Dir = %q, want %q", held.Dir, settings.mediaDir)
+	}
+}
+
+func TestMediaConfigCarriesTheImageLimitTheEnvironmentNamed(t *testing.T) {
+	t.Parallel()
+
+	settings := timedConfig()
+
+	held := mediaConfigFrom(settings, nil)
+
+	if held.ConcurrentImages != settings.mediaConcurrentImages {
+		t.Errorf("ConcurrentImages = %d, want %d", held.ConcurrentImages, settings.mediaConcurrentImages)
 	}
 }
 
