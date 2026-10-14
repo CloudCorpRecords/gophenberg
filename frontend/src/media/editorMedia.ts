@@ -146,13 +146,9 @@ async function storedAttachment(
 	args: EditorMediaUploadArgs,
 ): Promise<EditorAttachment | null> {
 	try {
-		const outcome = await uploadMedia(file)
-		if (outcome.kind === 'stored') {
-			return toAttachment(outcome.item)
-		}
-		args.onError?.(new Error(outcome.reason))
-	} catch {
-		args.onError?.(new Error(__('The server could not be reached, so nothing was uploaded.', 'gophenberg')))
+		return toAttachment(await uploadMedia(file))
+	} catch (failure) {
+		args.onError?.(failure as Error)
 	}
 	return null
 }

@@ -19,7 +19,7 @@
 	word-break: break-all;
 }
 
-.gophenberg-media__drop {
-	border-radius: var(--wpds-border-radius-md);
+.gophenberg-media__notice {
+	white-space: pre-line;
 }
 

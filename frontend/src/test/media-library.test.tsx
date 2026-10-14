@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { deleteFailure, deleteQuestion } from '../media/actions'
-import { chosenFile, droppedFile, filteredKind } from '../media/MediaScreen'
+import { filteredKind } from '../media/MediaScreen'
 import { renderAt } from './render'
 import { siteSettings } from './siteSettings'
 
@@ -143,14 +143,67 @@ test('reports a library that could not be read', async () => {
 	expect(await screen.findByRole('alert')).toHaveTextContent(/could not/i)
 })
 
-test('says the library is empty when nothing was uploaded', async () => {
+test('says the library holds nothing yet, and how to add a file, when nothing narrows it', async () => {
 	listing([])
 	renderAt('/media')
 
-	expect(await screen.findByText(/no media/i)).toBeInTheDocument()
+	const empty = (await screen.findByText('No media items yet.')).closest('.godmin-empty') as HTMLElement
+
+	expect(within(empty).getByText('Add one with Upload media.')).toBeInTheDocument()
+	expect(empty.querySelector('svg')).not.toBeNull()
 })
 
-test('uploads a chosen file and reloads the library', async () => {
+test('says no media item was found when a search narrows the library to nothing', async () => {
+	renderAt('/media')
+	await screen.findByText('Harbor at dawn')
+	listing([])
+
+	await userEvent.type(screen.getByRole('searchbox'), 'lighthouse')
+
+	expect(await screen.findByText('No media items found.')).toBeInTheDocument()
+	expect(screen.queryByText('Add one with Upload media.')).not.toBeInTheDocument()
+})
+
+test('says under the Media title what the library holds', async () => {
+	renderAt('/media')
+
+	expect(await screen.findByText('Manage the images and files this site holds.')).toHaveClass('godmin-page__subtitle')
+})
+
+test('says no media item was found when the kind filter narrows the library to nothing', async () => {
+	renderAt('/media')
+	await screen.findByText('Harbor at dawn')
+	listing([])
+
+	await userEvent.click(screen.getByRole('button', { name: /Kind/ }))
+	await userEvent.click(await screen.findByRole('option', { name: 'Files' }))
+
+	expect(await screen.findByText('No media items found.')).toBeInTheDocument()
+	expect(screen.queryByText('Add one with Upload media.')).not.toBeInTheDocument()
+})
+
+test('draws the library in the list region of the page, named Media', async () => {
+	renderAt('/media')
+
+	const region = await screen.findByRole('region', { name: 'Media' })
+
+	expect(await within(region).findByText('Harbor at dawn')).toBeInTheDocument()
+	expect(region).toHaveClass('godmin-page__list')
+	expect(region.parentElement).toHaveClass('godmin-page')
+	expect(region).toHaveAttribute('tabindex', '-1')
+})
+
+test('lays a drop zone reading Drop files to upload over the list region', async () => {
+	renderAt('/media')
+
+	const region = await screen.findByRole('region', { name: 'Media' })
+	const zone = region.querySelector(':scope > .godmin-list-overlay') as HTMLElement
+
+	expect(zone).not.toBeNull()
+	expect(zone).toHaveTextContent('Drop files to upload')
+})
+
+test('ignores a drop that carries no file, while the drop after it carrying one uploads it', async () => {
 	let uploaded = 0
 	server.use(
 		http.post('/api/media', () => {
@@ -160,89 +213,20 @@ test('uploads a chosen file and reloads the library', async () => {
 	)
 	renderAt('/media')
 	await screen.findByText('Harbor at dawn')
+	const zone = document.querySelector('.godmin-list-overlay') as HTMLElement
+	const dropped = (files: File[]) =>
+		zone.dispatchEvent(
+			Object.assign(new Event('drop', { bubbles: true, cancelable: true }), {
+				dataTransfer: { files, items: [], types: files.length > 0 ? ['Files'] : [], getData: () => '' },
+			}),
+		)
 
-	await userEvent.upload(
-		screen.getByLabelText(/add media/i),
-		new File(['bytes'], 'harbor.jpg', { type: 'image/jpeg' }),
-	)
+	dropped([])
+	dropped([new File(['bytes'], 'harbor.jpg', { type: 'image/jpeg' })])
 
-	await waitFor(() => expect(uploaded).toBe(1))
-})
-
-test('reports the reason an upload was refused', async () => {
-	server.use(
-		http.post('/api/media', () =>
-			HttpResponse.json({ error: 'the file type is not allowed' }, { status: 422 }),
-		),
-	)
-	renderAt('/media')
-	await screen.findByText('Harbor at dawn')
-
-	await userEvent.upload(
-		screen.getByLabelText(/add media/i),
-		new File(['x'], 'notes.txt', { type: 'text/plain' }),
-	)
-
-	expect(await screen.findByRole('alert')).toHaveTextContent('the file type is not allowed')
-})
-
-test('reports an upload that never reached the server', async () => {
-	vi.spyOn(console, 'error').mockImplementation(() => {})
-	server.use(http.post('/api/media', () => HttpResponse.error()))
-	renderAt('/media')
-	await screen.findByText('Harbor at dawn')
-
-	await userEvent.upload(
-		screen.getByLabelText(/add media/i),
-		new File(['x'], 'harbor.jpg', { type: 'image/jpeg' }),
-	)
-
-	expect(await screen.findByRole('alert')).toHaveTextContent(/could not be reached/i)
-})
-
-test('uploads a file dropped on the library', async () => {
-	let uploaded = 0
-	server.use(
-		http.post('/api/media', () => {
-			uploaded += 1
-			return HttpResponse.json(HARBOR, { status: 201 })
-		}),
-	)
-	renderAt('/media')
-	await screen.findByText('Harbor at dawn')
-	const target = screen.getByTestId('media-drop')
-	const dropped = new File(['bytes'], 'harbor.jpg', { type: 'image/jpeg' })
-
-	await userEvent.pointer({ target })
-	const transfer = { files: [dropped], items: [], types: ['Files'] }
-	target.dispatchEvent(
-		Object.assign(new Event('dragover', { bubbles: true }), { dataTransfer: transfer }),
-	)
-	target.dispatchEvent(
-		Object.assign(new Event('drop', { bubbles: true }), { dataTransfer: transfer }),
-	)
-
-	await waitFor(() => expect(uploaded).toBe(1))
-})
-
-test('ignores a drop that carries no file', async () => {
-	let uploaded = 0
-	server.use(
-		http.post('/api/media', () => {
-			uploaded += 1
-			return HttpResponse.json(HARBOR, { status: 201 })
-		}),
-	)
-	renderAt('/media')
-	await screen.findByText('Harbor at dawn')
-	const target = screen.getByTestId('media-drop')
-
-	target.dispatchEvent(
-		Object.assign(new Event('drop', { bubbles: true }), { dataTransfer: { files: [] } }),
-	)
-	target.dispatchEvent(new Event('drop', { bubbles: true }))
-
-	expect(uploaded).toBe(0)
+	expect(await screen.findByText('"harbor.jpg" uploaded.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(uploaded).toBe(1)
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 test('deletes a media item for good after a confirmation', async () => {
@@ -374,11 +358,6 @@ test('dates a media item that carries no timestamp', async () => {
 	await userEvent.click(await screen.findByRole('menuitemradio', { name: /table/i }))
 
 	expect(await screen.findAllByText('manual.pdf')).not.toHaveLength(0)
-})
-
-test('takes no file from a field that holds none', () => {
-	expect(chosenFile(null)).toBeNull()
-	expect(droppedFile(null)).toBeNull()
 })
 
 test('asks for every kind until a kind is filtered for', () => {

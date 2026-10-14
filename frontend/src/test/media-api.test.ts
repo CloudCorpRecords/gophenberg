@@ -219,32 +219,56 @@ test('uploads a file as multipart under the field the server reads', async () =>
 		}),
 	)
 
-	const outcome = await uploadMedia(new File(['the bytes'], 'harbor.jpg', { type: 'image/jpeg' }))
+	const stored = await uploadMedia(new File(['the bytes'], 'harbor.jpg', { type: 'image/jpeg' }))
 
-	expect(outcome).toEqual({ kind: 'stored', item: expect.objectContaining({ id: 7 }) })
+	expect(stored).toEqual(expect.objectContaining({ id: 7 }))
 	expect(contentType).toMatch(/^multipart\/form-data; boundary=/)
 	expect(body).toMatch(/name="file"; filename=/)
 	expect(body).toContain('Content-Type: image/jpeg')
 })
 
-test('carries the reason an upload was refused', async () => {
+test('throws the reason an upload was refused, so a run never counts it as done', async () => {
 	server.use(
 		http.post('/api/media', () =>
 			HttpResponse.json({ error: 'the file type is not allowed' }, { status: 422 }),
 		),
 	)
 
-	const outcome = await uploadMedia(new File(['x'], 'notes.txt', { type: 'text/plain' }))
-
-	expect(outcome).toEqual({ kind: 'refused', reason: 'the file type is not allowed' })
+	await expect(uploadMedia(new File(['x'], 'notes.txt', { type: 'text/plain' }))).rejects.toThrow(
+		'the file type is not allowed',
+	)
 })
 
-test('stands in when a refused upload carries no message', async () => {
+test('throws a stand in when a refused upload carries no message', async () => {
 	server.use(http.post('/api/media', () => new HttpResponse('', { status: 413 })))
 
-	const outcome = await uploadMedia(new File(['x'], 'huge.jpg', { type: 'image/jpeg' }))
+	await expect(uploadMedia(new File(['x'], 'huge.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+		'Something went wrong. Try again.',
+	)
+})
 
-	expect(outcome).toEqual({ kind: 'refused', reason: 'Something went wrong. Try again.' })
+test('throws in the reader words an upload that never reached the server', async () => {
+	server.use(http.post('/api/media', () => HttpResponse.error()))
+
+	await expect(uploadMedia(new File(['x'], 'harbor.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+		'The server could not be reached, so nothing was uploaded.',
+	)
+})
+
+test('throws a stand in, never the words of a parser, when a stored upload answers with no JSON', async () => {
+	server.use(http.post('/api/media', () => new HttpResponse('<html>gateway</html>', { status: 201 })))
+
+	await expect(uploadMedia(new File(['x'], 'harbor.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+		/^Something went wrong\. Try again\.$/,
+	)
+})
+
+test('throws a stand in, never the words of a schema, when a stored upload answers with a misshapen item', async () => {
+	server.use(http.post('/api/media', () => HttpResponse.json({ id: 'seven' }, { status: 201 })))
+
+	await expect(uploadMedia(new File(['x'], 'harbor.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+		/^Something went wrong\. Try again\.$/,
+	)
 })
 
 test('saves descriptions against the version it read', async () => {
