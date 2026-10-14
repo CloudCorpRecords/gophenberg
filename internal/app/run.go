@@ -110,6 +110,7 @@ func serverConfig(
 		Declarations:         walked,
 		Lists:                settings.lists,
 		Roles:                built.roles,
+		Avatars:              built.avatars,
 	}
 	if settings.webDir != "" {
 		cfg.Web = os.DirFS(settings.webDir)

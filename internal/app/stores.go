@@ -10,6 +10,7 @@ import (
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
+	"github.com/gopherium/gouncer/avatar"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/content"
@@ -42,6 +43,7 @@ type site struct {
 	failed     error
 	lane       *pluginLane
 	roles      *goncierge.Registry
+	avatars    avatar.Options
 }
 
 // composeOf returns the values compose reads out of the server settings.
