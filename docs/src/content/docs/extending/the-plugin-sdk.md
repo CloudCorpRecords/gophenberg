@@ -138,11 +138,25 @@ people, err := deps.Accounts.People(ctx, authorIDs, 96)
 
 The answer is a map keyed by `sdk.ID`. Each `sdk.Person` carries
 `ID`, `Name`, `Role`, `Avatar` and `Disabled`. `Name` is the display
-name. `Role` is the stored role, such as `member`. `Avatar` is an
-image address at the size you asked, from 1 to 2048 pixels, and
-empty when the site shows no avatars. For sharp screens, ask for
-twice the size you draw, and ask once with the largest size the page
-shows. Build profile links from `ID`.
+name. `Role` is the stored role, such as `member`. Build profile
+links from `ID`.
+
+`Avatar` is an image address at the size you asked, from 1 to 2048
+pixels. A size outside that range is refused. For sharp screens, ask
+for twice the size you draw, and ask once with the largest size the
+page shows. The site's [avatar settings](/self-hosting/configuration/#avatars)
+decide what the address holds. By default it is a
+`data:image/svg+xml;base64,` address that holds the picture itself,
+so the browser makes no request. With Gravatar it points at
+`secure.gravatar.com`. With avatars off it is empty, so draw no
+picture then. Put the address in an `<img src>` as it is.
+`html/template` writes `#ZgotmplZ` in place of a `data:` address, so
+pass it as `template.URL(person.Avatar)`. The site builds every
+avatar address, so it is safe to mark:
+
+```go
+data := struct{ Avatar template.URL }{template.URL(person.Avatar)}
+```
 
 `Disabled` is true for an account an administrator turned off. Show
 its name, link nowhere, and show your own word for its role, such as
@@ -455,12 +469,13 @@ const manages = can(session, 'hello.manage')
 
 The frontend SDK, `@gophenberg/frontend-sdk`, passes on a few icons
 from `@wordpress/icons`, each named after the job it does in the
-admin: `backIcon`, `backupIcon`, `downIcon`, `listViewIcon`,
-`mediaIcon`, `postIcon`, `redoIcon`, `trashIcon`, `undoIcon`, `upIcon`
-and `uploadIcon`. `postIcon` is the one an empty content list shows,
-`mediaIcon` the one an empty media library shows, and `uploadIcon`
-the one an upload button carries. Import them from
-the SDK, so the admin keeps one copy of the icon set:
+admin: `authorIcon`, `backIcon`, `backupIcon`, `downIcon`,
+`listViewIcon`, `mediaIcon`, `postIcon`, `redoIcon`, `trashIcon`,
+`undoIcon`, `upIcon` and `uploadIcon`. `authorIcon` is the one an
+author cell shows when the site shows no avatars, `postIcon` the one
+an empty content list shows, `mediaIcon` the one an empty media
+library shows, and `uploadIcon` the one an upload button carries.
+Import them from the SDK, so the admin keeps one copy of the icon set:
 
 ```ts
 import { trashIcon } from '@gophenberg/frontend-sdk'
@@ -507,6 +522,18 @@ To take a version, pass its number to `go get`, such as
 Your plugin compiles into Gophenberg, so it builds against the SDK
 inside the Gophenberg you build. Build with one that holds the
 version your plugin requires, or a later one.
+
+### v0.5.0
+
+Not tagged yet. A plugin can show who wrote something.
+
+- New: the `Accounts` field on `Deps`, an `AccountReader`. Its
+  `People` method takes many account ids and an avatar size, and
+  returns the public face of each account in one call. See
+  [reading account names](#reading-account-names).
+- New: the `Person` type, with `ID`, `Name`, `Role`, `Avatar` and
+  `Disabled`, and never an email address.
+- Nothing breaks for a plugin that names the fields of `Deps`.
 
 ### v0.4.0
 
