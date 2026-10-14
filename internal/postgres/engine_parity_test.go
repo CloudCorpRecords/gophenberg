@@ -146,6 +146,10 @@ var (
 			postgres: "CHECK ((jsonb_typeof(location) = 'array'::text))",
 			sqlite:   "json_valid(location) AND json_type(location) = 'array'",
 		},
+		"cron_jobs_lease_whole": {
+			postgres: "CHECK (((leased_until IS NULL) = (lease_token IS NULL)))",
+			sqlite:   "(leased_until IS NULL) = (lease_token IS NULL)",
+		},
 	}
 	// partialPredicates holds each partial index by name with its predicate as PostgreSQL prints it and SQLite keeps it.
 	partialPredicates = map[string]sqlTwin{

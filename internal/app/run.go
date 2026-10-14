@@ -16,7 +16,6 @@ import (
 
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/pluginkit"
-	"github.com/gopherium/gouncer/authkit"
 	"github.com/gopherium/gouncer/authkit/ratelimit"
 
 	"github.com/gopherium/gophenberg/internal/content"
@@ -55,9 +54,7 @@ func run(
 		return errors.Join(err, stopPlugins(ctx, host, settings.serving.StopGrace))
 	}
 
-	reaper := authkit.NewReaper(built.users, authkit.ReaperConfig{Logger: logger})
-	reaper.Start()
-	defer reaper.Stop()
+	jobs := cronOf(settings.cron, built, logger)
 
 	walked, err := declareTypes(ctx, built.registry, built.registered, logger)
 	if err != nil {
@@ -76,13 +73,15 @@ func run(
 
 	cfg := serverConfig(settings, built, host, walked, logger)
 	cfg.Theme, cfg.Themes = themes.Holder(), themes
+	cfg.Cron, cfg.CronSecret, cfg.CronOnVisits = jobs.runs, settings.cron.secret, settings.cron.onVisits
 	if settings.mediaDir != "" {
 		cfg.Media = recoveredLibrary(ctx, mediaConfigFrom(settings, built.settings), built.media.Saved, logger)
 		cfg.MediaStore = built.library
 		cfg.MediaFiles = os.DirFS(settings.mediaDir)
 	}
 
-	return gonsole.Serve(ctx, httpServerFrom(settings, server.NewServer(cfg)), settings.serving, host.Stop, logger)
+	return gonsole.Serve(ctx, jobs.serverOf(settings, server.NewServer(cfg)), settings.serving,
+		jobs.stop(host, settings.serving.StopGrace), logger)
 }
 
 // serverConfig returns the server settings over what compose built, the theme and the media left to the caller.
@@ -151,6 +150,8 @@ type runConfig struct {
 	serving gonsole.Timeouts
 
 	lists server.ListSettings
+
+	cron cronSettings
 }
 
 // servingDefaults are the HTTP timeouts and shutdown graces a site runs under when its environment names none.
@@ -362,7 +363,7 @@ func loadRunConfig(getenv func(string) string) (runConfig, error) {
 	if settings.serving, err = env.Timeouts(servingDefaults); err != nil {
 		return runConfig{}, err
 	}
-	if settings.lists, err = listSettingsFrom(env); err != nil {
+	if err := sectionsFrom(env, &settings); err != nil {
 		return runConfig{}, err
 	}
 	settings.databaseURL = databaseURL
@@ -376,6 +377,17 @@ func loadRunConfig(getenv func(string) string) (runConfig, error) {
 	settings.nodeBin = valueOr(env, "NODE_BIN", "node")
 	settings.mediaDir = env.Value("MEDIA_DIR")
 	return settings, nil
+}
+
+// sectionsFrom reads the admin list settings and the cron job settings into held.
+func sectionsFrom(env gonsole.Env, held *runConfig) error {
+	lists, err := listSettingsFrom(env)
+	if err != nil {
+		return err
+	}
+	held.lists = lists
+	held.cron, err = cronSettingsFrom(env)
+	return err
 }
 
 // valueOr returns the setting's value, or fallback when it is empty.

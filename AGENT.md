@@ -15,6 +15,7 @@ internal/server       http.Handler, routes, middleware, theme reverse proxy
 internal/content      content domain package
 internal/postgres     data access (pgx + sqlc)
 internal/contentbridge published content as the sdk ContentReader seam
+internal/cron         runs named jobs when due, under a lease, with no product words
 internal/publichtml   sanitizer for stored block markup on public surfaces
 internal/publicsite   built-in Go renderer for the public site
 internal/themehost    theme artifact validation and the node process supervisor

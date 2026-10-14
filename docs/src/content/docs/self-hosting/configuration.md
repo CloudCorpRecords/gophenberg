@@ -58,6 +58,13 @@ so it takes the default.
 | `GOPHENBERG_SHUTDOWN_GRACE` | No | `10s` | How long a stop gives running requests to finish, see [stopping the server](#stopping-the-server) |
 | `GOPHENBERG_SHUTDOWN_CANCEL_GRACE` | No | `5s` | How long the requests cancelled after that grace get to end |
 | `GOPHENBERG_SHUTDOWN_STOP_GRACE` | No | `5s` | How long the plugins get to stop after that, and after any other command |
+| `GOPHENBERG_CRON_SECRET` | No | | The secret the host's cron sends to run the [cron jobs](/self-hosting/cron/), at least 32 characters. Empty leaves the cron address off |
+| `GOPHENBERG_CRON_ON_VISITS` | No | `true` | Whether a visit may start the cron jobs once its page is answered |
+| `GOPHENBERG_CRON_VISIT_PACE` | No | `1m` | How long after one check a visit waits before it checks again |
+| `GOPHENBERG_CRON_TIME_LIMIT` | No | `30s` | How long one cron job run may take before it is cut short |
+| `GOPHENBERG_CRON_LEASE` | No | `1m` | How long a run holds its job so no other run takes it, above the time limit. Also the longest the server waits for the database to list or hand over a job |
+| `GOPHENBERG_CRON_STOP_GRACE` | No | `2s` | How long a stop gives a running cron job to end and record itself |
+| `GOPHENBERG_SESSION_SWEEP_INTERVAL` | No | `1h` | How often expired sessions and expired account links are swept |
 | `GOPHENBERG_COMMAND_RECORD_TIMEOUT` | No | `5s` | How long an account command has to store the record of a change it applied, see [the commands](/self-hosting/commands/) |
 | `GOPHENBERG_COMMAND_RECORDS_LIMIT` | No | `50` | How many records `account:records` lists when its `-limit` flag names no other |
 | `GOPHENBERG_FEED_TITLE` | No | `Gophenberg` | The RSS channel title |
@@ -179,14 +186,16 @@ terminal. From then on it takes no new request, and it:
 2. Cancels the ones still running after that, gives them
    `GOPHENBERG_SHUTDOWN_CANCEL_GRACE` to end, and then closes their
    connections.
-3. Gives the plugins `GOPHENBERG_SHUTDOWN_STOP_GRACE` to stop.
-4. Gives the theme `GOPHENBERG_THEME_STOP_GRACE` to stop.
+3. Gives a cron job still running `GOPHENBERG_CRON_STOP_GRACE` to
+   stop and record itself.
+4. Gives the plugins `GOPHENBERG_SHUTDOWN_STOP_GRACE` to stop.
+5. Gives the theme `GOPHENBERG_THEME_STOP_GRACE` to stop.
 
 Whatever sends the signal also waits, and kills the server when its
 own wait runs out. Docker waits 10 seconds unless the compose file
 sets `stop_grace_period`. Kubernetes waits
 `terminationGracePeriodSeconds`, 30 seconds unless set. Keep that wait
-longer than the four settings above added together, 23 seconds at
+longer than the five settings above added together, 25 seconds at
 their defaults, or the kill lands in the middle of the stop.
 
 The plugins get the same `GOPHENBERG_SHUTDOWN_STOP_GRACE` to stop
@@ -238,11 +247,18 @@ The server refuses to start, and says why, when:
 - Any of the cache windows is not a positive whole number of seconds.
   Write them as durations, `1h`, `90s`, `5m`. Part of a second is
   refused, because the header counts in whole seconds.
-- Any of the theme timings, HTTP timeouts, shutdown graces or the upload
-  timeout is not a positive duration. Write them the way Go does, `30s`,
-  `500ms`, `1m`.
+- Any of the theme timings, HTTP timeouts, shutdown graces, cron job
+  timings or the upload timeout is not a positive duration. Write them
+  the way Go does, `30s`, `500ms`, `1m`.
 - `GOPHENBERG_THEME_MAX_BACKOFF` stands below
   `GOPHENBERG_THEME_BACKOFF`, which would leave no room to grow.
+- `GOPHENBERG_CRON_LEASE` does not stand above
+  `GOPHENBERG_CRON_TIME_LIMIT`, which would let a second run take a
+  job that is still allowed to run.
+- `GOPHENBERG_CRON_SECRET` is set but shorter than 32 characters.
+  The message names its length, never the secret.
+- `GOPHENBERG_CRON_ON_VISITS` is `false` while
+  `GOPHENBERG_CRON_SECRET` is empty, so no cron job could ever run.
 - `GOPHENBERG_LIST_PAGE_SIZES` lists fewer than 2 or more than 6
   sizes, lists a size twice or out of order, or names a size above
   `GOPHENBERG_LIST_PAGE_CAP`.
@@ -286,6 +302,7 @@ docker compose run --rm -T gophenberg check
 | `/admin/` | The admin | The screens ask for one |
 | `/api/...` | The admin's JSON API | Yes, apart from signing in and out |
 | `/api/content/v1/...` | The [public content API](/reference/content-api/) | No |
+| `/api/cron` | Runs the [cron jobs](/self-hosting/cron/) for the host's cron, `POST` only, served only once a secret is set | The cron secret, in a header |
 | `/api/plugins/feed/rss.xml` | The [RSS feed](/reference/rss-feed/) | No |
 | `/gophenberg/...` | Site assets, cached for an hour unless set otherwise | No |
 | `/_gophenberg/...` | Reserved for internal use | Answers 404 |

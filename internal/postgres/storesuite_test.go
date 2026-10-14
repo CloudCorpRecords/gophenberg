@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
+	"github.com/gopherium/gophenberg/internal/cron/crontest"
 	"github.com/gopherium/gophenberg/internal/media/mediatest"
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/testdb"
@@ -79,6 +80,19 @@ func TestSiteSettingStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	contenttest.RunSiteSettings(t, postgresStores)
+}
+
+// postgresCronStores returns a fresh cron store over a migrated database of its own.
+func postgresCronStores(t *testing.T) crontest.Stores {
+	t.Helper()
+	store, pool := cronStoreWithPool(t)
+	return crontest.Stores{Store: store, LastFailure: lastFailureIn(pool)}
+}
+
+func TestCronStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	crontest.Run(t, postgresCronStores)
 }
 
 func TestUserSettingStoreSuite(t *testing.T) {
