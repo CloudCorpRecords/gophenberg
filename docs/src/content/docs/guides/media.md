@@ -9,10 +9,17 @@ what it places from the same library.
 
 ## Uploading a file
 
-Open Media in the menu and choose a file with **Add media**. You
-can also drop a file straight onto the library. Either way the
-upload starts at once, and the file appears in the grid when the
-server has stored it.
+Open Media in the menu and press **Upload media** at the top of the
+screen. You can pick several files at once, or drop them straight
+onto the library, which reads "Drop files to upload" while you drag.
+Either way the upload starts at once, every file sent side by side,
+and the files appear in the grid when the server has stored them.
+
+A short message at the bottom of the screen names the file you
+uploaded, or counts the files when you sent several. A file the
+server refuses is not counted. Its reason shows in a notice above
+the library, and when you sent several files each refused one is
+named on its own line.
 
 Gophenberg accepts JPEG, PNG, GIF and WebP pictures, MP4 and WebM
 video, MP3, M4A, WAV, OGG and FLAC audio, PDF documents and ZIP
@@ -52,7 +59,9 @@ throw the animation away.
 The library opens as a grid of thumbnails. The **Layout** control
 switches it to a table, which adds the file name, type and date.
 Search matches titles and file names, and the filter narrows the
-list to images or to plain files.
+list to images or to plain files. When nothing matches, the library
+says `No media items found.` An empty library says `No media items
+yet.` and how to add one.
 
 Every item carries four descriptions, all editable through
 **Describe**:

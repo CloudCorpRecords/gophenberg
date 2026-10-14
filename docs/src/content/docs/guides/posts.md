@@ -104,13 +104,16 @@ holds nothing at all says `No items yet.` and how to add one.
 
 ## Creating a post
 
-Press **Add New** at the top of the list, or in the Posts section of
-the menu. Gophenberg creates a draft and opens it in
-[the editor](/guides/editor/). Both buttons wait until the screen has
-read the content type, so the draft starts on the defaults its
-fields name. If the button at the top fails, the list says why above
-the rows. If the one in the menu fails, the reason shows under the
-menu.
+Press **Add New** at the top of the list. Gophenberg creates a draft
+and opens it in [the editor](/guides/editor/). The button waits until
+the screen has read the content type, so the draft starts on the
+defaults its fields name. If it fails, the list says why above the
+rows.
+
+Each content type is one screen. Its menu entry opens the list
+straight away, with the status tabs above the table, and the menu
+stays as it is beside it. The admin's own address opens the list of
+the default content type.
 
 ## The actions on a row
 
@@ -142,7 +145,8 @@ with what you typed kept.
 
 **Trash…** sits last in the actions menu of every row not in the
 trash yet. It asks first, in a dialog with no header, and the
-question names the post. Tick several rows and the **Trash…**
+question names the post. Its button reads **Move to trash**. Tick
+several rows and the **Trash…**
 button under the list moves them all at once, behind one question.
 
 The editor's Document panel offers **Move to trash**. It asks in a
