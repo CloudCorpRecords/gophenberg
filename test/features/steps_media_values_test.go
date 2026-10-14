@@ -253,8 +253,8 @@ func theServedFieldsCarryNo(ctx context.Context, key string) error {
 	return nil
 }
 
-// theServedFieldCarriesNoRenditions asserts the served object holds an empty sizes map.
-func theServedFieldCarriesNoRenditions(ctx context.Context, key string) error {
+// theServedFieldCarriesNoSubSizes asserts the served object holds an empty sizes map.
+func theServedFieldCarriesNoSubSizes(ctx context.Context, key string) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -347,6 +347,6 @@ func initializeMediaValues(sc *godog.ScenarioContext) {
 		theServedFieldListsTheAddresses,
 	)
 	sc.Then(`^the served fields carry no "([^"]*)"$`, theServedFieldsCarryNo)
-	sc.Then(`^the served field "([^"]*)" carries no renditions$`, theServedFieldCarriesNoRenditions)
+	sc.Then(`^the served field "([^"]*)" carries no image sizes$`, theServedFieldCarriesNoSubSizes)
 	sc.Then(`^resolving "([^"]*)" answers a changed validator$`, resolvingAnswersAChangedValidator)
 }

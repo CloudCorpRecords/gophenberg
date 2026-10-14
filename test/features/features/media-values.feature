@@ -1,6 +1,6 @@
 Feature: Serving media field values
   A published item's media fields serve the file itself, its address, its
-  words and its renditions, so a theme renders an image without a login.
+  words and its image sizes, so a theme renders an image without a login.
   A file that is gone drops out rather than breaking the page.
 
   Background:
@@ -74,11 +74,11 @@ Feature: Serving media field values
     When the administrator describes the image "sunrise"
     Then resolving "/hello-world" answers a changed validator
 
-  Scenario: An animated GIF serves its address and no renditions
+  Scenario: An animated GIF serves its address and no image sizes
     Given the media field "cover" in "Extras"
     And the administrator uploads an animated GIF named "wave.gif"
     And the published post "Hello world"
     And the administrator saves the image named "wave" into "cover" of "Hello world"
     When a visitor resolves "/hello-world"
     Then the served field "cover" is one object addressing "wave.gif"
-    And the served field "cover" carries no renditions
+    And the served field "cover" carries no image sizes
