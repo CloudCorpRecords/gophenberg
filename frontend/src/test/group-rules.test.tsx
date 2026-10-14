@@ -74,6 +74,36 @@ async function openRules() {
 	return screen.findByRole('dialog')
 }
 
+/** A type a plugin declared under the built-in page key, with the page's shipped names. */
+const DECLARED_PAGE = { ...RECIPE_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', origin: 'shop' }
+
+/** Serves the content type source with the page key among its values. */
+function offeringPages() {
+	const [offered] = SOURCES.items
+	server.use(
+		http.get('/api/groups/params', () =>
+			HttpResponse.json({ items: [{ ...offered, values: [...offered.values, { value: 'page', label: 'Pages' }] }] }),
+		),
+	)
+}
+
+/**
+ * Opens the value select of the first rule in a Spanish admin.
+ * @returns The rule the select belongs to.
+ */
+async function openSpanishValues() {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/field-groups')
+	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
+	const row = within(table).getByRole('row', { name: /Article details/ })
+	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
+	const dialog = await screen.findByRole('dialog')
+	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
+	await userEvent.click(within(rule).getByLabelText('Valor'))
+	return rule
+}
+
 /** Answers the group edit and records what the dialog sent. */
 function recording(sent: { body?: unknown }) {
 	server.use(
@@ -102,69 +132,34 @@ test('shows a stored rule under the source, condition and value it carries', asy
 })
 
 test('offers the built-in types as rule values in the words of WordPress es_ES for a Spanish reader', async () => {
-	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
-	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	renderAt('/field-groups')
-
-	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
-	const row = within(table).getByRole('row', { name: /Article details/ })
-	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
-	const dialog = await screen.findByRole('dialog')
-	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
+	const rule = await openSpanishValues()
 
 	expect(within(rule).getByLabelText('Valor')).toHaveTextContent('Entradas')
-	await userEvent.click(within(rule).getByLabelText('Valor'))
 	expect(await screen.findByRole('option', { name: 'Entradas' })).toBeInTheDocument()
 	expect(screen.getByRole('option', { name: 'Recipes' })).toBeInTheDocument()
 })
 
 test('offers a type a plugin declared under a built-in key as a rule value by the name it declared', async () => {
-	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
-	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	const declared = { ...RECIPE_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', origin: 'shop' }
-	const [offered] = SOURCES.items
-	server.use(
-		http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, declared] })),
-		http.get('/api/groups/params', () =>
-			HttpResponse.json({ items: [{ ...offered, values: [...offered.values, { value: 'page', label: 'Pages' }] }] }),
-		),
-	)
-	renderAt('/field-groups')
+	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, DECLARED_PAGE] })))
+	offeringPages()
 
-	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
-	const row = within(table).getByRole('row', { name: /Article details/ })
-	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
-	const dialog = await screen.findByRole('dialog')
-	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
-	await userEvent.click(within(rule).getByLabelText('Valor'))
+	await openSpanishValues()
 
 	expect(await screen.findByRole('option', { name: 'Pages' })).toBeInTheDocument()
 	expect(screen.getByRole('option', { name: 'Entradas' })).toBeInTheDocument()
 })
 
 test('names a rule value as the server sent it until the type list says who declared it', async () => {
-	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
-	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	const declared = { ...RECIPE_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', origin: 'shop' }
-	const [offered] = SOURCES.items
 	const types = gate()
 	server.use(
 		http.get('/api/types', async () => {
 			await types.held
-			return HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, declared] })
+			return HttpResponse.json({ items: [POST_TYPE, RECIPE_TYPE, DECLARED_PAGE] })
 		}),
-		http.get('/api/groups/params', () =>
-			HttpResponse.json({ items: [{ ...offered, values: [...offered.values, { value: 'page', label: 'Pages' }] }] }),
-		),
 	)
-	renderAt('/field-groups')
+	offeringPages()
 
-	const table = await screen.findByRole('region', { name: 'Grupos de campos' })
-	const row = within(table).getByRole('row', { name: /Article details/ })
-	await userEvent.click(within(row).getByRole('button', { name: 'Reglas' }))
-	const dialog = await screen.findByRole('dialog')
-	const rule = within(dialog).getByRole('group', { name: 'Regla 1 del conjunto 1' })
-	await userEvent.click(within(rule).getByLabelText('Valor'))
+	await openSpanishValues()
 
 	expect(await screen.findByRole('option', { name: 'Pages' })).toBeInTheDocument()
 	expect(screen.queryByRole('option', { name: 'Páginas' })).not.toBeInTheDocument()
