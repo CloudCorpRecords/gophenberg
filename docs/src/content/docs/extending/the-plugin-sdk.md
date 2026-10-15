@@ -531,7 +531,7 @@ the action.
 Each version below says what it adds and what it changes. When a
 change stops a plugin from compiling, **To move** lists the steps.
 To take a version, pass its number to `go get`, such as
-`github.com/gopherium/gophenberg/sdk@v0.4.0`.
+`github.com/gopherium/gophenberg/sdk@v0.5.0`.
 
 Your plugin compiles into Gophenberg, so it builds against the SDK
 inside the Gophenberg you build. Build with one that holds the
@@ -608,11 +608,12 @@ database.
 Tagged 2026-10-08. The SDK becomes a Go module of its own.
 
 Before this version, the `sdk` package lived inside the Gophenberg
-module, and its last release there was Gophenberg v0.18.1. The import
-path stays `github.com/gopherium/gophenberg/sdk`, so your `import`
-lines do not change. What changes is the module your plugin requires,
-and the SDK now names only its own types and the standard library's.
-Compared with Gophenberg v0.18.1:
+module, and its last release there was Gophenberg v0.18.2, which
+holds the same package as v0.18.1. The import path stays
+`github.com/gopherium/gophenberg/sdk`, so your `import` lines do not
+change. What changes is the module your plugin requires, and the SDK
+now names only its own types and the standard library's. Compared
+with Gophenberg v0.18.2:
 
 - The SDK is the module `github.com/gopherium/gophenberg/sdk`. Its
   versions come from tags such as `sdk/v0.1.0`.
@@ -643,8 +644,9 @@ Compared with Gophenberg v0.18.1:
    go mod tidy
    ```
 
-   Keep no requirement on Gophenberg v0.18.1 or earlier. It holds the
-   `sdk` package too, so Go stops the build with `ambiguous import`.
+   Keep no requirement on Gophenberg v0.18.2 or earlier. Each of those
+   releases holds the `sdk` package too, so Go stops the build with
+   `ambiguous import`.
 2. Where you still need a `uuid.UUID`, convert it. Both are sixteen
    bytes, so `uuid.UUID(item.ID)` and `sdk.ID(someUUID)` work.
 3. A command reads its settings and the database address from the
