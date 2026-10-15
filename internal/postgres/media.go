@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gopherium/framework/dbkit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -171,7 +172,7 @@ func mediaNarrowing(f media.Filter) db.CountMediaParams {
 		After:           f.After,
 		ModifiedBefore:  f.ModifiedBefore,
 		ModifiedAfter:   f.ModifiedAfter,
-		Search:          escapeLike(f.Search),
+		Search:          dbkit.EscapeLike(f.Search),
 	}
 }
 
@@ -179,7 +180,7 @@ func mediaNarrowing(f media.Filter) db.CountMediaParams {
 func escapedPrefixes(prefixes []string) []string {
 	escaped := make([]string, len(prefixes))
 	for i, prefix := range prefixes {
-		escaped[i] = escapeLike(prefix)
+		escaped[i] = dbkit.EscapeLike(prefix)
 	}
 	return escaped
 }
