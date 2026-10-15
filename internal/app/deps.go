@@ -4,7 +4,6 @@ package app
 
 import (
 	"cmp"
-	"context"
 	"errors"
 	"fmt"
 
@@ -22,7 +21,7 @@ import (
 var errNamesSentOut = errors.New("this default sends names to Gravatar, the initials mode draws them on the site")
 
 // compose builds the stores the address picks, the plugins, their roles and their share off SQLite, starting nothing.
-func compose(ctx context.Context, cfg composeConfig, plugins func(sdk.Deps) ([]sdk.Plugin, error)) (site, error) {
+func compose(cfg composeConfig, plugins func(sdk.Deps) ([]sdk.Plugin, error)) (site, error) {
 	lane, err := laneSettingsFrom(cfg.getenv)
 	if err != nil {
 		return site{}, err
@@ -31,7 +30,7 @@ func compose(ctx context.Context, cfg composeConfig, plugins func(sdk.Deps) ([]s
 	if err != nil {
 		return site{}, err
 	}
-	built, err := openStores(ctx, cfg)
+	built, err := openStores(cfg)
 	if err != nil {
 		return site{}, err
 	}
@@ -86,20 +85,19 @@ func avatarOf(options avatar.Options) func(name, email string, size int) string 
 	}
 }
 
-// ready declares the core's and the registered plugins' roles, then opens the plugins' database share off SQLite.
+// ready declares the core's and the registered plugins' roles, then opens the plugins' share on the PostgreSQL handle.
 func (s site) ready(lane laneSettings) error {
 	if err := declareRoles(s.roles, role.Core(), s.registered); err != nil {
 		return err
 	}
-	if s.lane.sqlite {
+	if s.pgHandle == nil {
 		return nil
 	}
-	return s.lane.open(s.pool, len(s.registered), lane)
+	return s.lane.open(s.pgHandle, len(s.registered), lane)
 }
 
-// close closes the plugins' database share and then releases the pool, nothing on SQLite.
+// close releases the PostgreSQL handle and with it the plugins' share, nothing on SQLite or while describing.
 func (s site) close() {
-	s.lane.close()
 	s.release()
 }
 

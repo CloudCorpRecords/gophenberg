@@ -51,7 +51,7 @@ func TestComposeRegistersThePluginsWithoutMigrating(t *testing.T) {
 	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_FEED_ITEMS": "7"})
 	var handed sdk.Deps
 
-	built, err := compose(t.Context(), composeConfig{databaseURL: databaseURL, fieldDepth: 4, getenv: getenv},
+	built, err := compose(composeConfig{databaseURL: databaseURL, fieldDepth: 4, getenv: getenv},
 		func(deps sdk.Deps) ([]sdk.Plugin, error) {
 			handed = deps
 			return keeping(&keeper{})(deps)
@@ -99,7 +99,7 @@ func TestComposeReadsTheAvatarSettingsWithTheirDefaults(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			built, err := compose(t.Context(), composeConfig{
+			built, err := compose(composeConfig{
 				databaseURL: unreachableDatabaseURL, fieldDepth: 4, getenv: testkit.Getenv(asked.env),
 			}, noPlugins)
 			if err != nil {
@@ -126,7 +126,7 @@ func TestComposeRefusesEachBadAvatarSetting(t *testing.T) {
 		t.Run(bad.name+"="+bad.value, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := compose(t.Context(), composeConfig{
+			_, err := compose(composeConfig{
 				databaseURL: unreachableDatabaseURL, fieldDepth: 4,
 				getenv: testkit.Getenv(map[string]string{bad.name: bad.value}),
 			}, noPlugins)
@@ -144,7 +144,7 @@ func TestComposeInDescribeModeNeedsNoDatabaseSetting(t *testing.T) {
 
 	var handed sdk.Deps
 
-	built, err := compose(t.Context(), composeConfig{fieldDepth: 4}, func(deps sdk.Deps) ([]sdk.Plugin, error) {
+	built, err := compose(composeConfig{describe: true, fieldDepth: 4}, func(deps sdk.Deps) ([]sdk.Plugin, error) {
 		handed = deps
 		return keeping(&keeper{})(deps)
 	})
@@ -202,7 +202,7 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRunConfig() error = %v, want nil", err)
 	}
-	built, err := compose(t.Context(), composeOf(settings, getenv), noPlugins)
+	built, err := compose(composeOf(settings, getenv), noPlugins)
 	if err != nil {
 		t.Fatalf("compose() error = %v, want nil", err)
 	}

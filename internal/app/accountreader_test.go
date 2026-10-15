@@ -114,7 +114,7 @@ func TestAPluginReadingAccountsWhileItRegistersIsRefused(t *testing.T) {
 
 	var refused error
 
-	built, err := compose(t.Context(), composeConfig{databaseURL: unreachableDatabaseURL, fieldDepth: 4},
+	built, err := compose(composeConfig{databaseURL: unreachableDatabaseURL, fieldDepth: 4},
 		func(deps sdk.Deps) ([]sdk.Plugin, error) {
 			_, refused = deps.Accounts.People(t.Context(), []sdk.ID{sdk.ID(uuid.New())}, readSize)
 			return []sdk.Plugin{}, nil
@@ -133,7 +133,7 @@ func TestAPluginReadingAccountsEndsAtThePluginQueryTimeout(t *testing.T) {
 	t.Parallel()
 
 	var handed sdk.Deps
-	built, err := compose(t.Context(), composeConfig{
+	built, err := compose(composeConfig{
 		databaseURL: emptyDatabaseURL(t), fieldDepth: 4,
 		getenv: testkit.Getenv(map[string]string{"GOPHENBERG_PLUGIN_QUERY_TIMEOUT": "1ns"}),
 	}, func(deps sdk.Deps) ([]sdk.Plugin, error) {

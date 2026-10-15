@@ -3,6 +3,7 @@
 package app
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -14,17 +15,18 @@ import (
 // sqliteAddress is a SQLite database address at an absolute path that no test opens.
 const sqliteAddress = "sqlite:/srv/site/site.db"
 
-// badSQLiteSettings holds, for each SQLite setting check reads, one value a SQLite site refuses.
+// badSQLiteSettings holds, for each setting only a SQLite site reads, one value a SQLite site refuses.
 var badSQLiteSettings = map[string]string{
 	"GOPHENBERG_SQLITE_SYNCHRONOUS":       "off",
-	"GOPHENBERG_DATABASE_MAX_CONNS":       "1",
 	"GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT": "0",
 }
 
 func TestCheckNamesEachBadSQLiteSettingBeforeOpeningTheDatabase(t *testing.T) {
 	t.Parallel()
 
-	for name, value := range badSQLiteSettings {
+	bad := map[string]string{"GOPHENBERG_DATABASE_MAX_CONNS": "1"}
+	maps.Copy(bad, badSQLiteSettings)
+	for name, value := range bad {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

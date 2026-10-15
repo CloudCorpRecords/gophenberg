@@ -12,9 +12,9 @@ import (
 	"github.com/gopherium/gophenberg/sdk"
 )
 
-// loadPlugins returns the registration the command line runs the plugins through, declaring their roles into roles.
+// loadPlugins returns the plugin registration, declaring roles into roles and keeping the site's handle in composed.
 func loadPlugins(
-	plugins func(sdk.Deps) ([]sdk.Plugin, error), roles *goncierge.Registry,
+	plugins func(sdk.Deps) ([]sdk.Plugin, error), roles *goncierge.Registry, composed *sitePool,
 ) func(context.Context, gonsole.Call) (gonsole.Loaded, error) {
 	return func(ctx context.Context, call gonsole.Call) (gonsole.Loaded, error) {
 		grace, err := call.Env.Duration("SHUTDOWN_STOP_GRACE", servingDefaults.StopGrace)
@@ -30,13 +30,14 @@ func loadPlugins(
 			return gonsole.Loaded{}, err
 		}
 		cfg := composeConfig{
-			databaseURL: databaseURL, handle: handle, fieldDepth: depth, mediaDir: call.Env.Value("MEDIA_DIR"),
-			getenv: call.Env.Getenv, roles: roles,
+			databaseURL: databaseURL, handle: handle, describe: call.Describe, fieldDepth: depth,
+			mediaDir: call.Env.Value("MEDIA_DIR"), getenv: call.Env.Getenv, roles: roles,
 		}
-		built, err := compose(ctx, cfg, plugins)
+		built, err := compose(cfg, plugins)
 		if err != nil {
 			return gonsole.Loaded{}, err
 		}
+		composed.handle = built.pgHandle
 		host := hostOf(built.registered)
 		return gonsole.Hosted(offerings(built.registered), host, built.failed, grace, built.close), nil
 	}

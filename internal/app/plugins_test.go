@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gopherium/framework/dbkit"
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
@@ -116,7 +117,8 @@ func TestLoadPluginsNamesWhatItCannotRead(t *testing.T) {
 		},
 		"no database address outside describe mode": {map[string]string{}, false, "GOPHENBERG_DATABASE_URL"},
 		"a database address it cannot parse": {
-			map[string]string{"GOPHENBERG_DATABASE_URL": "not a url \x00"}, false, "parse database url",
+			map[string]string{"GOPHENBERG_DATABASE_URL": "not a url \x00"}, false,
+			"GOPHENBERG_DATABASE_URL: " + dbkit.ErrAddress.Error(),
 		},
 	}
 	for testName, tc := range tests {
@@ -125,7 +127,7 @@ func TestLoadPluginsNamesWhatItCannotRead(t *testing.T) {
 
 			call := gonsole.Call{Env: settingsEnv(testkit.Getenv(tc.env)), Describe: tc.describe}
 
-			_, err := loadPlugins(noPlugins, goncierge.New())(t.Context(), call)
+			_, err := loadPlugins(noPlugins, goncierge.New(), &sitePool{})(t.Context(), call)
 
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("loadPlugins() error = %v, want %s named", err, tc.want)
@@ -169,7 +171,7 @@ func TestReleaseEndsWithinTheStopGrace(t *testing.T) {
 	call := gonsole.Call{Env: settingsEnv(testkit.Getenv(map[string]string{
 		"GOPHENBERG_SHUTDOWN_STOP_GRACE": "100ms",
 	})), Describe: true}
-	loaded, err := loadPlugins(keeping(k), goncierge.New())(t.Context(), call)
+	loaded, err := loadPlugins(keeping(k), goncierge.New(), &sitePool{})(t.Context(), call)
 	if err != nil {
 		t.Fatalf("loadPlugins() error = %v, want nil", err)
 	}
