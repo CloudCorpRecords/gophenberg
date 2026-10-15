@@ -18,11 +18,15 @@ import (
 	"testing"
 	"time"
 
+	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 	"github.com/gopherium/framework/dbkit/postgres/pgtest"
+	"github.com/gopherium/framework/gonsole"
+	"github.com/gopherium/framework/gonsole/testkit"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
 	"github.com/joho/godotenv"
 	"github.com/peterldowns/pgtestdb"
 
+	"github.com/gopherium/gophenberg/internal/dbconns"
 	"github.com/gopherium/gophenberg/internal/postgres"
 )
 
@@ -33,6 +37,10 @@ const (
 	maxAgeKey = "GOPHENBERG_TEST_DATABASE_MAX_AGE"
 	// whereToSet tells the reader of a refused setting where to set it.
 	whereToSet = "in the environment or .env, see .env.example"
+	// settingsPrefix starts the name of the site setting the connection cap of a test handle is read from.
+	settingsPrefix = "GOPHENBERG_"
+	// maxConnsKey names the site setting that caps the connections of a test handle.
+	maxConnsKey = settingsPrefix + "DATABASE_MAX_CONNS"
 )
 
 // rootDotenv reads the .env entries of the module the test process started in, once per process.
@@ -46,6 +54,44 @@ func New(t testing.TB, migrator pgtestdb.Migrator) string {
 		t.Fatal(err)
 	}
 	return pgtest.NewSwept(t, address, maxAge, migrator)
+}
+
+// Open returns the database/sql view of a capped handle on the database at address, closed when t ends.
+func Open(t testing.TB, address string) *sql.DB {
+	t.Helper()
+	handle, err := open(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
+	return handle.DB
+}
+
+// open returns a handle on the database at address under the connection cap the environment or .env sets.
+func open(address string) (*dbkitpg.Handle, error) {
+	conns, err := connectionCap(os.LookupEnv, rootDotenv)
+	if err != nil {
+		return nil, err
+	}
+	handle, err := dbkitpg.Open(address, dbkitpg.Options{MaxConns: conns})
+	if err != nil {
+		return nil, fmt.Errorf("testdb: open the test database: %w", err)
+	}
+	return handle, nil
+}
+
+// connectionCap returns the cap GOPHENBERG_DATABASE_MAX_CONNS sets, read from environ first and from file second.
+func connectionCap(environ func(string) (string, bool), file func() (map[string]string, error)) (int, error) {
+	text, err := value(environ, file, maxConnsKey)
+	if err != nil {
+		return 0, err
+	}
+	read := gonsole.Env{Prefix: settingsPrefix, Getenv: testkit.Getenv(map[string]string{maxConnsKey: text})}
+	conns, err := dbconns.MaxConnsFrom(read)
+	if err != nil {
+		return 0, fmt.Errorf("testdb: %w", err)
+	}
+	return conns, nil
 }
 
 // settings returns the test server address and the sweep age, each read from environ first and from file second.
@@ -164,12 +210,17 @@ func (migrator) Hash() (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Migrate applies the authkit migrations and then the core ones to the template database.
+// Migrate applies the authkit migrations and then the core ones on a capped handle to the template database.
 func (migrator) Migrate(ctx context.Context, _ *sql.DB, cfg pgtestdb.Config) error {
 	if err := authkitpg.Migrate(ctx, cfg.URL()); err != nil {
 		return fmt.Errorf("testdb: auth migrations: %w", err)
 	}
-	if err := postgres.Migrate(ctx, cfg.URL()); err != nil {
+	handle, err := open(cfg.URL())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = handle.Close() }()
+	if err := postgres.Migrate(ctx, handle.DB); err != nil {
 		return fmt.Errorf("testdb: core migrations: %w", err)
 	}
 	return nil
