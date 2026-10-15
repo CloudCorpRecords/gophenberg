@@ -710,12 +710,6 @@ msgstr ""
 msgid "Follow the browser"
 msgstr ""
 
-msgid "Fri"
-msgstr ""
-
-msgid "Friday"
-msgstr ""
-
 msgid "From %(plugin)s"
 msgstr ""
 
@@ -915,12 +909,6 @@ msgid "Mobile"
 msgstr ""
 
 msgid "Modified: %s"
-msgstr ""
-
-msgid "Mon"
-msgstr ""
-
-msgid "Monday"
 msgstr ""
 
 msgid "Most files"
@@ -1243,12 +1231,6 @@ msgstr ""
 msgid "Rules showing %(field)s"
 msgstr ""
 
-msgid "Sat"
-msgstr ""
-
-msgid "Saturday"
-msgstr ""
-
 msgid "Save"
 msgstr ""
 
@@ -1346,12 +1328,6 @@ msgid "Steps of"
 msgstr ""
 
 msgid "Stop nesting"
-msgstr ""
-
-msgid "Sun"
-msgstr ""
-
-msgid "Sunday"
 msgstr ""
 
 msgid "Tablet"
@@ -1755,22 +1731,10 @@ msgstr ""
 msgid "Through"
 msgstr ""
 
-msgid "Thu"
-msgstr ""
-
 msgid "Thumbnail"
 msgstr ""
 
-msgid "Thursday"
-msgstr ""
-
 msgid "Title"
-msgstr ""
-
-msgid "Tue"
-msgstr ""
-
-msgid "Tuesday"
 msgstr ""
 
 msgid "Two field groups in this file share the key %(key)s. Give one of them a different key and import again."
@@ -1827,12 +1791,6 @@ msgid "Visit Site"
 msgstr ""
 
 msgid "Web address"
-msgstr ""
-
-msgid "Wed"
-msgstr ""
-
-msgid "Wednesday"
 msgstr ""
 
 msgid "What each Linked from field reads"
@@ -1904,58 +1862,6 @@ msgstr ""
 msgid "{day} {month} {year}"
 msgstr ""
 
-msgctxt "April abbreviation"
-msgid "Apr"
-msgstr ""
-
-msgctxt "August abbreviation"
-msgid "Aug"
-msgstr ""
-
-msgctxt "December abbreviation"
-msgid "Dec"
-msgstr ""
-
-msgctxt "February abbreviation"
-msgid "Feb"
-msgstr ""
-
-msgctxt "January abbreviation"
-msgid "Jan"
-msgstr ""
-
-msgctxt "July abbreviation"
-msgid "Jul"
-msgstr ""
-
-msgctxt "June abbreviation"
-msgid "Jun"
-msgstr ""
-
-msgctxt "March abbreviation"
-msgid "Mar"
-msgstr ""
-
-msgctxt "May abbreviation"
-msgid "May"
-msgstr ""
-
-msgctxt "November abbreviation"
-msgid "Nov"
-msgstr ""
-
-msgctxt "October abbreviation"
-msgid "Oct"
-msgstr ""
-
-msgctxt "September abbreviation"
-msgid "Sep"
-msgstr ""
-
-msgctxt "abbreviated date and time format"
-msgid "M j, Y g:i a"
-msgstr ""
-
 msgctxt "account"
 msgid "Role"
 msgstr ""
@@ -1982,10 +1888,6 @@ msgstr ""
 
 msgctxt "content type"
 msgid "Status"
-msgstr ""
-
-msgctxt "date and time format"
-msgid "F j, Y g:i a"
 msgstr ""
 
 msgctxt "field"
@@ -2114,10 +2016,6 @@ msgstr ""
 
 msgctxt "role"
 msgid "No role"
-msgstr ""
-
-msgctxt "start of week"
-msgid "1"
 msgstr ""
 
 msgctxt "status filter"
