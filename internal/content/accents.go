@@ -36,8 +36,8 @@ var letterFolds = map[rune]string{
 	'ə': "e",
 }
 
-// foldAccents returns lowercase s with its accented Latin letters written as plain ones.
-func foldAccents(s string) string {
+// FoldAccents returns lowercase s with its accented Latin letters written as plain ones.
+func FoldAccents(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	afterLatin := false

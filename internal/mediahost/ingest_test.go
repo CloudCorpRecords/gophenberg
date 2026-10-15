@@ -356,6 +356,30 @@ func TestIngestSanitizesHostileNames(t *testing.T) {
 	}
 }
 
+func TestIngestFoldsAccentsInNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, upload, want string
+	}{
+		{"precomposed accents and ligatures", "Café Ærø.jpg", "cafe-aero.jpg"},
+		{"letters that do not decompose", "Łódź 2026.jpg", "lodz-2026.jpg"},
+		{"a combining mark", "Mu\u0308nchen.jpg", "munchen.jpg"},
+		{"letters with no plain form", "写真.jpg", "写真.jpg"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := mustIngest(t, newLibrary(t), tc.upload, jpegImage(t, 40, 30))
+
+			if filepath.Base(m.File) != tc.want {
+				t.Errorf("File = %q, want %s", m.File, tc.want)
+			}
+		})
+	}
+}
+
 func TestIngestRefusesWhatItCannotTrust(t *testing.T) {
 	t.Parallel()
 

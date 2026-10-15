@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/gopherium/gophenberg/internal/content"
 )
 
 // lookalikeSuffix matches a stem that could collide with sub-size naming.
@@ -28,7 +30,7 @@ func titleOf(name string) string {
 func stemOf(name string) string {
 	var b strings.Builder
 	separated := false
-	for _, r := range strings.ToLower(titleOf(name)) {
+	for _, r := range content.FoldAccents(strings.ToLower(titleOf(name))) {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
 			separated = true
 			continue
