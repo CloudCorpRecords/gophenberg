@@ -309,6 +309,10 @@ beside the file the link points at. A step waits for it up to
 `GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT`, 30 seconds unless set, then
 stops with an error. Never delete that file.
 
+On a new empty file, two `migrate` runs started at the same moment can
+still stop at once with `the database is busy`, before either reaches
+the lock. Nothing is written, so run `migrate` again.
+
 ### seed
 
 ```text
