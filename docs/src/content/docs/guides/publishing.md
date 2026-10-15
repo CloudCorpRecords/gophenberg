@@ -59,7 +59,8 @@ or invalid, the server settles a valid one during the save.
 
 A new post takes its slug from the title. Accented letters become
 plain ones, so "Café" gives `cafe`, and letters of other alphabets,
-such as Chinese or Greek, stay as they are.
+such as Chinese or Greek, stay as they are. Words in scripts with
+vowel signs, such as Hindi or Thai, stay whole.
 
 The excerpt is a short summary shown on listing pages. The RSS
 feed does not use it: feed readers receive the full content.

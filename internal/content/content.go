@@ -96,7 +96,7 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 // slug characters.
 func Slugify(title string) string {
 	var b strings.Builder
-	separated := false
+	separated, afterKept := false, false
 	for _, r := range foldAccents(strings.ToLower(title)) {
 		switch {
 		case r == '\'' || r == '’':
@@ -105,10 +105,14 @@ func Slugify(title string) string {
 			if separated && b.Len() > 0 {
 				b.WriteRune('-')
 			}
-			separated = false
+			separated, afterKept = false, true
+			b.WriteRune(r)
+		case afterKept && isSeparateAccent(r):
+			continue
+		case afterKept && unicode.Is(unicode.M, r):
 			b.WriteRune(r)
 		default:
-			separated = true
+			separated, afterKept = true, false
 		}
 	}
 	slug := truncateSlug(b.String())
@@ -116,6 +120,12 @@ func Slugify(title string) string {
 		return untitledSlug
 	}
 	return slug
+}
+
+// isSeparateAccent reports whether r is a combining diacritical mark left over after accent folding, which a
+// slug drops like WordPress drops an accent.
+func isSeparateAccent(r rune) bool {
+	return r >= '\u0300' && r <= '\u036f'
 }
 
 // truncateSlug returns slug bounded to [slugMaxLength] characters without a trailing separator.

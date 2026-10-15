@@ -195,9 +195,13 @@ func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
 		"separate mark after a latin letter dropped": {in: "J\u030cana", want: "jana"},
 		"separate mark mid-word dropped":             {in: "x\u0301ray", want: "xray"},
 		"stacked separate marks dropped":             {in: "a\u0301\u0302bc", want: "abc"},
-		"accent behind a spacing mark dropped":       {in: "é\u1bf2z", want: "e-z"},
-		"mark after a digit still separates":         {in: "7\u0301up", want: "7-up"},
-		"mark after a cyrillic letter separates":     {in: "и\u0301ра", want: "и-ра"},
+		"spacing mark after a folded accent kept":    {in: "é\u1bf2z", want: "e\u1bf2z"},
+		"accent after a digit dropped":               {in: "7\u0301up", want: "7up"},
+		"accent after a cyrillic letter dropped":     {in: "и\u0301ра", want: "ира"},
+		"devanagari marks are kept":                  {in: "हिन्दी भाषा", want: "हिन्दी-भाषा"},
+		"thai marks are kept":                        {in: "สวัสดี", want: "สวัสดี"},
+		"tamil marks are kept":                       {in: "தமிழ் மொழி", want: "தமிழ்-மொழி"},
+		"mark after a separator separates":           {in: "a \u093fb", want: "a-b"},
 		"compatibility digraph is left as is":        {in: "Ǆ", want: "ǆ"},
 	}
 
