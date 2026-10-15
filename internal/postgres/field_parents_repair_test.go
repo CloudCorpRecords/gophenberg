@@ -14,6 +14,7 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 // plantTwin stores a field row of the kind under the parent in the group and returns its identity.
@@ -62,7 +63,7 @@ func parentOfField(t *testing.T, pool *pgxpool.Pool, id int) int {
 // beforeTheSettle rolls the database behind the pool back to before the settle migration, so a twin can be stored.
 func beforeTheSettle(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	if err := postgres.MigrateDownTo(t.Context(), pool.Config().ConnString(), 24); err != nil {
+	if err := postgres.MigrateDownTo(t.Context(), testdb.Open(t, pool.Config().ConnString()), 24); err != nil {
 		t.Fatalf("rolling back to before the settle: %v, want nil", err)
 	}
 }
@@ -70,11 +71,11 @@ func beforeTheSettle(t *testing.T, pool *pgxpool.Pool) {
 // rerunRepair runs the repair migrations again on the database behind the pool.
 func rerunRepair(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	url := pool.Config().ConnString()
-	if err := postgres.MigrateDownTo(t.Context(), url, 23); err != nil {
+	db := testdb.Open(t, pool.Config().ConnString())
+	if err := postgres.MigrateDownTo(t.Context(), db, 23); err != nil {
 		t.Fatalf("rolling back to before the repair: %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 }

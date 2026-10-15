@@ -7,6 +7,7 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 func TestRollingBackPastOpenKindsDropsWhatTheOldCheckRefuses(t *testing.T) {
@@ -31,12 +32,12 @@ func TestRollingBackPastOpenKindsDropsWhatTheOldCheckRefuses(t *testing.T) {
 	if _, err := store.CreateFieldInGroup(t.Context(), group.ID, gallery, nil); err != nil {
 		t.Fatalf("CreateFieldInGroup(gallery) error = %v, want nil", err)
 	}
-	url := pool.Config().ConnString()
+	db := testdb.Open(t, pool.Config().ConnString())
 
-	if err := postgres.MigrateDownTo(t.Context(), url, 14); err != nil {
+	if err := postgres.MigrateDownTo(t.Context(), db, 14); err != nil {
 		t.Fatalf("MigrateDownTo(14) error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 

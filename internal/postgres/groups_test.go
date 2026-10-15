@@ -13,6 +13,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 // typedStore returns a type store, its pool and a seeded author over a migrated database.
@@ -98,8 +99,8 @@ func TestMigrationCarriesFieldsIntoDefaultGroups(t *testing.T) {
 	t.Parallel()
 
 	store, _, pool := typedStore(t)
-	url := pool.Config().ConnString()
-	if err := postgres.MigrateDownTo(t.Context(), url, 12); err != nil {
+	db := testdb.Open(t, pool.Config().ConnString())
+	if err := postgres.MigrateDownTo(t.Context(), db, 12); err != nil {
 		t.Fatalf("MigrateDownTo(12) error = %v, want nil", err)
 	}
 	for _, seed := range []string{
@@ -116,7 +117,7 @@ func TestMigrationCarriesFieldsIntoDefaultGroups(t *testing.T) {
 		}
 	}
 
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 

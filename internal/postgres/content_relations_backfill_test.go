@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 func TestMigrationsCopyTheTargetsAnItemPointsAtIntoItsFields(t *testing.T) {
@@ -19,8 +20,8 @@ func TestMigrationsCopyTheTargetsAnItemPointsAtIntoItsFields(t *testing.T) {
 	news := storedCategory(t, store, "News", author)
 	events := storedCategory(t, store, "Events", author)
 	filed := fileUnder(t, store, mustCreate(t, store, "Filed", author), events.ID, news.ID)
-	url := pool.Config().ConnString()
-	if err := postgres.MigrateDownTo(t.Context(), url, 22); err != nil {
+	db := testdb.Open(t, pool.Config().ConnString())
+	if err := postgres.MigrateDownTo(t.Context(), db, 22); err != nil {
 		t.Fatalf("rolling back to before the copy: %v, want nil", err)
 	}
 	pointed := []string{events.ID.String(), news.ID.String()}
@@ -28,7 +29,7 @@ func TestMigrationsCopyTheTargetsAnItemPointsAtIntoItsFields(t *testing.T) {
 		t.Fatalf("the index holds %v, want the targets the copy reads, %v", held, pointed)
 	}
 
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 
