@@ -269,6 +269,9 @@ names, without touching the database. It prints
 refuses, one line each, and exits with code 1. Run it before a
 rollout. On a SQLite database it also checks the SQLite settings and
 that the file exists on a local disk, still without connecting to it.
+It does not open the file, so a folder, a file that is not a SQLite
+database or a read-only file still passes `check` and stops at
+`migrate`.
 
 ### help
 
