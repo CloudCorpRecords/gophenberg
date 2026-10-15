@@ -23,6 +23,11 @@ const LONG_NAMES = [
 	{ reads: 'with no spaces', condition: 'unspaced', name: LONG_NAME.replaceAll(' ', '') },
 ]
 
+const POST_TABS = [
+	{ tab: 'All', narrowing: '' },
+	{ tab: 'Draft', narrowing: 'status=draft&' },
+]
+
 /**
  * Creates an author under the name and a post that author writes, through the API the admin uses.
  * @param page - The page of the signed in administrator, which creates the account.
@@ -62,6 +67,25 @@ async function cutOf(name: Locator) {
 			insideCell: element.getBoundingClientRect().right <= cell.getBoundingClientRect().right,
 		}
 	})
+}
+
+/**
+ * Opens the posts tab searched for one title and returns how its table sits in its card.
+ * @param page - The page of the signed in administrator.
+ * @param narrowing - The status the tab narrows the list to, as the address writes it before the search.
+ * @param title - The title of the post the list is searched for.
+ * @returns How far the table runs past its card, and the width of the Title column.
+ */
+async function postsTableFor(page: Page, narrowing: string, title: string) {
+	await page.goto(`/admin/content/post?${narrowing}search=${encodeURIComponent(title)}`)
+	const table = page.locator('.dataviews-view-table')
+	await expect(table.getByRole('link', { name: title, exact: true })).toBeVisible()
+	const heading = await table.getByRole('columnheader', { name: 'Title', exact: true }).boundingBox()
+	const spill = await table.evaluate((element) => {
+		const scroller = element.closest('.dataviews-layout__container') as HTMLElement
+		return scroller.scrollWidth - scroller.clientWidth
+	})
+	return { table, spill, title: Math.round(heading?.width ?? 0) }
 }
 
 /**
@@ -135,19 +159,35 @@ test('fits the posts table to its card at 1280 beside a long title, the listed f
 })
 
 for (const { reads, condition, name } of LONG_NAMES) {
-	test(`cuts an author name ${reads} with an ellipsis inside its cell at 1280, as WordPress does`, async ({
+	test(`cuts an author name ${reads} with an ellipsis and keeps the posts table in its card at 1280, as WordPress does`, async ({
 		page,
 		playwright,
 	}) => {
+		const besideTitle = `A post signed with a short name beside the ${condition} one ${RUN}`
+		const created = await page.request.post('/api/content', { data: { type: 'post', title: besideTitle } })
+		expect(created.status()).toBe(201)
+		const beside = (await created.json()) as { id: string }
 		const post = await postWrittenBy(page, playwright.request, condition, name)
 		await page.setViewportSize(LAPTOP)
 
-		await page.goto(`/admin/content/post?search=${encodeURIComponent(post.title)}`)
-		const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: post.title, exact: true }) })
-		const author = row.getByText(name, { exact: true })
-		await expect(author).toBeVisible()
+		for (const { tab, narrowing } of POST_TABS) {
+			const short = await postsTableFor(page, narrowing, besideTitle)
+			const long = await postsTableFor(page, narrowing, post.title)
+			const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: post.title, exact: true }) })
+			const author = row.getByText(name, { exact: true })
+			await expect(author).toBeVisible()
 
-		expect(await cutOf(author)).toEqual({ textOverflow: 'ellipsis', clipped: true, insideCell: true })
+			expect(await cutOf(author), `${tab} cuts the name`).toEqual({
+				textOverflow: 'ellipsis',
+				clipped: true,
+				insideCell: true,
+			})
+			expect.soft(long.spill, `${tab} runs the table past its card`).toBeLessThanOrEqual(0)
+			const stuck = long.table.locator('.dataviews-view-table__actions-column--stuck')
+			await expect.soft(stuck, `${tab} sticks the actions over the columns`).toHaveCount(0)
+			expect.soft(long.title, `${tab} narrows the title`).toBeGreaterThanOrEqual(short.title)
+		}
 		await page.request.delete(`/api/content/${post.id}?force=true`)
+		await page.request.delete(`/api/content/${beside.id}?force=true`)
 	})
 }

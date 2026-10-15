@@ -26,6 +26,7 @@ import {
 	BELOW_HUGE_QUERY,
 	OPENING_SORT,
 	PHONE_COLUMNS,
+	TABLE_LAYOUT,
 	levelOf,
 	narrowedBy,
 	offeredView,
@@ -210,6 +211,7 @@ function usePostList(listed: ContentType, status: string) {
 		descriptionField: 'excerpt',
 		sort: { ...OPENING_SORT },
 		perPage: settings?.list_page_size,
+		layoutSettings: { table: TABLE_LAYOUT },
 	})
 	const offered = offeredView(list.view, columns)
 	const view = {

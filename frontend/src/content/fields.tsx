@@ -165,6 +165,9 @@ export function levelOf(listed: ContentType): (post: Post) => number {
 /** The columns a list shows by default on a phone, which read alone. */
 export const PHONE_COLUMNS = ['status', 'date']
 
+/** What the table of a list opens on, its author column held to the 15ch floor of a DataViews cell. */
+export const TABLE_LAYOUT = { layout: { styles: { author: { align: 'start', maxWidth: '15ch' } } } } as const
+
 /** The viewports below WordPress's huge breakpoint, where a table opens on its built-in columns alone. */
 export const BELOW_HUGE_QUERY = '(max-width: 1439px)'
 
