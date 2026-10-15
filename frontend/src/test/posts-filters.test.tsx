@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { LIST_CHROME_DOMAIN, listChromeCatalogFor, startListDates } from '@gopherium/godmin'
 import { rememberLocale } from '@gopherium/gottext'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,8 +9,7 @@ import { getSettings, setSettings } from '@wordpress/date'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import { afterEach, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
-import { DEFAULT_LOCALE, catalogFor } from '../i18n/catalog'
-import { startDates } from '../i18n/dates'
+import { DEFAULT_LOCALE } from '../i18n/catalog'
 import { startLocale } from '../i18n/start'
 import { renderAt } from './render'
 import { warmPostsScreen } from './warm'
@@ -173,13 +173,13 @@ test('writes the moment of a date chip in the full date and time format, as the 
 })
 
 test('writes the moment of a date chip in the full date and time format of the reader language', async () => {
-	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
-	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	startDates('es-ES')
+	setLocaleData(await listChromeCatalogFor('es-ES'), LIST_CHROME_DOMAIN)
+	onTestFinished(() => resetLocaleData({}, LIST_CHROME_DOMAIN))
+	startListDates('es-ES')
 	renderAt(narrowedAt([{ field: 'date', operator: 'after', value: '2026-08-16T12:00:00.000Z' }]))
 	await screen.findByText('Welcome to Gophenberg')
 
-	await userEvent.click(screen.getByRole('button', { name: 'Filter' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Filtrar' }))
 
 	expect(await screen.findByText('16 de agosto de 2026 12:00')).toBeInTheDocument()
 })

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { LIST_CHROME_DOMAIN, listChromeCatalogFor } from '@gopherium/godmin'
+import { LIST_CHROME_DOMAIN, listChromeCatalogFor, startListDates } from '@gopherium/godmin'
 import { DOMAIN as BRICK_DOMAIN, catalogFor as brickCatalogFor } from '@gopherium/react-auth'
 
 import { startLocale as start } from '@gopherium/gottext'
 
 import { fetchLocale } from './api'
 import { DEFAULT_LOCALE, catalogFor, editorCatalogFor, type Catalog } from './catalog'
-import { startDates } from './dates'
 
 /** The text domain every Gophenberg owned string names. */
 export const DOMAIN = 'gophenberg'
@@ -44,6 +43,6 @@ export async function startLocale(from: Catalogs = shipped): Promise<string> {
 		],
 		{ defaultLocale: DEFAULT_LOCALE },
 	)
-	startDates(locale)
+	startListDates(locale)
 	return locale
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { listChromeCatalogFor } from '@gopherium/godmin'
 import { dateI18n, getDate, getSettings, setSettings } from '@wordpress/date'
 import { __, getLocaleData, resetLocaleData } from '@wordpress/i18n'
 import { afterEach, beforeEach, expect, test } from 'vitest'
@@ -36,8 +37,8 @@ test('hands the dates the month and weekday names of the reader language and its
 
 	await startLocale()
 
+	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe('es-ES')
 	expect(getSettings().l10n).toMatchObject({
-		locale: 'es-ES',
 		months: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
 			'noviembre', 'diciembre'],
 		monthsShort: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
@@ -52,8 +53,8 @@ test('hands the dates the words the sources are written in, the weeks starting o
 
 	await startLocale()
 
+	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe('en-US')
 	expect(getSettings().l10n).toMatchObject({
-		locale: 'en-US',
 		months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
 			'November', 'December'],
 		monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
@@ -81,10 +82,10 @@ test.each([
 	{ named: 'lunes', first: 1 },
 ])('starts the weeks on day $first when the catalogue names $named as the first day', async ({ named, first }) => {
 	serveLocale('es-ES')
-	const own = { '': { 'plural-forms': 'nplurals=2; plural=(n != 1);' }, 'start of week\u00041': [named] }
+	const chrome = { ...(await listChromeCatalogFor('es-ES')), 'start of week\u00041': [named] }
 	const none = async () => undefined
 
-	await startLocale({ own: async () => own, editor: none, brick: none, chrome: none })
+	await startLocale({ own: none, editor: none, brick: none, chrome: async () => chrome })
 
 	expect(getSettings().l10n.startOfWeek).toBe(first)
 })

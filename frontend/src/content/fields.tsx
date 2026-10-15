@@ -2,9 +2,9 @@
 
 import { authorIcon, Badge, Icon } from '@gophenberg/frontend-sdk'
 import type { Field, Filter, View } from '@gophenberg/frontend-sdk/dataviews'
-import { InitialsAvatar } from '@gopherium/godmin'
+import { InitialsAvatar, listDate } from '@gopherium/godmin'
 import { formatDate } from '@gopherium/gottext'
-import { dateI18n, getDate, getSettings } from '@wordpress/date'
+import { getSettings } from '@wordpress/date'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import type { ComponentProps } from 'react'
 
@@ -80,8 +80,7 @@ function DateCell({ item }: { item: Post }) {
 	if (item.date === '') {
 		return null
 	}
-	const written = dateI18n(getSettings().formats.datetimeAbbreviated, getDate(item.date))
-	return <span>{datedAs(item.status, written)}</span>
+	return <span>{datedAs(item.status, listDate(item.date))}</span>
 }
 
 /**
