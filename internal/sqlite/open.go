@@ -11,7 +11,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,8 @@ import (
 	"github.com/gopherium/framework/dbkit"
 	dbsqlite "github.com/gopherium/framework/dbkit/sqlite"
 	"github.com/gopherium/framework/gonsole"
+
+	"github.com/gopherium/gophenberg/internal/dbconns"
 )
 
 // maxBusyTimeout is the longest busy timeout SQLite keeps.
@@ -38,7 +39,7 @@ type Settings struct {
 
 // SettingsFrom reads the SQLite settings from env, each one left unset taking its documented default.
 func SettingsFrom(env gonsole.Env) (Settings, error) {
-	maxConns, err := connectionCap(env)
+	maxConns, err := dbconns.MaxConnsFrom(env)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -63,23 +64,6 @@ func SettingsFrom(env gonsole.Env) (Settings, error) {
 		BusyTimeout: busyTimeout, CacheSize: cacheSize, MaxConns: maxConns,
 		Synchronous: synchronous, JournalSizeLimit: journalSizeLimit,
 	}, nil
-}
-
-// connectionCap reads the DATABASE_MAX_CONNS setting, defaultMaxConns of the CPU count when unset, and refuses 1.
-func connectionCap(env gonsole.Env) (int, error) {
-	conns, err := env.Count("DATABASE_MAX_CONNS", defaultMaxConns(runtime.NumCPU()))
-	if err != nil {
-		return 0, err
-	}
-	if conns < 2 {
-		return 0, fmt.Errorf("%s: must be 2 or more on SQLite, got %q", env.Key("DATABASE_MAX_CONNS"), strconv.Itoa(conns))
-	}
-	return conns, nil
-}
-
-// defaultMaxConns returns the connection cap a machine with cpus processors gets, the larger of 4 and cpus.
-func defaultMaxConns(cpus int) int {
-	return max(4, cpus)
 }
 
 // parseSynchronous reads full or normal, in any case, as the Synchronous it names.
