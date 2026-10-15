@@ -77,11 +77,7 @@ func undescribedDB(t *testing.T) (*sql.DB, *goose.Provider) {
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := testdb.Open(t, databaseURL)
 	provider := coreProvider(t, db)
 	if _, err := provider.UpTo(t.Context(), describedVersion-1); err != nil {
 		t.Fatalf("migrating to the shape before descriptions: %v", err)

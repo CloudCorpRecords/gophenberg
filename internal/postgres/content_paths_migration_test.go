@@ -44,11 +44,7 @@ func TestPathMigrationsBackfillExistingContent(t *testing.T) {
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db := testdb.Open(t, databaseURL)
 	provider := coreProvider(t, db)
 	if _, err := provider.UpTo(t.Context(), nestingVersion-1); err != nil {
 		t.Fatalf("migrating to the shape before nesting: %v", err)
@@ -70,7 +66,7 @@ func TestPathMigrationsBackfillExistingContent(t *testing.T) {
 
 	var path string
 	var parent *uuid.UUID
-	err = db.QueryRow(`SELECT path, parent_id FROM core.content WHERE slug = 'hello-world'`).
+	err := db.QueryRow(`SELECT path, parent_id FROM core.content WHERE slug = 'hello-world'`).
 		Scan(&path, &parent)
 	if err != nil {
 		t.Fatalf("reading the stored path: %v, want nil", err)
