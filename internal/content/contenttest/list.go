@@ -149,6 +149,7 @@ func listSearchesTitleAndContent(t *testing.T, s Stores) {
 func listTreatsWildcardsAsLiterals(t *testing.T, s Stores) {
 	author := s.AddAuthor(t, DefaultAuthor)
 	MustCreate(t, s.Content, "100% Coverage", author)
+	MustCreate(t, s.Content, "1000 Readers", author)
 	MustCreate(t, s.Content, "Plain Title", author)
 
 	posts, total, err := s.Content.List(
