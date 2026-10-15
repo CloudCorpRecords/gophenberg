@@ -32,36 +32,32 @@ function serveLocale(locale: string) {
 	server.use(http.get('/api/locale', () => HttpResponse.json({ locale, supported: ['en-US', locale] })))
 }
 
-test('hands the dates the month and weekday names of the reader language and its first weekday', async () => {
-	serveLocale('es-ES')
-
-	await startLocale()
-
-	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe('es-ES')
-	expect(getSettings().l10n).toMatchObject({
+test.each([
+	{
+		reader: 'es-ES',
 		months: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
 			'noviembre', 'diciembre'],
 		monthsShort: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
 		weekdays: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
 		weekdaysShort: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
-		startOfWeek: 1,
-	})
-})
-
-test('hands the dates the words the sources are written in, the weeks starting on Monday', async () => {
-	serveLocale('en-US')
-
-	await startLocale()
-
-	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe('en-US')
-	expect(getSettings().l10n).toMatchObject({
+	},
+	{
+		reader: 'en-US',
 		months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
 			'November', 'December'],
 		monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
 		weekdays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
 		weekdaysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-		startOfWeek: 1,
-	})
+	},
+])('hands the dates the month and weekday names of $reader, the weeks starting on Monday', async (
+	{ reader, ...words },
+) => {
+	serveLocale(reader)
+
+	await startLocale()
+
+	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe(reader)
+	expect(getSettings().l10n).toMatchObject({ ...words, startOfWeek: 1 })
 })
 
 test.each([
