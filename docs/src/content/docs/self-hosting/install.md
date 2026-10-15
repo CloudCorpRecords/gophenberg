@@ -68,9 +68,12 @@ Four values to change:
   `POSTGRES_PASSWORD` value in single quotes, so a password such as
   `0012345678` is not read as a number. A long password of only
   letters and digits is simplest, because it needs nothing more.
-  Otherwise write a `$` as `$$` in both places, a `'` as `''` in
-  `POSTGRES_PASSWORD`, and in `GOPHENBERG_DATABASE_URL` also write an
-  `@` as `%40`, a `/` as `%2F`, a `%` as `%25` and a space as `%20`.
+  Otherwise write a `$` as `$$` and a `'` as `''` in
+  `POSTGRES_PASSWORD`. In `GOPHENBERG_DATABASE_URL` write every sign
+  that is not a letter or a digit as its `%` code, such as `%40` for
+  `@`, `%23` for `#`, `%3F` for `?`, `%2F` for `/`, `%25` for `%`,
+  `%24` for `$` and `%20` for a space, see
+  [the PostgreSQL address](/self-hosting/configuration/#the-postgresql-address).
 - **The image tag.** Pin the newest version from the
   [tags page](https://github.com/gopherium/gophenberg/tags), never
   `latest`.

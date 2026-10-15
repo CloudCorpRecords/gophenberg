@@ -100,14 +100,11 @@ Some things work differently after this update:
   any alert that watched for them.
 - Plugins draw from a share of the site's one database pool, and
   `GOPHENBERG_PLUGIN_DB_RESERVE` of its connections, 2 by default,
-  always stay free for the site. The pool's size is the
-  `pool_max_conns` of `GOPHENBERG_DATABASE_URL`, or the larger of 4
-  and the number of CPUs when unset. At the default reserve, a pool of
-  2 or fewer leaves the plugins nothing, so the server refuses to
-  start, even with no plugin. Raise `pool_max_conns` to 3 or more. At
-  2, setting `GOPHENBERG_PLUGIN_DB_RESERVE=1` also works. The reserve
-  is at least 1, so a pool of 1 always needs raising. `check` names
-  the problem before you update.
+  always stay free for the site. The pool holds the larger of 4 and
+  the number of CPUs, so the default reserve always leaves the plugins
+  some. A reserve as large as the pool leaves them nothing, so the
+  server refuses to start, even with no plugin. `check` names the
+  problem before you update.
 - The admin writes dates, times and numbers in one format for every
   reader, set by `GOPHENBERG_FORMAT_LOCALE`. Its default, `es-ES`,
   writes 4 October 2026 as 04/10/2026, a time as 14:05 and a number as
@@ -122,7 +119,7 @@ Some things work differently after this update:
   decodes and resizes at once, pick how the site draws avatars, and
   tune a SQLite database. A value out of range or outside its list
   stops startup, so run `check` with your settings first. A PostgreSQL
-  address ignores the seven SQLite ones. See
+  address ignores the six that start with `GOPHENBERG_SQLITE_`. See
   [configuration](/self-hosting/configuration/).
 - This release can check and migrate a SQLite file, named in
   `GOPHENBERG_DATABASE_URL` as `sqlite:` and its absolute path, but
@@ -158,6 +155,51 @@ Some things work differently after this update:
   [versions of the plugin SDK](/extending/the-plugin-sdk/#versions)
   list every step to move a plugin. Building from source needs
   Go 1.27.2.
+- On PostgreSQL, `GOPHENBERG_DATABASE_MAX_CONNS` now caps the site's
+  one database pool. Left unset, the pool keeps the size it had, the
+  larger of 4 and the number of CPUs. `GOPHENBERG_DATABASE_URL` takes
+  no `pool_` setting, and
+  [the PostgreSQL address](/self-hosting/configuration/#the-postgresql-address)
+  lists every form it may not hold. Run `check` with the new image
+  before you update. It names the setting and the reason without
+  connecting, and it now stops at every `pool_` setting and names it.
+  For example:
+
+  ```text
+  gophenberg: GOPHENBERG_DATABASE_URL: dbkit: refused database address: a ? or # comes before an @ ahead of the first /, write ? as %3F, # as %23 and @ as %40
+  ```
+
+  These forms already stopped `migrate` and `serve` before this
+  update, so no running site holds them: any `pool_` setting, such as
+  `pool_max_conns`, whatever its value, an `@` inside the user name or
+  the password, a space inside a value, a `%` that starts no `%` code,
+  `%00`, and a pair after the `?` with no `=` or with two.
+
+  These forms worked before and now stop the server, so change them
+  first. The likeliest come first:
+
+  - A `?`, a `#` or another sign in the password or the user name,
+    such as `^` or `"`. Only an unaccented letter, a digit, a
+    semicolon and the signs `-._:~!$&'()*+,=%` may stay as they are.
+  - A key set twice, such as `sslmode=disable` twice. `dbname` and
+    `database` count as one key.
+  - A space at the start or end of a value, such as
+    `application_name= site`.
+  - A `#` or a control character, such as a tab, anywhere else.
+  - A `+` or a semicolon after the `?`.
+  - `ssl` in place of `sslmode`.
+  - A host list with an empty host, or with a port on some hosts only.
+  - A database name that starts with `/`.
+  - A backslash in a connection string written as `key=value` pairs.
+
+  [The PostgreSQL address](/self-hosting/configuration/#the-postgresql-address)
+  says how to write each one, mostly as its `%` code, such as `%23`
+  for `#` and `%3F` for `?`. The release before this one reads the
+  changed address too, so change the address first and update after.
+
+  The update keeps every table and row. The core migrations keep their
+  record in the same `goose_db_version` table, so none of them runs a
+  second time.
 
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
@@ -263,6 +305,7 @@ all. While you run it:
   takes up to 23 seconds at the defaults. A plugin that uses
   `deps.DB`, `deps.Accounts`, `Needs` or `RoleProvider`, or requires
   the SDK module, does not build against it.
+- Its PostgreSQL pool holds the larger of 4 and the number of CPUs.
 - Its screens come back, with the home screen, the older lists with
   their counts and the **Undo** after a trash. An author sees
   **Empty Trash** again. The author column shows the name alone, with

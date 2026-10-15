@@ -14,6 +14,7 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -94,7 +95,7 @@ func TestRunLeavesTheSitesOwnTypeToTheSiteWhenAPluginDeclaresItsKey(t *testing.T
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("migrating auth: %v", err)
 	}
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	if err := postgres.Migrate(t.Context(), testdb.Open(t, databaseURL)); err != nil {
 		t.Fatalf("migrating core: %v", err)
 	}
 	pool, err := pgxpool.New(t.Context(), databaseURL)

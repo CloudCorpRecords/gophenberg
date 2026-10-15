@@ -19,21 +19,12 @@ import (
 	"github.com/gopherium/gophenberg/internal/seed"
 )
 
-// seedDemoData stores the demo data set in a migrated database.
-func seedDemoData(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
-	databaseURL, err := settingsEnv(getenv).Required("DATABASE_URL")
-	if err != nil {
-		return err
-	}
+// seedDemoData stores the demo data set in the migrated database pool draws from, opening no pool of its own.
+func seedDemoData(ctx context.Context, pool *pgxpool.Pool, getenv func(string) string, stdout io.Writer) error {
 	depth, err := fieldDepthFrom(getenv)
 	if err != nil {
 		return err
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return fmt.Errorf("parse database url: %w", err)
-	}
-	defer pool.Close()
 	users := authkitpg.NewUserStore(pool)
 	if err := accounts.EnsureAccounts(ctx, users, demoAccounts(), stdout); err != nil {
 		return err

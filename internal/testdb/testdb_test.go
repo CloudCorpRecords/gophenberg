@@ -3,7 +3,6 @@
 package testdb_test
 
 import (
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"runtime"
@@ -77,7 +76,7 @@ func TestNewNamesTheSettingOfARefusedAddress(t *testing.T) {
 		t.Errorf("New() stopped with %q, want the setting of the refused address named first", message)
 	}
 	if !strings.Contains(message, "dbkit: refused database address") {
-		t.Errorf("New() stopped with %q, want the dbkit refusal of the address kept", message)
+		t.Errorf("New() stopped with %q, want the dbkit error for the address kept", message)
 	}
 }
 
@@ -87,11 +86,7 @@ func TestMigratorCreatesAuthAndCoreSchemas(t *testing.T) {
 		t.Skip("skipping database test in short mode")
 	}
 
-	db, err := sql.Open("pgx", testdb.New(t, testdb.Migrator()))
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := testdb.Open(t, testdb.New(t, testdb.Migrator()))
 
 	for _, schema := range []string{"auth", "core"} {
 		var found bool

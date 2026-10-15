@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gopherium/framework/dbkit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -264,7 +265,7 @@ func narrowing(f content.Filter) db.CountContentParams {
 		ExcludedAuthors: append([]uuid.UUID{}, f.ExcludeAuthors...),
 		Before:          f.Before,
 		After:           f.After,
-		Search:          escapeLike(f.Search),
+		Search:          dbkit.EscapeLike(f.Search),
 	}
 }
 
@@ -536,8 +537,8 @@ func valuesDeclared(ctx context.Context, queries *db.Queries, c content.Content)
 	return nil
 }
 
-// writeRefusals lists the domain errors a failed write reports unchanged.
-var writeRefusals = []error{
+// domainWriteErrors lists the domain errors a failed write reports unchanged.
+var domainWriteErrors = []error{
 	content.ErrNotFound, content.ErrConflict, content.ErrUnknownField, content.ErrNotHierarchical,
 	content.ErrTargetNotFound, content.ErrTargetType, content.ErrParentType, content.ErrParentTrashed,
 	content.ErrCycle,
@@ -548,7 +549,7 @@ func writeFailure(err error) error {
 	if isSlugTaken(err) {
 		return err
 	}
-	for _, domain := range writeRefusals {
+	for _, domain := range domainWriteErrors {
 		if errors.Is(err, domain) {
 			return err
 		}
@@ -765,11 +766,6 @@ func trashSuffix() string {
 		b.WriteByte(trashSuffixAlphabet[rand.IntN(len(trashSuffixAlphabet))])
 	}
 	return b.String()
-}
-
-// escapeLike returns search with the pattern characters of LIKE escaped.
-func escapeLike(search string) string {
-	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(search)
 }
 
 // isSlugTaken reports whether err is the unique violation over a type and slug.

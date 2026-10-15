@@ -3,36 +3,17 @@
 package postgres
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 )
-
-func TestMustLockerPanicsOnALockerItCannotBuild(t *testing.T) {
-	t.Parallel()
-
-	failed := errors.New("no locker")
-	defer func() {
-		if recovered := recover(); recovered != failed {
-			t.Fatalf("recovered %v, want the error", recovered)
-		}
-	}()
-
-	mustLocker(nil, failed)
-}
 
 func TestMigrateRequiresDatabase(t *testing.T) {
 	t.Parallel()
 
-	if err := migrate(t.Context(), nil); err == nil {
-		t.Fatal("migrate(nil) error = nil, want a provider error")
-	}
-}
+	err := Migrate(t.Context(), nil)
 
-func TestMigrateDatabaseRequiresRegisteredDriver(t *testing.T) {
-	t.Parallel()
-
-	if err := migrateDatabase(t.Context(), "no-such-driver", "ignored"); err == nil {
-		t.Fatal("migrateDatabase() error = nil, want an unknown driver error")
+	if want := "postgres: apply migrations: dbkit: Migrate needs a database handle, got nil"; fmt.Sprint(err) != want {
+		t.Fatalf("Migrate(nil) error = %v, want %q", err, want)
 	}
 }
 

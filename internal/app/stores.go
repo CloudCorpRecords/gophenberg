@@ -5,15 +5,14 @@ package app
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
+	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 	accountsqlite "github.com/gopherium/framework/gonsole/auth/sqlite"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
 	"github.com/gopherium/gouncer/avatar"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/cron"
@@ -28,15 +27,16 @@ import (
 type composeConfig struct {
 	databaseURL string
 	handle      *sql.DB
+	describe    bool
 	fieldDepth  int
 	mediaDir    string
 	getenv      func(string) string
 	roles       *goncierge.Registry
 }
 
-// site is what compose builds over one pool or one SQLite handle.
+// site is what compose builds over one PostgreSQL handle, one SQLite handle or, while describing, no database.
 type site struct {
-	pool       *pgxpool.Pool
+	pgHandle   *dbkitpg.Handle
 	users      *authkitpg.UserStore
 	content    *postgres.ContentStore
 	types      *postgres.TypeStore
@@ -61,23 +61,27 @@ func composeOf(settings runConfig, getenv func(string) string) composeConfig {
 	}
 }
 
-// openStores builds the stores and the registry of the engine the address picks, migrating nothing.
-func openStores(ctx context.Context, cfg composeConfig) (site, error) {
-	if onSQLite(cfg.databaseURL) {
+// openStores builds the stores and the registry of the engine the address picks, only the registry while describing.
+func openStores(cfg composeConfig) (site, error) {
+	switch {
+	case onSQLite(cfg.databaseURL):
 		return sqliteStores(cfg), nil
+	case cfg.describe:
+		return site{registry: registryFrom(cfg.fieldDepth, nil), release: func() {}}, nil
 	}
-	return postgresStores(ctx, cfg)
+	return postgresStores(cfg)
 }
 
-// postgresStores builds the pool, every store over it and the registry, releasing the pool on close.
-func postgresStores(ctx context.Context, cfg composeConfig) (site, error) {
-	pool, err := pgxpool.New(ctx, cfg.databaseURL)
+// postgresStores opens the capped pool, builds every store over it and the registry, closing the pool on release.
+func postgresStores(cfg composeConfig) (site, error) {
+	handle, err := openPostgres(settingsEnv(cfg.getenv), cfg.databaseURL)
 	if err != nil {
-		return site{}, fmt.Errorf("parse database url: %w", err)
+		return site{}, err
 	}
+	pool := handle.Pool
 	store := postgres.NewMediaStore(pool)
 	built := site{
-		pool:      pool,
+		pgHandle:  handle,
 		users:     authkitpg.NewUserStore(pool),
 		content:   postgres.NewContentStore(pool),
 		types:     postgres.NewTypeStore(pool),
@@ -85,7 +89,7 @@ func postgresStores(ctx context.Context, cfg composeConfig) (site, error) {
 		library:   libraryOf(store, cfg.mediaDir),
 		settings:  postgres.NewSettingStore(pool),
 		readers:   postgres.NewUserSettingStore(pool),
-		release:   pool.Close,
+		release:   func() { _ = handle.Close() },
 		cronStore: postgres.NewCronStore(pool),
 	}
 	built.registry = registryFrom(cfg.fieldDepth, built.types)
@@ -137,12 +141,14 @@ func migrations(getenv func(string) string) []gonsole.Step {
 	if onSQLite(env.Value("DATABASE_URL")) {
 		return sqliteMigrations(env)
 	}
-	return postgresMigrations()
+	steps := postgresMigrations(postgresCore(env))
+	steps[0] = checkedFirst(env, steps[0])
+	return steps
 }
 
-// postgresMigrations returns the steps a PostgreSQL database takes at its address, in the order they apply.
-func postgresMigrations() []gonsole.Step {
-	return []gonsole.Step{accounts.Migration(), accounts.RecordMigration(), {Name: "core", Run: postgres.Migrate}}
+// postgresMigrations returns the steps a PostgreSQL database takes in the order they apply, the core step last.
+func postgresMigrations(core gonsole.Step) []gonsole.Step {
+	return []gonsole.Step{accounts.Migration(), accounts.RecordMigration(), core}
 }
 
 // sqliteMigrations returns the steps a SQLite database takes on the run's one handle, in the order they apply.
@@ -176,10 +182,10 @@ func accountStep(
 	}
 }
 
-// migrate applies every PostgreSQL schema step to the database at databaseURL.
-func migrate(ctx context.Context, databaseURL string) error {
-	for _, step := range postgresMigrations() {
-		if err := step.Run(ctx, databaseURL); err != nil {
+// migrate applies every PostgreSQL schema step, the account ones at databaseURL and the core one on the site's db.
+func migrate(ctx context.Context, databaseURL string, db *sql.DB) error {
+	for _, step := range postgresMigrations(gonsole.Step{Name: "core", RunOn: postgres.Migrate}) {
+		if err := step.Apply(ctx, databaseURL, db); err != nil {
 			return err
 		}
 	}

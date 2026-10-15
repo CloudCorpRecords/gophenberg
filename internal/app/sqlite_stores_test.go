@@ -128,7 +128,7 @@ func TestDescribingThePluginsOnSQLiteOpensNoDatabase(t *testing.T) {
 		Describe: true,
 	}
 
-	loaded, err := loadPlugins(keeping(&keeper{}), goncierge.New())(t.Context(), call)
+	loaded, err := loadPlugins(keeping(&keeper{}), goncierge.New(), &sitePool{})(t.Context(), call)
 
 	if err != nil {
 		t.Fatalf("loadPlugins() error = %v, want the plugins described with no database opened", err)
@@ -143,7 +143,7 @@ func TestEachEngineLendsTheMediaLibraryOnlyUnderAMediaFolder(t *testing.T) {
 
 	for _, address := range []string{unreachableDatabaseURL, sqliteAddress} {
 		for mediaDir, want := range map[string]bool{"": false, t.TempDir(): true} {
-			built, err := openStores(t.Context(), composeConfig{databaseURL: address, fieldDepth: 4, mediaDir: mediaDir})
+			built, err := openStores(composeConfig{databaseURL: address, fieldDepth: 4, mediaDir: mediaDir})
 			if err != nil {
 				t.Fatalf("openStores(%q) error = %v, want nil", address, err)
 			}

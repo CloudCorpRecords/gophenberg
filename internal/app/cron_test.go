@@ -144,7 +144,7 @@ func (s *sweptStore) DeleteExpiredSessions(_ context.Context, now time.Time) (in
 	return s.sessions, nil
 }
 
-// DeleteExpiredTokens records the time and answers the token count or the refusal.
+// DeleteExpiredTokens records the time and answers the token count or the error it holds.
 func (s *sweptStore) DeleteExpiredTokens(_ context.Context, now time.Time) (int64, error) {
 	s.asked = append(s.asked, now)
 	return s.tokens, s.tokensErr
@@ -342,11 +342,11 @@ func TestCronRunsOverTheStoreTheSiteHolds(t *testing.T) {
 func TestOpenStoresPicksThePostgresCronStore(t *testing.T) {
 	t.Parallel()
 
-	built, err := openStores(t.Context(), composeConfig{databaseURL: unreachableDatabaseURL})
+	built, err := openStores(composeConfig{databaseURL: unreachableDatabaseURL})
 	if err != nil {
 		t.Fatalf("openStores() error = %v", err)
 	}
-	defer built.pool.Close()
+	defer built.close()
 
 	if _, picked := built.cronStore.(*postgres.CronStore); !picked {
 		t.Errorf("openStores() holds the cron store %T, want the PostgreSQL one", built.cronStore)
@@ -462,7 +462,8 @@ func TestTheSessionSweepRunsAsACronJobOnPostgres(t *testing.T) {
 	t.Parallel()
 
 	databaseURL := emptyDatabaseURL(t)
-	if err := migrate(t.Context(), databaseURL); err != nil {
+	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL})
+	if err := applySteps(t.Context(), getenv); err != nil {
 		t.Fatalf("migrating: %v", err)
 	}
 	pool := expiredSessionIn(t, databaseURL)

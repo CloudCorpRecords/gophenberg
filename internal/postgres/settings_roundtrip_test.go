@@ -8,6 +8,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 // groupOf is the shared fixture under the name these tests use.
@@ -27,12 +28,12 @@ func TestRollingBackPastSettingsLeavesTheFieldStanding(t *testing.T) {
 	if _, err := store.CreateFieldInGroup(t.Context(), group.ID, declared, nil); err != nil {
 		t.Fatalf("CreateFieldInGroup() error = %v, want nil", err)
 	}
-	url := pool.Config().ConnString()
+	db := testdb.Open(t, pool.Config().ConnString())
 
-	if err := postgres.MigrateDownTo(t.Context(), url, 13); err != nil {
+	if err := postgres.MigrateDownTo(t.Context(), db, 13); err != nil {
 		t.Fatalf("MigrateDownTo(13) error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 

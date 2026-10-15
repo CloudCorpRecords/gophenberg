@@ -7,14 +7,15 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/testdb"
 )
 
 func TestMigrationKeysExistingGroupsFromTheirTitles(t *testing.T) {
 	t.Parallel()
 
 	store, _, pool := typedStore(t)
-	url := pool.Config().ConnString()
-	if err := postgres.MigrateDownTo(t.Context(), url, 18); err != nil {
+	db := testdb.Open(t, pool.Config().ConnString())
+	if err := postgres.MigrateDownTo(t.Context(), db, 18); err != nil {
 		t.Fatalf("MigrateDownTo(18) error = %v, want nil", err)
 	}
 	if _, err := pool.Exec(t.Context(),
@@ -28,7 +29,7 @@ func TestMigrationKeysExistingGroupsFromTheirTitles(t *testing.T) {
 		t.Fatalf("seeding the pre migration groups: %v, want nil", err)
 	}
 
-	if err := postgres.Migrate(t.Context(), url); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
 

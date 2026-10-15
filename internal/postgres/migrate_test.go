@@ -6,14 +6,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"io/fs"
 	"sync"
 	"testing"
 	"time"
 
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
 	"github.com/peterldowns/pgtestdb"
-	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
 	"github.com/gopherium/gophenberg/internal/postgres"
@@ -43,19 +41,15 @@ func TestMigrateCreatesCoreSchema(t *testing.T) {
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
+	db := testdb.Open(t, databaseURL)
 
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("second Migrate() error = %v, want idempotent nil", err)
 	}
 
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	defer func() { _ = db.Close() }()
 	if !schemaExists(t, db, "core") {
 		t.Fatal("core schema not found after Migrate()")
 	}
@@ -71,24 +65,12 @@ func TestMigrateRollsBackAndReapplies(t *testing.T) {
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("auth Migrate() error = %v, want nil", err)
 	}
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	db := testdb.Open(t, databaseURL)
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() error = %v, want nil", err)
 	}
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-	source, err := fs.Sub(postgres.Migrations, "migrations")
-	if err != nil {
-		t.Fatalf("migrations subtree: %v", err)
-	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, source)
-	if err != nil {
-		t.Fatalf("goose provider: %v", err)
-	}
 
-	if _, err := provider.DownTo(t.Context(), 0); err != nil {
+	if _, err := coreProvider(t, db).DownTo(t.Context(), 0); err != nil {
 		t.Fatalf("DownTo(0) error = %v, want a clean rollback", err)
 	}
 
@@ -98,7 +80,7 @@ func TestMigrateRollsBackAndReapplies(t *testing.T) {
 	if !schemaExists(t, db, "auth") {
 		t.Error("auth schema missing after core rollback, want it untouched")
 	}
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	if err := postgres.Migrate(t.Context(), db); err != nil {
 		t.Fatalf("Migrate() after rollback error = %v, want a clean reapply", err)
 	}
 	if !schemaExists(t, db, "core") {
@@ -123,11 +105,7 @@ func TestMigrateWaitsForTheMigrationLock(t *testing.T) {
 	t.Parallel()
 
 	databaseURL := accountsMigrated(t)
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db := testdb.Open(t, databaseURL)
 	holder, err := db.Conn(t.Context())
 	if err != nil {
 		t.Fatalf("taking a connection: %v", err)
@@ -139,7 +117,7 @@ func TestMigrateWaitsForTheMigrationLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
-	err = postgres.Migrate(ctx, databaseURL)
+	err = postgres.Migrate(ctx, testdb.Open(t, databaseURL))
 
 	if created := schemaExists(t, db, "core"); !errors.Is(err, context.DeadlineExceeded) || created {
 		t.Errorf("Migrate() = %v with the core schema created %v, want the deadline and nothing applied", err, created)
@@ -153,7 +131,8 @@ func TestMigrateLetsRunsAtOnceAllSucceed(t *testing.T) {
 	failures := make(chan error, 4)
 	var runs sync.WaitGroup
 	for range 4 {
-		runs.Go(func() { failures <- postgres.Migrate(t.Context(), databaseURL) })
+		db := testdb.Open(t, databaseURL)
+		runs.Go(func() { failures <- postgres.Migrate(t.Context(), db) })
 	}
 	runs.Wait()
 	close(failures)
@@ -165,20 +144,12 @@ func TestMigrateLetsRunsAtOnceAllSucceed(t *testing.T) {
 	}
 }
 
-func TestMigrateRejectsMalformedURL(t *testing.T) {
-	t.Parallel()
-
-	if err := postgres.Migrate(t.Context(), "://not-a-url"); err == nil {
-		t.Fatal("Migrate() error = nil, want a parse error")
-	}
-}
-
 func TestMigrateReportsUnreachableDatabase(t *testing.T) {
 	t.Parallel()
 
 	err := postgres.Migrate(
 		t.Context(),
-		"postgres://postgres:gophenberg@localhost:9/postgres?sslmode=disable&connect_timeout=1",
+		testdb.Open(t, "postgres://postgres:gophenberg@localhost:9/postgres?sslmode=disable&connect_timeout=1"),
 	)
 
 	if err == nil {

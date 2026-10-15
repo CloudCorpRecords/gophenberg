@@ -142,16 +142,20 @@ func TestRunReportsCoreMigrationFailure(t *testing.T) {
 	if err := authkitpg.Migrate(t.Context(), databaseURL); err != nil {
 		t.Fatalf("pre-migrating auth: %v", err)
 	}
-	if err := postgres.Migrate(t.Context(), databaseURL); err != nil {
+	if err := postgres.Migrate(t.Context(), testdb.Open(t, databaseURL)); err != nil {
 		t.Fatalf("pre-migrating core: %v", err)
 	}
 	forgetCoreMigrations(t, databaseURL)
-	env := map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL}
+	env := map[string]string{
+		"GOPHENBERG_DATABASE_URL": databaseURL, "GOPHENBERG_ADDR": "localhost:0", "GOPHENBERG_WEB_DIR": t.TempDir(),
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 
-	err := run(t.Context(), testkit.Getenv(env), io.Discard, noPlugins)
+	err := run(ctx, testkit.Getenv(env), cancelOnListen{cancel: cancel}, noPlugins)
 
-	if err == nil {
-		t.Fatal("run() error = nil, want a core migration failure")
+	if err == nil || !strings.HasPrefix(err.Error(), "postgres: apply migrations: ") {
+		t.Fatalf("run() error = %v, want the core migration failure before the site listens", err)
 	}
 }
 
