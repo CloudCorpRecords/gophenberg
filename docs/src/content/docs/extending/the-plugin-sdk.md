@@ -30,7 +30,7 @@ each version and how to move your plugin to it.
 | `DB` | The plugin's share of the site's database, described [below](#the-database) |
 | `DatabaseURL` | The PostgreSQL connection string, for a plugin that still opens its own connection. Empty on a SQLite database |
 | `Content` | A read view of published content |
-| `Accounts` | Reads the names, roles and avatars of many accounts in one call, described [below](#reading-account-names). Not ready on a SQLite database yet |
+| `Accounts` | Reads the names, roles and avatars of many accounts in one call, described [below](#reading-account-names) |
 | `Env` | Reads the settings under the `GOPHENBERG_` prefix, for the plugin's own configuration |
 | `Getenv` | Reads any environment variable by its full name, as it is set |
 
@@ -108,9 +108,9 @@ _, err := p.db.Exec(ctx, "INSERT INTO greetings (name) VALUES ($1)", name)
   A `Migrate` that runs through `deps.DB` gets the same error, so
   `gophenberg migrate` stops there. `Engine` tells a plugin which
   database it runs on before it sends a statement.
-- On a SQLite database the content and account reads of `Deps` are
-  not ready yet either, so check `deps.DB.Engine()` first and skip
-  them when it answers `sdk.SQLite`.
+- On a SQLite database the content reads of `Deps` are not ready yet
+  either, so check `deps.DB.Engine()` first and skip them when it
+  answers `sdk.SQLite`. The account reads work there.
 
 ## Reading content
 
@@ -146,9 +146,7 @@ draw, so a page of fifteen authors costs one read:
 people, err := deps.Accounts.People(ctx, authorIDs, 96)
 ```
 
-On a SQLite database `People` does not work yet. Check
-`deps.DB.Engine()` first and skip the call when it answers
-`sdk.SQLite`.
+`People` works the same way on a SQLite database.
 
 The answer is a map keyed by `sdk.ID`. Each `sdk.Person` carries
 `ID`, `Name`, `Role`, `Avatar` and `Disabled`. `Name` is the display

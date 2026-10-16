@@ -11,7 +11,9 @@ import (
 	"github.com/gopherium/framework/gonsole"
 	accountpg "github.com/gopherium/framework/gonsole/auth/postgres"
 	accountsqlite "github.com/gopherium/framework/gonsole/auth/sqlite"
+	"github.com/gopherium/gouncer/authkit"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
+	authkitsqlite "github.com/gopherium/gouncer/authkit/sqlite"
 	"github.com/gopherium/gouncer/avatar"
 
 	"github.com/gopherium/gophenberg/internal/content"
@@ -19,6 +21,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/media"
 	"github.com/gopherium/gophenberg/internal/mediahost"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/internal/sqlite"
 	"github.com/gopherium/gophenberg/sdk"
 )
@@ -34,10 +37,17 @@ type composeConfig struct {
 	roles       *goncierge.Registry
 }
 
+// userStore is the account store the site serves, signs in with and sweeps expired sessions and tokens from.
+type userStore interface {
+	server.UserStore
+	authkit.SessionReaper
+	authkit.TokenReaper
+}
+
 // site is what compose builds over one PostgreSQL handle, one SQLite handle or, while describing, no database.
 type site struct {
 	pgHandle   *dbkitpg.Handle
-	users      *authkitpg.UserStore
+	users      userStore
 	content    *postgres.ContentStore
 	types      *postgres.TypeStore
 	registry   *content.Registry
@@ -96,10 +106,11 @@ func postgresStores(cfg composeConfig) (site, error) {
 	return built, nil
 }
 
-// sqliteStores builds the media and setting stores over the SQLite handle, leaving users, content, types and cron nil.
+// sqliteStores builds the user, media and setting stores over the SQLite handle, leaving content, types and cron nil.
 func sqliteStores(cfg composeConfig) site {
 	store := sqlite.NewMediaStore(cfg.handle)
 	return site{
+		users:    authkitsqlite.NewUserStore(cfg.handle),
 		registry: registryFrom(cfg.fieldDepth, nil),
 		saved:    store.Saved,
 		library:  libraryOf(store, cfg.mediaDir),

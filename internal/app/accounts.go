@@ -11,6 +11,7 @@ import (
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 	accountpg "github.com/gopherium/framework/gonsole/auth/postgres"
+	accountsqlite "github.com/gopherium/framework/gonsole/auth/sqlite"
 
 	"github.com/gopherium/gophenberg/internal/role"
 )
@@ -21,13 +22,10 @@ const recordTimeout = 5 * time.Second
 // recordsLimit is how many records account:records lists when COMMAND_RECORDS_LIMIT names no other.
 const recordsLimit = 50
 
-// errAccountsOnSQLite answers every account command and every check on the acting account on a SQLite database.
-var errAccountsOnSQLite = fmt.Errorf("account commands: %w", errPostgresOnly)
-
 // accountConfig returns the configuration of the account commands and of the check on the acting account over registry.
 func accountConfig(registry *goncierge.Registry, getenv func(string) string) accounts.Config {
 	return accounts.Config{
-		Roles:         rolesHook(registry, getenv),
+		Roles:         declaredRoles(registry),
 		Capability:    string(role.ManageUsers),
 		RecordTimeout: recordTimeout,
 		RecordsLimit:  recordsLimit,
@@ -35,28 +33,14 @@ func accountConfig(registry *goncierge.Registry, getenv func(string) string) acc
 	}
 }
 
-// accountStores returns the hook answering errAccountsOnSQLite on a sqlite: address, accountpg.Stores on any other.
+// accountStores returns accountsqlite.Stores on a sqlite: address, accountpg.Stores on any other.
 func accountStores(
 	getenv func(string) string,
 ) func(context.Context, gonsole.Call) (accounts.Stores, func(context.Context) error, error) {
-	if !onSQLite(settingsEnv(getenv).Value("DATABASE_URL")) {
-		return accountpg.Stores
+	if onSQLite(settingsEnv(getenv).Value("DATABASE_URL")) {
+		return accountsqlite.Stores
 	}
-	return func(context.Context, gonsole.Call) (accounts.Stores, func(context.Context) error, error) {
-		return accounts.Stores{}, nil, errAccountsOnSQLite
-	}
-}
-
-// rolesHook returns declaredRoles over registry, or on a sqlite: address the hook answering errAccountsOnSQLite.
-func rolesHook(
-	registry *goncierge.Registry, getenv func(string) string,
-) func(context.Context, gonsole.Call) (accounts.Roles, error) {
-	if !onSQLite(settingsEnv(getenv).Value("DATABASE_URL")) {
-		return declaredRoles(registry)
-	}
-	return func(context.Context, gonsole.Call) (accounts.Roles, error) {
-		return accounts.Roles{}, errAccountsOnSQLite
-	}
+	return accountpg.Stores
 }
 
 // declaredRoles returns the hook answering the roles the core and the call's plugins declared into registry.
