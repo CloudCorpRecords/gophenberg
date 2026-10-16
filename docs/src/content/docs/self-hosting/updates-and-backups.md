@@ -200,6 +200,18 @@ Some things work differently after this update:
   The update keeps every table and row. The core migrations keep their
   record in the same `goose_db_version` table, so none of them runs a
   second time.
+- On PostgreSQL, `account:records -json` now gives each time in UTC,
+  as the text output already does. When the PostgreSQL driver, pgx,
+  cannot read the address in `GOPHENBERG_DATABASE_URL`, `account:list`
+  and `account:records` now stop with this one line, which holds no
+  part of the address and no longer repeats the driver's own text:
+
+  ```text
+  gophenberg: postgres: open the database: pgx cannot parse the address or one of its settings
+  ```
+
+  The other account commands check the address first and name the
+  setting, as they did before.
 
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
