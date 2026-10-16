@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/gopherium/gophenberg/internal/content"
 )
@@ -202,7 +203,18 @@ func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
 		"thai marks are kept":                        {in: "สวัสดี", want: "สวัสดี"},
 		"tamil marks are kept":                       {in: "தமிழ் மொழி", want: "தமிழ்-மொழி"},
 		"mark after a separator separates":           {in: "a \u093fb", want: "a-b"},
-		"compatibility digraph is left as is":        {in: "Ǆ", want: "ǆ"},
+		"grave after a digit dropped":                {in: "7\U00000300up", want: "7up"},
+		"macron after a digit dropped":               {in: "7\U00000304up", want: "7up"},
+		"caron after a digit dropped":                {in: "7\U0000030Cup", want: "7up"},
+		"grapheme joiner after a digit dropped":      {in: "7\U0000034Fup", want: "7up"},
+		"other mark after a digit kept":              {in: "3\U00000308d", want: "3\U00000308d"},
+		"other mark after a cyrillic letter kept": {
+			in:   "\U00000440\U00000435\U0000030F\U0000043A\U00000430",
+			want: "\U00000440\U00000435\U0000030F\U0000043A\U00000430",
+		},
+		"nukta behind a grapheme joiner composes":  {in: "\U00000928\U0000034F\U0000093C", want: "\U00000929"},
+		"hangul jamo across an apostrophe compose": {in: "\U00001100'\U00001161", want: "\U0000AC00"},
+		"compatibility digraph is left as is":      {in: "Ǆ", want: "ǆ"},
 	}
 
 	for testName, tc := range tests {
@@ -234,4 +246,24 @@ func TestSlugifyTruncatesBeforeACharacterCutFromItsMarks(t *testing.T) {
 	if want := strings.Repeat("a", 198); got != want {
 		t.Errorf("Slugify() = %q, want %q", got, want)
 	}
+}
+
+func FuzzSlugifyGivesTheSameSlugBack(f *testing.F) {
+	for _, seed := range []string{
+		"Crème Brûlée",
+		"\U00000939\U0000093F\U00000928\U00000926\U00000940 \U0000092D\U00000937\U0000093E",
+		"\U00000928\U0000034F\U0000093C",
+		"\U00001100'\U00001161",
+		"admin'\U0000FE0F",
+		"\U00000915" + strings.Repeat("\U00000951", 40),
+		strings.Repeat("a", 198) + " \U00000915\U0000093F",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, title string) {
+		slug := content.Slugify(title)
+		if again := content.Slugify(slug); again != slug || !norm.NFC.IsNormalString(slug) {
+			t.Errorf("Slugify(%q) = %q, which is not NFC or slugifies again to %q", title, slug, again)
+		}
+	})
 }

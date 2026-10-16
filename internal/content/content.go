@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 )
 
 // ErrInvalidType reports that a content type is not registered.
@@ -111,7 +112,7 @@ func Slugify(title string) string {
 			separated, afterKept = true, false
 		}
 	}
-	slug := truncateSlug(b.String())
+	slug := truncateSlug(norm.NFC.String(b.String()))
 	if slug == "" {
 		return untitledSlug
 	}
@@ -131,12 +132,10 @@ const (
 // slugRuneKindOf returns the [slugRuneKind] of r, given whether the previous character was kept.
 func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	switch {
-	case r == '\'' || r == '’':
+	case isApostrophe(r) || isSeparateAccent(r):
 		return slugRuneSkip
 	case unicode.IsLetter(r) || unicode.IsDigit(r):
 		return slugRuneWord
-	case afterKept && isSeparateAccent(r):
-		return slugRuneSkip
 	case afterKept && unicode.Is(unicode.M, r):
 		return slugRuneMark
 	default:
@@ -144,18 +143,21 @@ func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	}
 }
 
-// isSeparateAccent reports whether r is a combining diacritical mark in U+0300 through U+036F.
+// isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.
 func isSeparateAccent(r rune) bool {
-	return r >= '\u0300' && r <= '\u036f'
+	switch r {
+	case 0x0300, 0x0301, 0x0304, 0x030C, 0x034F:
+		return true
+	}
+	return false
 }
 
-// truncateSlug returns slug bounded to [slugMaxLength] characters without a trailing separator or a character
-// cut from its combining marks.
+// truncateSlug returns slug within [slugMaxLength] characters, with no trailing hyphen and no mark cut from its letter.
 func truncateSlug(slug string) string {
 	runes := []rune(slug)
 	if len(runes) > slugMaxLength {
 		end := slugMaxLength
-		for end > 0 && unicode.Is(unicode.M, runes[end]) {
+		for unicode.Is(unicode.M, runes[end]) {
 			end--
 		}
 		runes = runes[:end]
