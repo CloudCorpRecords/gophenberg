@@ -246,4 +246,5 @@ func initializeReleaseSignatures(sc *godog.ScenarioContext) {
 	sc.Then(`^the check holds$`, theCheckHolds)
 	sc.Then(`^the check refuses the signature, naming base64url without padding$`,
 		theCheckRefusesTheSignatureNamingTheEncoding)
+	initializeReleaseFiles(sc)
 }

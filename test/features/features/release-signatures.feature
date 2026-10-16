@@ -27,3 +27,14 @@ Feature: Release files carry signatures anyone can check
     When its signature is rewritten in standard base64 with padding
     And its signature is checked against its digest under its key
     Then the check refuses the signature, naming base64url without padding
+
+  Scenario: SHA256SUMS lists every archive and the release record
+    Given the archives of version "0.20.0" for "linux/amd64", "linux/arm64" and "darwin/arm64", each signed by a fresh release key
+    When releasetool writes the release record and SHA256SUMS
+    Then SHA256SUMS lists every archive and the release record by its SHA-256, sorted by name
+
+  Scenario: The release record names each archive by its platform
+    Given the archives of version "0.20.0" for "linux/amd64", "linux/arm64" and "darwin/arm64", each signed by a fresh release key
+    When releasetool writes the release record and SHA256SUMS
+    Then the release record lists each archive by its platform, with its address, its checksum and its signature
+    And each signature the release record carries holds for its archive under the release key
