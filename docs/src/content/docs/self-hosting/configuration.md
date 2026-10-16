@@ -80,9 +80,9 @@ Three rows deserve a warning:
 
 - `GOPHENBERG_WEB_DIR` replaces the admin built into the binary,
   and the stylesheets every public page loads with it. Leave it
-  unset to serve both from the binary. Before 0.20.0 the image set
-  it to `/web`, a folder the image no longer holds, so delete that
-  line if your compose file copied it, or the server stops at start.
+  unset to serve both from the binary. Older images set it to
+  `/web`, a folder the image no longer holds, so delete that line if
+  your compose file copied it, or the server stops at start.
 - `GOPHENBERG_SITE_TITLE` only affects the built-in renderer. A
   theme names the site in its own source.
 - `GOPHENBERG_MEDIA_DIR` holds files no database backup carries.
