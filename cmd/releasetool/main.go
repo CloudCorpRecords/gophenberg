@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command releasetool makes release keys, signs release files and checks their signatures.
+// Command releasetool makes release keys, signs release files, checks their signatures, and lists them in
+// SHA256SUMS and the release record.
 package main
 
 import (
@@ -19,6 +20,8 @@ const usage = `usage:
   releasetool keygen -curve ed25519|p256 -out <file|-> [-public <file>] [-passphrase-file <file> -iterations <n>]
   releasetool sign   -key <file> [-passphrase-file <file>] <file>...
   releasetool verify -public <file|multikey> <file>...
+  releasetool sums   <file>...
+  releasetool record -version <version> -download-url <https address> <archive>...
 `
 
 // command runs one releasetool command over its arguments.
@@ -29,6 +32,8 @@ var commands = map[string]command{
 	"keygen": keygen,
 	"sign":   sign,
 	"verify": verify,
+	"sums":   sums,
+	"record": record,
 }
 
 // errFlags reports flags the flag package refused and has already described.
