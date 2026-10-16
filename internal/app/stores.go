@@ -9,7 +9,7 @@ import (
 	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
-	accounts "github.com/gopherium/framework/gonsole/auth"
+	accountpg "github.com/gopherium/framework/gonsole/auth/postgres"
 	accountsqlite "github.com/gopherium/framework/gonsole/auth/sqlite"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
 	"github.com/gopherium/gouncer/avatar"
@@ -148,7 +148,7 @@ func migrations(getenv func(string) string) []gonsole.Step {
 
 // postgresMigrations returns the steps a PostgreSQL database takes in the order they apply, the core step last.
 func postgresMigrations(core gonsole.Step) []gonsole.Step {
-	return []gonsole.Step{accounts.Migration(), accounts.RecordMigration(), core}
+	return []gonsole.Step{accountpg.Migration(), accountpg.RecordMigration(), core}
 }
 
 // sqliteMigrations returns the steps a SQLite database takes on the run's one handle, in the order they apply.

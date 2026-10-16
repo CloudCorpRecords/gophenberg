@@ -13,7 +13,6 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
 
@@ -202,13 +201,38 @@ func TestSeedOnSQLiteMigratesTheFileThenNamesTheSQLiteError(t *testing.T) {
 	}
 }
 
-func TestAPostgreSQLProgramKeepsTheAccountStoresOfItsAddress(t *testing.T) {
+func TestAccountReadsOnAnAddressPgxCannotParseHoldNoPartOfTheAddress(t *testing.T) {
 	t.Parallel()
 
-	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL})
+	env := testkit.Getenv(map[string]string{
+		"GOPHENBERG_DATABASE_URL": "postgres://postgres:secretword@localhost:notaport/postgres",
+	})
+	want := "gophenberg: postgres: open the database: pgx cannot parse the address or one of its settings\n"
 
-	if accountConfig(goncierge.New(), getenv).Stores != nil {
-		t.Error("Stores is set on a PostgreSQL address, want nil so the account commands open their own pool")
+	for _, command := range []string{"account:list", "account:records"} {
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+
+			got := testkit.Run(t, Program(env, noPlugins), "", command)
+
+			if got.Code != gonsole.ExitFailed || got.Stdout != "" || got.Stderr != want {
+				t.Errorf("%s = %d, stdout %q, stderr %q, want 1 and only %q",
+					command, got.Code, got.Stdout, got.Stderr, want)
+			}
+		})
+	}
+}
+
+func TestAccountRecordsOnAPostgreSQLDatabaseWithNoRecordsTableSaysToMigrate(t *testing.T) {
+	t.Parallel()
+
+	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": emptyDatabaseURL(t)})
+
+	got := testkit.Run(t, Program(getenv, noPlugins), "", "account:records")
+
+	want := "gophenberg: the command records are missing, run migrate first\n"
+	if got.Code != gonsole.ExitFailed || got.Stderr != want {
+		t.Errorf("account:records = %d, stderr %q, want 1 and %q", got.Code, got.Stderr, want)
 	}
 }
 
