@@ -146,7 +146,7 @@ func TestRunReportsCoreMigrationFailure(t *testing.T) {
 	}
 	forgetCoreMigrations(t, databaseURL)
 	env := map[string]string{
-		"GOPHENBERG_DATABASE_URL": databaseURL, "GOPHENBERG_ADDR": "localhost:0", "GOPHENBERG_WEB_DIR": t.TempDir(),
+		"GOPHENBERG_DATABASE_URL": databaseURL, "GOPHENBERG_ADDR": "localhost:0",
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
