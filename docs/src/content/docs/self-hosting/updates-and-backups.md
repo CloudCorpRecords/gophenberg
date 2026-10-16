@@ -213,6 +213,14 @@ Some things work differently after this update:
   The other account commands check the address first and name the
   setting, as they did before.
 
+  Errors from the command records now name their step after
+  `postgres:`, such as `postgres: check the records:` when
+  `account:records` or a `-yes -as` command cannot reach the database.
+  A failed records step of `migrate` now reads
+  `migrate records: postgres: apply the records schema:` followed by
+  dbkit's own text. Update any script or alert that matches the old
+  wording.
+
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
 or older, write any `@` inside the password in
