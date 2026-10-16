@@ -109,7 +109,6 @@ func Slugify(title string) string {
 			b.WriteRune(r)
 		case slugRuneSeparator:
 			separated, afterKept = true, false
-		case slugRuneSkip:
 		}
 	}
 	slug := truncateSlug(b.String())
@@ -119,17 +118,17 @@ func Slugify(title string) string {
 	return slug
 }
 
-// slugRuneKind is how [Slugify] treats one character of a title.
+// slugRuneKind is the role of one title character in a slug: skipped, a word character, a kept mark or a separator.
 type slugRuneKind int
 
 const (
-	slugRuneSkip      slugRuneKind = iota // dropped without splitting the word
-	slugRuneWord                          // a letter or digit, kept
-	slugRuneMark                          // a combining mark after a kept character, kept
-	slugRuneSeparator                     // splits words
+	slugRuneSkip slugRuneKind = iota
+	slugRuneWord
+	slugRuneMark
+	slugRuneSeparator
 )
 
-// slugRuneKindOf returns how [Slugify] treats r, given whether the previous character was kept.
+// slugRuneKindOf returns the [slugRuneKind] of r, given whether the previous character was kept.
 func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	switch {
 	case r == '\'' || r == '’':
@@ -145,17 +144,21 @@ func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	}
 }
 
-// isSeparateAccent reports whether r is a combining diacritical mark left over after accent folding, which a
-// slug drops like WordPress drops an accent.
+// isSeparateAccent reports whether r is a combining diacritical mark in U+0300 through U+036F.
 func isSeparateAccent(r rune) bool {
 	return r >= '\u0300' && r <= '\u036f'
 }
 
-// truncateSlug returns slug bounded to [slugMaxLength] characters without a trailing separator.
+// truncateSlug returns slug bounded to [slugMaxLength] characters without a trailing separator or a character
+// cut from its combining marks.
 func truncateSlug(slug string) string {
 	runes := []rune(slug)
 	if len(runes) > slugMaxLength {
-		runes = runes[:slugMaxLength]
+		end := slugMaxLength
+		for end > 0 && unicode.Is(unicode.M, runes[end]) {
+			end--
+		}
+		runes = runes[:end]
 	}
 	return strings.TrimRight(string(runes), "-")
 }

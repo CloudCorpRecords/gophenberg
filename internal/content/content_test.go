@@ -225,3 +225,13 @@ func TestSlugifyTruncatesLongTitlesWithoutTrailingSeparator(t *testing.T) {
 		t.Errorf("Slugify() = %q with length %d, want %d characters and no trailing hyphen", got, len(got), len(want))
 	}
 }
+
+func TestSlugifyTruncatesBeforeACharacterCutFromItsMarks(t *testing.T) {
+	t.Parallel()
+
+	got := content.Slugify(strings.Repeat("a", 198) + " कि")
+
+	if want := strings.Repeat("a", 198); got != want {
+		t.Errorf("Slugify() = %q, want %q", got, want)
+	}
+}
