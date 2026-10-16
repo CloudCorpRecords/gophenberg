@@ -2,7 +2,7 @@
 	translations \
 	translations-push translations-retire \
 	e2e e2e-build e2e-theme e2e-serve e2e-db-reset e2e-seed e2e-reset bump bump-kit sdk-compat \
-	brick-link brick-sync brick-pack brick-unlink keygen build-release
+	brick-link brick-sync brick-pack brick-unlink keygen build-release release-archives
 
 COVERPKGS = $(shell go list ./... | grep -v -e /internal/postgres/db -e /internal/sqlite -e /internal/testdb -e /internal/content/contenttest -e /internal/media/mediatest -e /internal/cron/crontest)
 SQLITE_COVERPKGS = $(shell go list ./internal/sqlite/... | grep -v -e /internal/sqlite/db)
@@ -77,6 +77,18 @@ keygen:
 RELEASE_DIR ?= dist
 # The platforms make build-release builds, as os/arch, the machine's own unless named.
 RELEASE_PLATFORMS ?= $(shell go env GOOS)/$(shell go env GOARCH)
+# The platforms a release publishes, as os/arch, each packed by make release-archives.
+RELEASE_TARGETS ?= linux/amd64 linux/arm64 darwin/arm64
+# The build stamp written into release binaries, which only the release workflow sets, to official.
+RELEASE_STAMP ?=
+# The commit written into release binaries.
+RELEASE_COMMIT ?=
+# The time every archive entry carries, as Unix seconds, the last commit's unless named.
+RELEASE_EPOCH ?= $(shell git log -1 --format=%ct)
+# The address a release's notes are read at, before its tag.
+RELEASE_NOTES_URL ?= https://github.com/gopherium/gophenberg/releases/tag
+# The package whose variables carry the build stamp and the commit.
+VERSION_PACKAGE = github.com/gopherium/gophenberg/internal/version
 
 build-release:
 	pnpm --filter @gophenberg/frontend build
@@ -85,8 +97,24 @@ build-release:
 	go test -tags embedweb ./internal/webui
 	for platform in $(RELEASE_PLATFORMS); do \
 		os=$${platform%/*}; arch=$${platform#*/}; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -tags embedweb -trimpath -buildvcs=false -ldflags="-s -w" \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -tags embedweb -trimpath -buildvcs=false \
+			-ldflags="-s -w -X $(VERSION_PACKAGE).stamp=$(RELEASE_STAMP) -X $(VERSION_PACKAGE).commit=$(RELEASE_COMMIT)" \
 			-o "$(RELEASE_DIR)/$${os}_$${arch}/gophenberg" ./cmd/gophenberg || exit 1; \
+	done
+
+release-archives: RELEASE_PLATFORMS = $(RELEASE_TARGETS)
+release-archives: build-release
+	about="$$("$(RELEASE_DIR)/$$(go env GOOS)_$$(go env GOARCH)/gophenberg" about -json)" && \
+	version="$$(printf '%s' "$$about" | jq -r .version)" && \
+	for platform in $(RELEASE_TARGETS); do \
+		folder="$(RELEASE_DIR)/$${platform%/*}_$${platform#*/}"; \
+		printf '%s' "$$about" | jq --arg platform "$$platform" --arg notes "$(RELEASE_NOTES_URL)/v$$version" \
+			'. + {platform: $$platform, notes: $$notes}' > "$$folder/release.json" && \
+		cp LICENSE NOTICE "$$folder/" && rm -rf "$$folder/LICENSES" && cp -R LICENSES "$$folder/LICENSES" && \
+		tar -C "$$folder" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$(RELEASE_EPOCH) \
+			--use-compress-program='gzip -n' \
+			-cf "$(RELEASE_DIR)/gophenberg_$${version}_$${platform%/*}_$${platform#*/}.tar.gz" \
+			LICENSE LICENSES NOTICE gophenberg release.json || exit 1; \
 	done
 
 SDK_BASE ?=

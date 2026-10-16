@@ -25,13 +25,17 @@ COPY . .
 COPY --from=frontend /app/frontend/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedweb -trimpath -buildvcs=false -ldflags="-s -w" \
 	-o /gophenberg ./cmd/gophenberg
-RUN mkdir -p /themes /media
 
-# Assemble the runtime image: the binary with the admin inside, and the node a theme is served with.
-FROM gcr.io/distroless/nodejs24-debian12:nonroot
-COPY --from=backend /gophenberg /gophenberg
-COPY --from=backend --chown=65532:65532 /themes /themes
-COPY --from=backend --chown=65532:65532 /media /media
+# Make the folders the image hands to the nonroot user.
+FROM --platform=$BUILDPLATFORM gcr.io/distroless/static-debian12:debug AS folders
+RUN ["/busybox/mkdir", "-p", "/themes", "/media"]
+
+# What every image holds: the node a theme runs on, the notices and the settings.
+FROM gcr.io/distroless/nodejs24-debian12:nonroot AS base
+COPY LICENSE NOTICE /usr/share/doc/gophenberg/
+COPY LICENSES /usr/share/doc/gophenberg/LICENSES
+COPY --from=folders --chown=65532:65532 /themes /themes
+COPY --from=folders --chown=65532:65532 /media /media
 ENV GOPHENBERG_THEMES_DIR=/themes
 ENV GOPHENBERG_MEDIA_DIR=/media
 ENV GOPHENBERG_ADDR=0.0.0.0:8081
@@ -40,3 +44,12 @@ EXPOSE 8081
 USER nonroot:nonroot
 ENTRYPOINT ["/gophenberg"]
 CMD ["serve"]
+
+# The release image: the very binary the release archives hold.
+FROM base AS release
+ARG TARGETARCH
+COPY --chmod=0755 --from=binaries linux_${TARGETARCH}/gophenberg /gophenberg
+
+# The image built from source, the default target.
+FROM base AS runtime
+COPY --from=backend /gophenberg /gophenberg

@@ -13,8 +13,29 @@ import (
 	"testing"
 )
 
-// releaseRepo returns a git repository holding the Makefile, a stand-in admin package and an admin build whose
-// page is page, with a pnpm on its bin folder that only records how it was called.
+// standInMain prints the build facts for about -json, as the real binary does, and the admin page otherwise.
+const standInMain = `package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/gopherium/gophenberg/internal/version"
+	"github.com/gopherium/gophenberg/internal/webui"
+)
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "about" {
+		fmt.Printf("{\"schema\":1,\"name\":\"gophenberg\",\"version\":\"0.20.0\",\"commit\":%q,\"stamp\":%q,"+
+			"\"kits\":[\"0.9.0\"]}\n", version.Commit(), version.Stamp())
+		return
+	}
+	fmt.Print(webui.Page())
+}
+`
+
+// releaseRepo returns a git repository holding the Makefile, the notices, stand-ins for the admin and version
+// packages, and an admin build whose page is page, with a pnpm on its bin folder that only records how it was called.
 func releaseRepo(t *testing.T, page string) string {
 	t.Helper()
 	for _, tool := range []string{"make", "go", "git"} {
@@ -29,7 +50,10 @@ func releaseRepo(t *testing.T, page string) string {
 	}
 	files := map[string]string{
 		"Makefile":                      string(makefile),
-		"go.mod":                        "module example.com/site\n\ngo 1.27.1\n",
+		"go.mod":                        "module github.com/gopherium/gophenberg\n\ngo 1.27.1\n",
+		"LICENSE":                       "the Apache License\n",
+		"NOTICE":                        "the notice\n",
+		"LICENSES/GPL-3.0.txt":          "the GPLv3\n",
 		"frontend/dist/index.html":      page,
 		"internal/webui/dist/stale.txt": "left by an older build\n",
 		"internal/webui/embed.go": "//go:build embedweb\n\npackage webui\n\nimport _ \"embed\"\n\n" +
@@ -39,9 +63,10 @@ func releaseRepo(t *testing.T, page string) string {
 			"import (\n\t\"strings\"\n\t\"testing\"\n)\n\n" +
 			"func TestPage(t *testing.T) {\n\tif !strings.Contains(Page(), \"built admin\") {\n" +
 			"\t\tt.Fatal(\"the page is not the built admin\")\n\t}\n}\n",
-		"cmd/gophenberg/main.go": "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/site/internal/webui\"\n)\n\n" +
-			"func main() { fmt.Print(webui.Page()) }\n",
-		"bin/pnpm": "#!/bin/sh\nprintf '%s\\n' \"$*\" > pnpm-args\n",
+		"internal/version/version.go": "package version\n\nvar stamp, commit string\n\n" +
+			"func Stamp() string { return stamp }\n\nfunc Commit() string { return commit }\n",
+		"cmd/gophenberg/main.go": standInMain,
+		"bin/pnpm":               "#!/bin/sh\nprintf '%s\\n' \"$*\" > pnpm-args\n",
 	}
 	for path, body := range files {
 		writeFile(t, filepath.Join(root, path), body)
