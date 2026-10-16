@@ -228,6 +228,55 @@ func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
 	}
 }
 
+func TestSlugifyKeepsUnderscoresAndDropsWordPressStrippedSymbols(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"keeps underscores":               {in: "my_post", want: "my_post"},
+		"keeps underscores beside words":  {in: "My_Post title", want: "my_post-title"},
+		"drops ampersand without a break": {in: "Q&A", want: "qa"},
+		"drops the degree sign":           {in: "Bake at 180°C", want: "bake-at-180c"},
+		"multiplication sign becomes x":   {in: "2×4", want: "2x4"},
+		"drops the soft hyphen in a word": {in: "so\u00adft", want: "soft"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if got := content.Slugify(tc.in); got != tc.want {
+				t.Errorf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRouteWordBreaksAtUnderscoresTheWaySlugsNoLongerDo(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"breaks a label's underscores":  {in: "FAQ_Items", want: "faq-items"},
+		"breaks a leading underscore":   {in: "_posts", want: "posts"},
+		"folds accents as Slugify does": {in: "Café_Ærø", want: "cafe-aero"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if got := content.RouteWord(tc.in); got != tc.want {
+				t.Errorf("RouteWord(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlugifyTruncatesLongTitlesWithoutTrailingSeparator(t *testing.T) {
 	t.Parallel()
 

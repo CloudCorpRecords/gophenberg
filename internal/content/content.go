@@ -98,7 +98,8 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 func Slugify(title string) string {
 	var b strings.Builder
 	separated, afterKept := false, false
-	for _, r := range foldAccents(strings.ToLower(title)) {
+	// WordPress writes the multiplication sign as a plain x before it strips symbols.
+	for _, r := range foldAccents(strings.ReplaceAll(strings.ToLower(title), "×", "x")) {
 		switch slugRuneKindOf(r, afterKept) {
 		case slugRuneWord:
 			if separated && b.Len() > 0 {
@@ -119,6 +120,13 @@ func Slugify(title string) string {
 	return slug
 }
 
+// RouteWord returns label as a route word: its slug with underscores broken
+// as separators, because route words keep splitting words at underscores
+// while slugs no longer do.
+func RouteWord(label string) string {
+	return Slugify(strings.ReplaceAll(label, "_", " "))
+}
+
 // slugRuneKind is the role of one title character in a slug: skipped, a word character, a kept mark or a separator.
 type slugRuneKind int
 
@@ -130,17 +138,30 @@ const (
 )
 
 // slugRuneKindOf returns the [slugRuneKind] of r, given whether the previous character was kept.
+// Punctuation, symbols and invisible characters that WordPress strips are skipped without splitting the word.
 func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	switch {
 	case isApostrophe(r) || isSeparateAccent(r):
 		return slugRuneSkip
-	case unicode.IsLetter(r) || unicode.IsDigit(r):
+	case isSlugWord(r):
 		return slugRuneWord
 	case afterKept && unicode.Is(unicode.M, r):
 		return slugRuneMark
-	default:
+	case unicode.Is(unicode.M, r) || isWordSeparator(r):
 		return slugRuneSeparator
+	default:
+		return slugRuneSkip
 	}
+}
+
+// isSlugWord reports whether r is kept as part of a word in a slug: a letter, a digit or an underscore.
+func isSlugWord(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+}
+
+// isWordSeparator reports whether r splits words in a slug: whitespace, a dot, a slash or a dash.
+func isWordSeparator(r rune) bool {
+	return unicode.IsSpace(r) || r == '.' || r == '/' || r == '-'
 }
 
 // isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.
