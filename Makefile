@@ -2,7 +2,7 @@
 	translations \
 	translations-push translations-retire \
 	e2e e2e-build e2e-theme e2e-serve e2e-db-reset e2e-seed e2e-reset bump bump-kit sdk-compat \
-	brick-link brick-sync brick-pack brick-unlink keygen
+	brick-link brick-sync brick-pack brick-unlink keygen build-release
 
 COVERPKGS = $(shell go list ./... | grep -v -e /internal/postgres/db -e /internal/sqlite -e /internal/testdb -e /internal/content/contenttest -e /internal/media/mediatest -e /internal/cron/crontest)
 SQLITE_COVERPKGS = $(shell go list ./internal/sqlite/... | grep -v -e /internal/sqlite/db)
@@ -72,6 +72,22 @@ keygen:
 	@test -n "$(ROOT_KEY)" || { printf '%s\n' 'usage: read -rs pass && printf "%s\n" "$$pass" | make keygen ROOT_KEY=root1.pem && unset pass'; exit 1; }
 	go run ./cmd/releasetool keygen -curve p256 -out "$(ROOT_KEY)" -public "$(basename $(ROOT_KEY)).pub.pem" \
 		-passphrase-file "$(ROOT_KEY_PASSPHRASE_FILE)" -iterations "$(RELEASE_KEY_ITERATIONS)"
+
+# The folder make build-release writes each platform's binary into, as <os>_<arch>/gophenberg.
+RELEASE_DIR ?= dist
+# The platforms make build-release builds, as os/arch, the machine's own unless named.
+RELEASE_PLATFORMS ?= $(shell go env GOOS)/$(shell go env GOARCH)
+
+build-release:
+	pnpm --filter @gophenberg/frontend build
+	rm -rf internal/webui/dist
+	cp -R frontend/dist internal/webui/dist
+	go test -tags embedweb ./internal/webui
+	for platform in $(RELEASE_PLATFORMS); do \
+		os=$${platform%/*}; arch=$${platform#*/}; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -tags embedweb -trimpath -buildvcs=false -ldflags="-s -w" \
+			-o "$(RELEASE_DIR)/$${os}_$${arch}/gophenberg" ./cmd/gophenberg || exit 1; \
+	done
 
 SDK_BASE ?=
 SDK_BREAK_LABELED ?= false
@@ -207,10 +223,9 @@ E2E_STALE_THEME ?= millpond
 E2E_STALE_KIT ?= 0.1.0
 E2E_MEDIA_DIR ?= $(CURDIR)/.e2e-media
 
-e2e-build:
-	pnpm --filter @gophenberg/frontend build
+e2e-build: build-release
 	pnpm --filter @gophenberg/theme-starter build
-	go build -o gophenberg ./cmd/gophenberg
+	cp "$(RELEASE_DIR)/$$(go env GOOS)_$$(go env GOARCH)/gophenberg" gophenberg
 
 e2e-theme: e2e-build
 	rm -rf $(E2E_THEMES_DIR)
@@ -243,7 +258,7 @@ e2e-media:
 	mkdir -p $(E2E_MEDIA_DIR)
 
 e2e-serve: db-up e2e-theme e2e-media
-	GOPHENBERG_WEB_DIR=frontend/dist GOPHENBERG_DATABASE_URL="$(E2E_DATABASE_URL)" \
+	GOPHENBERG_DATABASE_URL="$(E2E_DATABASE_URL)" \
 		GOPHENBERG_THEMES_DIR="$(E2E_THEMES_DIR)" \
 		GOPHENBERG_MEDIA_DIR="$(E2E_MEDIA_DIR)" \
 		./gophenberg serve

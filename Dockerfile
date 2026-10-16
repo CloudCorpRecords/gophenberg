@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Build the single-page app.
-FROM node:26-slim AS frontend
+# Build the admin app on the builder's own platform.
+FROM --platform=$BUILDPLATFORM node:26-slim AS frontend
 RUN npm install -g pnpm@12.2.1
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -14,23 +14,24 @@ COPY test/theme/package.json ./test/theme/package.json
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @gophenberg/frontend build
 
-# Build the statically linked server binary.
-FROM golang:1.27 AS backend
+# Build the server with the admin inside, for the image's platform.
+FROM --platform=$BUILDPLATFORM golang:1.27 AS backend
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY sdk/go.mod ./sdk/go.mod
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /gophenberg ./cmd/gophenberg
+COPY --from=frontend /app/frontend/dist ./internal/webui/dist
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedweb -trimpath -buildvcs=false -ldflags="-s -w" \
+	-o /gophenberg ./cmd/gophenberg
 RUN mkdir -p /themes /media
 
-# Assemble the runtime image: the binary, the built SPA, and the node a theme is served with.
+# Assemble the runtime image: the binary with the admin inside, and the node a theme is served with.
 FROM gcr.io/distroless/nodejs24-debian12:nonroot
 COPY --from=backend /gophenberg /gophenberg
-COPY --from=frontend /app/frontend/dist /web
 COPY --from=backend --chown=65532:65532 /themes /themes
 COPY --from=backend --chown=65532:65532 /media /media
-ENV GOPHENBERG_WEB_DIR=/web
 ENV GOPHENBERG_THEMES_DIR=/themes
 ENV GOPHENBERG_MEDIA_DIR=/media
 ENV GOPHENBERG_ADDR=0.0.0.0:8081
