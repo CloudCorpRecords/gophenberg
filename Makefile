@@ -2,7 +2,7 @@
 	translations \
 	translations-push translations-retire \
 	e2e e2e-build e2e-theme e2e-serve e2e-db-reset e2e-seed e2e-reset bump bump-kit sdk-compat \
-	brick-link brick-sync brick-pack brick-unlink
+	brick-link brick-sync brick-pack brick-unlink keygen
 
 COVERPKGS = $(shell go list ./... | grep -v -e /internal/postgres/db -e /internal/sqlite -e /internal/testdb -e /internal/content/contenttest -e /internal/media/mediatest -e /internal/cron/crontest)
 SQLITE_COVERPKGS = $(shell go list ./internal/sqlite/... | grep -v -e /internal/sqlite/db)
@@ -60,6 +60,18 @@ bump-kit:
 		{ git rev-parse -q --verify "refs/tags/astro@$$current" >/dev/null || \
 		{ echo "astro@$$current carries no tag. Release it, or fetch the tags, before bumping the kit."; exit 1; }; }
 	cd sdk/astro && npm version "$(V)" --no-git-tag-version --allow-same-version
+
+# The PBKDF2 rounds make keygen seals a root key file with.
+RELEASE_KEY_ITERATIONS ?= 600000
+# The root key file make keygen writes, with its public key beside it.
+ROOT_KEY ?=
+# The file whose first line seals the root key.
+ROOT_KEY_PASSPHRASE_FILE ?= /dev/stdin
+
+keygen:
+	@test -n "$(ROOT_KEY)" || { printf '%s\n' 'usage: read -rs pass && printf "%s\n" "$$pass" | make keygen ROOT_KEY=root1.pem && unset pass'; exit 1; }
+	go run ./cmd/releasetool keygen -curve p256 -out "$(ROOT_KEY)" -public "$(basename $(ROOT_KEY)).pub.pem" \
+		-passphrase-file "$(ROOT_KEY_PASSPHRASE_FILE)" -iterations "$(RELEASE_KEY_ITERATIONS)"
 
 SDK_BASE ?=
 SDK_BREAK_LABELED ?= false
@@ -131,7 +143,7 @@ cover:
 	rm -rf $(COVERDATA)
 	mkdir -p $(COVERDATA)/bin $(COVERDATA)/counters
 	go build -cover -covermode=atomic -coverpkg=./cmd/...,./internal/app/... -o $(COVERDATA)/bin \
-		./cmd/gophenberg ./cmd/doclint ./cmd/pluginwire
+		./cmd/gophenberg ./cmd/doclint ./cmd/pluginwire ./cmd/releasetool
 	GOPHENBERG_COVER_BINDIR=$(CURDIR)/$(COVERDATA)/bin \
 	GOPHENBERG_COVER_GOCOVERDIR=$(CURDIR)/$(COVERDATA)/counters \
 	go test -cover -covermode=atomic $(GOTESTFLAGS) $(COVERPKGS) -args -test.gocoverdir=$(CURDIR)/$(COVERDATA)/counters
