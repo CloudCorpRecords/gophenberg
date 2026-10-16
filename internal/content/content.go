@@ -159,9 +159,10 @@ func isSlugWord(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-// isWordSeparator reports whether r splits words in a slug: whitespace, a dot, a slash or a dash.
+// isWordSeparator reports whether r splits words in a slug: whitespace, a dot, a slash or a dash,
+// where the dashes include the en and em dashes WordPress folds into hyphens.
 func isWordSeparator(r rune) bool {
-	return unicode.IsSpace(r) || r == '.' || r == '/' || r == '-'
+	return unicode.IsSpace(r) || r == '.' || r == '/' || r == '-' || r == 0x2013 || r == 0x2014
 }
 
 // isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.

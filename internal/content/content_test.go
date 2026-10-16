@@ -148,6 +148,7 @@ func TestSlugify(t *testing.T) {
 		"collapses runs of separators": {in: "multiple   spaces", want: "multiple-spaces"},
 		"trims leading and trailing":   {in: "---edged---", want: "edged"},
 		"drops apostrophes":            {in: "How's it going", want: "hows-it-going"},
+		"splits en and em dashes":      {in: "News–Events—Index", want: "news-events-index"},
 		"keeps digits":                 {in: "Top 10 Reasons", want: "top-10-reasons"},
 		"keeps unicode letters":        {in: "Cafe Munchen", want: "cafe-munchen"},
 		"lowercases unicode":           {in: "MARIA PEREZ", want: "maria-perez"},
