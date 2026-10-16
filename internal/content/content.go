@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 )
 
 // ErrInvalidType reports that a content type is not registered.
@@ -96,33 +97,70 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 // slug characters.
 func Slugify(title string) string {
 	var b strings.Builder
-	separated := false
+	separated, afterKept := false, false
 	for _, r := range foldAccents(strings.ToLower(title)) {
-		switch {
-		case r == '\'' || r == '’':
-			continue
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
+		switch slugRuneKindOf(r, afterKept) {
+		case slugRuneWord:
 			if separated && b.Len() > 0 {
 				b.WriteRune('-')
 			}
-			separated = false
+			separated, afterKept = false, true
 			b.WriteRune(r)
-		default:
-			separated = true
+		case slugRuneMark:
+			b.WriteRune(r)
+		case slugRuneSeparator:
+			separated, afterKept = true, false
 		}
 	}
-	slug := truncateSlug(b.String())
+	slug := truncateSlug(norm.NFC.String(b.String()))
 	if slug == "" {
 		return untitledSlug
 	}
 	return slug
 }
 
-// truncateSlug returns slug bounded to [slugMaxLength] characters without a trailing separator.
+// slugRuneKind is the role of one title character in a slug: skipped, a word character, a kept mark or a separator.
+type slugRuneKind int
+
+const (
+	slugRuneSkip slugRuneKind = iota
+	slugRuneWord
+	slugRuneMark
+	slugRuneSeparator
+)
+
+// slugRuneKindOf returns the [slugRuneKind] of r, given whether the previous character was kept.
+func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
+	switch {
+	case isApostrophe(r) || isSeparateAccent(r):
+		return slugRuneSkip
+	case unicode.IsLetter(r) || unicode.IsDigit(r):
+		return slugRuneWord
+	case afterKept && unicode.Is(unicode.M, r):
+		return slugRuneMark
+	default:
+		return slugRuneSeparator
+	}
+}
+
+// isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.
+func isSeparateAccent(r rune) bool {
+	switch r {
+	case 0x0300, 0x0301, 0x0304, 0x030C, 0x034F:
+		return true
+	}
+	return false
+}
+
+// truncateSlug returns slug within [slugMaxLength] characters, with no trailing hyphen and no mark cut from its letter.
 func truncateSlug(slug string) string {
 	runes := []rune(slug)
 	if len(runes) > slugMaxLength {
-		runes = runes[:slugMaxLength]
+		end := slugMaxLength
+		for unicode.Is(unicode.M, runes[end]) {
+			end--
+		}
+		runes = runes[:end]
 	}
 	return strings.TrimRight(string(runes), "-")
 }
