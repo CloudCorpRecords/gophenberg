@@ -18,8 +18,8 @@ import (
 // sqlitePrefix starts every database address that picks SQLite, any other address picking PostgreSQL.
 const sqlitePrefix = "sqlite:"
 
-// errPostgresOnly answers a command that needs the content, types or accounts a SQLite database does not run yet.
-var errPostgresOnly = errors.New("content, types and accounts do not run on SQLite yet, " +
+// errPostgresOnly answers a command that needs the content or types a SQLite database does not run yet.
+var errPostgresOnly = errors.New("content and types do not run on SQLite yet, " +
 	"so this command needs GOPHENBERG_DATABASE_URL to name a PostgreSQL database")
 
 // onSQLite reports whether the database address picks SQLite.

@@ -16,6 +16,7 @@ import (
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
 
+	"github.com/gopherium/gophenberg/internal/sqlite"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -47,17 +48,8 @@ func TestEveryCommandNeedingTheWholeSiteNamesTheSQLiteError(t *testing.T) {
 		args  []string
 		named string
 	}{
-		"serve":        {[]string{"serve"}, "serve"},
-		"seed -yes":    {[]string{"seed", "-yes"}, "seed"},
-		"account:list": {[]string{"account:list"}, "account commands"},
-		"account:create-admin": {
-			[]string{"account:create-admin", "-email", "admin@example.com", "-name", "Holder", "-role", "admin"},
-			"account commands",
-		},
-		"account:role as an admin": {
-			[]string{"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com"},
-			"account commands",
-		},
+		"serve":     {[]string{"serve"}, "serve"},
+		"seed -yes": {[]string{"seed", "-yes"}, "seed"},
 	}
 	for testName, tc := range tests {
 		t.Run(testName, func(t *testing.T) {
@@ -67,53 +59,79 @@ func TestEveryCommandNeedingTheWholeSiteNamesTheSQLiteError(t *testing.T) {
 
 			got := runUnread(t, program, tc.args...)
 
-			want := "gophenberg: " + tc.named + ": " + errPostgresOnly.Error() + "\n"
+			want := "gophenberg: " + tc.named + ": content and types do not run on SQLite yet, " +
+				"so this command needs GOPHENBERG_DATABASE_URL to name a PostgreSQL database\n"
 			if got.Code != gonsole.ExitFailed || got.Stdout != "" || !strings.HasSuffix(got.Stderr, want) {
-				t.Errorf("%q = %d, stdout %q, stderr %q, want 1, no password asked and %q last",
+				t.Errorf("%q = %d, stdout %q, stderr %q, want 1 and %q last",
 					tc.args, got.Code, got.Stdout, got.Stderr, want)
 			}
 		})
 	}
 }
 
-func TestAccountCommandsActingAsAnAccountNameTheSQLiteErrorBeforeOpeningTheFile(t *testing.T) {
+func TestAccountCommandsNameWhatStopsThemOnASQLiteFile(t *testing.T) {
 	t.Parallel()
 
+	asAdmin := []string{"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com"}
+	unmigrated := saying("the command records are missing, run migrate first")
 	tests := map[string]struct {
 		args     []string
+		file     func(*testing.T) string
 		settings map[string]string
+		says     func(path string) string
 	}{
-		"account:role": {
-			[]string{"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com"}, nil,
+		"account:role on a missing file": {asAdmin, missingSQLiteFile, nil, namingTheMissingFile},
+		"account:disable on a missing file": {
+			[]string{"account:disable", "author@example.com", "-yes", "-as", "admin@example.com"},
+			missingSQLiteFile, nil, namingTheMissingFile,
 		},
-		"account:disable": {
-			[]string{"account:disable", "author@example.com", "-yes", "-as", "admin@example.com"}, nil,
-		},
-		"account:grant-role under a bad SQLite setting": {
+		"account:grant-role on a missing file under a bad SQLite setting": {
 			[]string{"account:grant-role", "-role", "editor", "-yes", "-as", "admin@example.com"},
-			map[string]string{"GOPHENBERG_SQLITE_SYNCHRONOUS": "off"},
+			missingSQLiteFile, map[string]string{"GOPHENBERG_SQLITE_SYNCHRONOUS": "off"},
+			saying("GOPHENBERG_SQLITE_SYNCHRONOUS"),
 		},
+		"account:records on a file never migrated": {[]string{"account:records"}, emptySQLiteFile, nil, unmigrated},
+		"account:role on a file never migrated":    {asAdmin, emptySQLiteFile, nil, unmigrated},
+		"account:list on a file never migrated":    {[]string{"account:list"}, emptySQLiteFile, nil, saying("")},
 	}
 	for testName, tc := range tests {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			path := filepath.Join(t.TempDir(), "site.db")
+			path := tc.file(t)
+			_, before := os.Stat(path)
 			settings := map[string]string{"GOPHENBERG_DATABASE_URL": sqlitePrefix + path}
 			maps.Copy(settings, tc.settings)
 
 			got := runUnread(t, Program(testkit.Getenv(settings), noPlugins), tc.args...)
 
-			want := "gophenberg: account commands: " + errPostgresOnly.Error() + "\n"
-			if got.Code != gonsole.ExitFailed || got.Stdout != "" || !strings.HasSuffix(got.Stderr, want) {
-				t.Errorf("%q = %d, stdout %q, stderr %q, want 1 and %q last",
-					tc.args, got.Code, got.Stdout, got.Stderr, want)
+			want := tc.says(path)
+			if got.Code != gonsole.ExitFailed || got.Stdout != "" || !strings.Contains(got.Stderr, want) ||
+				strings.Contains(got.Stderr, errPostgresOnly.Error()) {
+				t.Errorf("%q = %d, stdout %q, stderr %q, want 1, %q and never %q",
+					tc.args, got.Code, got.Stdout, got.Stderr, want, errPostgresOnly.Error())
 			}
-			if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
-				t.Errorf("the file after %q: %v, want it still missing", tc.args, err)
+			if _, after := os.Stat(path); errors.Is(after, fs.ErrNotExist) != errors.Is(before, fs.ErrNotExist) {
+				t.Errorf("the file after %q: %v, want it as it was before the command (%v)", tc.args, after, before)
 			}
 		})
 	}
+}
+
+// missingSQLiteFile returns the path of a SQLite file that does not exist, in a folder of its own.
+func missingSQLiteFile(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "site.db")
+}
+
+// namingTheMissingFile returns the line naming the missing SQLite file at path.
+func namingTheMissingFile(path string) string {
+	return sqlite.ErrNoFile.Error() + ": " + path
+}
+
+// saying returns the answer holding text whatever the file's path.
+func saying(text string) func(string) string {
+	return func(string) string { return text }
 }
 
 func TestAPaddedSQLiteAddressPicksSQLiteForEveryCommand(t *testing.T) {
@@ -122,7 +140,8 @@ func TestAPaddedSQLiteAddressPicksSQLiteForEveryCommand(t *testing.T) {
 	padded := func(path string) func(string) string {
 		return testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": "  " + sqlitePrefix + path + "  "})
 	}
-	onFile, onMissing := padded(emptySQLiteFile(t)), padded(filepath.Join(t.TempDir(), "site.db"))
+	missing := missingSQLiteFile(t)
+	onFile, onMissing := padded(emptySQLiteFile(t)), padded(missing)
 
 	migrated := testkit.Run(t, Program(onFile, noPlugins), "", "migrate")
 
@@ -133,17 +152,17 @@ func TestAPaddedSQLiteAddressPicksSQLiteForEveryCommand(t *testing.T) {
 	for _, tc := range []struct {
 		getenv func(string) string
 		args   []string
-		named  string
+		code   int
+		says   string
 	}{
-		{onFile, []string{"serve"}, "serve"},
-		{onFile, []string{"account:list"}, "account commands"},
+		{onFile, []string{"serve"}, gonsole.ExitFailed, "serve: " + errPostgresOnly.Error()},
+		{onFile, []string{"account:list"}, gonsole.ExitDone, ""},
 		{onMissing, []string{"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com"},
-			"account commands"},
+			gonsole.ExitFailed, namingTheMissingFile(missing)},
 	} {
 		got := runUnread(t, Program(tc.getenv, noPlugins), tc.args...)
-		if want := "gophenberg: " + tc.named + ": " + errPostgresOnly.Error() + "\n"; got.Code != gonsole.ExitFailed ||
-			!strings.HasSuffix(got.Stderr, want) {
-			t.Errorf("%q = %d with stderr %q, want 1 and %q last", tc.args, got.Code, got.Stderr, want)
+		if got.Code != tc.code || !strings.Contains(got.Stderr, tc.says) {
+			t.Errorf("%q = %d with stderr %q, want %d and %q", tc.args, got.Code, got.Stderr, tc.code, tc.says)
 		}
 	}
 }
@@ -248,5 +267,23 @@ func TestAPostgreSQLAccountChangeStillReadsTheRolesOfTheRegisteredPlugins(t *tes
 	if want := "register plugins: plugin teams: a setting is missing"; got.Code != gonsole.ExitFailed ||
 		!strings.Contains(got.Stderr, want) {
 		t.Errorf("account:role on PostgreSQL = %d with stderr %q, want 1 and %q", got.Code, got.Stderr, want)
+	}
+}
+
+func TestTheSQLiteAccountStoresRunOnTheHandleOfTheRun(t *testing.T) {
+	t.Parallel()
+
+	runs := openSQLiteFile(t, migratedSQLiteFile(t))
+	elsewhere := testkit.Getenv(map[string]string{
+		"GOPHENBERG_DATABASE_URL": sqlitePrefix + filepath.Join(t.TempDir(), "site.db"),
+	})
+
+	stores, release, err := accountStores(elsewhere)(t.Context(), gonsole.Call{}.WithDB(runs))
+
+	if err != nil || release != nil {
+		t.Fatalf("accountStores() = a release %v and %v, want the run's handle and nothing to release", release != nil, err)
+	}
+	if held, err := stores.Records.Held(t.Context()); err != nil || !held {
+		t.Errorf("the records are held %v (%v), want the stores over the run's migrated handle", held, err)
 	}
 }
