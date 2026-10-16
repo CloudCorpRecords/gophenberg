@@ -15,7 +15,10 @@ import (
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
+	"github.com/gopherium/gouncer"
+	authkitsqlite "github.com/gopherium/gouncer/authkit/sqlite"
 
+	"github.com/gopherium/gophenberg/internal/seed"
 	"github.com/gopherium/gophenberg/internal/sqlite"
 )
 
@@ -179,6 +182,30 @@ func TestTheSQLiteSiteKeepsEveryStoreItBuildsInTheFile(t *testing.T) {
 	}
 	if built.library == nil || built.registry == nil {
 		t.Errorf("library %v and registry %v, want both built under a media folder", built.library, built.registry)
+	}
+}
+
+func TestTheSQLiteSiteKeepsTheAccountsItCreatesInTheFile(t *testing.T) {
+	t.Parallel()
+
+	path := migratedSQLiteFile(t)
+	built := sqliteStores(composeConfig{handle: openSQLiteFile(t, path), fieldDepth: 4})
+	if built.users == nil {
+		t.Fatal("the SQLite site holds no user store, want one over the file")
+	}
+	created := gouncer.User{
+		ID: uuid.Must(uuid.NewV7()), Email: seed.AuthorEmail, Name: seed.AuthorName, PasswordHash: "hash",
+		CreatedAt: accountsAdded,
+	}
+
+	if err := built.users.CreateUser(t.Context(), created); err != nil {
+		t.Fatalf("creating an account through the site's user store: %v", err)
+	}
+
+	read, err := authkitsqlite.NewUserStore(openSQLiteFile(t, path)).UserByEmail(t.Context(), created.Email)
+	if err != nil || read.ID != created.ID || read.Name != created.Name {
+		t.Errorf("a second handle on the file reads %s named %q (%v), want the account %s the site created",
+			read.ID, read.Name, err, created.ID)
 	}
 }
 
