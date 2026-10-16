@@ -98,21 +98,18 @@ func Slugify(title string) string {
 	var b strings.Builder
 	separated, afterKept := false, false
 	for _, r := range foldAccents(strings.ToLower(title)) {
-		switch {
-		case r == '\'' || r == '’':
-			continue
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
+		switch slugRuneKindOf(r, afterKept) {
+		case slugRuneWord:
 			if separated && b.Len() > 0 {
 				b.WriteRune('-')
 			}
 			separated, afterKept = false, true
 			b.WriteRune(r)
-		case afterKept && isSeparateAccent(r):
-			continue
-		case afterKept && unicode.Is(unicode.M, r):
+		case slugRuneMark:
 			b.WriteRune(r)
-		default:
+		case slugRuneSeparator:
 			separated, afterKept = true, false
+		case slugRuneSkip:
 		}
 	}
 	slug := truncateSlug(b.String())
@@ -120,6 +117,32 @@ func Slugify(title string) string {
 		return untitledSlug
 	}
 	return slug
+}
+
+// slugRuneKind is how [Slugify] treats one character of a title.
+type slugRuneKind int
+
+const (
+	slugRuneSkip      slugRuneKind = iota // dropped without splitting the word
+	slugRuneWord                          // a letter or digit, kept
+	slugRuneMark                          // a combining mark after a kept character, kept
+	slugRuneSeparator                     // splits words
+)
+
+// slugRuneKindOf returns how [Slugify] treats r, given whether the previous character was kept.
+func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
+	switch {
+	case r == '\'' || r == '’':
+		return slugRuneSkip
+	case unicode.IsLetter(r) || unicode.IsDigit(r):
+		return slugRuneWord
+	case afterKept && isSeparateAccent(r):
+		return slugRuneSkip
+	case afterKept && unicode.Is(unicode.M, r):
+		return slugRuneMark
+	default:
+		return slugRuneSeparator
+	}
 }
 
 // isSeparateAccent reports whether r is a combining diacritical mark left over after accent folding, which a
