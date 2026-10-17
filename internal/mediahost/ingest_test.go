@@ -366,6 +366,7 @@ func TestIngestFoldsAccentsInNames(t *testing.T) {
 		{"letters that do not decompose", "Łódź 2026.jpg", "lodz-2026.jpg"},
 		{"a combining mark", "Mu\u0308nchen.jpg", "munchen.jpg"},
 		{"letters with no plain form", "写真.jpg", "写真.jpg"},
+		{"a folded sub-size lookalike", "photo-150ẋ150.jpg", "photo-150x150-file.jpg"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -375,6 +376,30 @@ func TestIngestFoldsAccentsInNames(t *testing.T) {
 
 			if filepath.Base(m.File) != tc.want {
 				t.Errorf("File = %q, want %s", m.File, tc.want)
+			}
+		})
+	}
+}
+
+func TestIngestStoresALongNameUnderAShortStem(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, upload, want string
+	}{
+		{"single byte letters", strings.Repeat("a", 300) + ".jpg", strings.Repeat("a", 200) + ".jpg"},
+		{"three byte letters", strings.Repeat("写", 100) + ".jpg", strings.Repeat("写", 66) + ".jpg"},
+		{"a cut after a separator", strings.Repeat("a", 199) + " b.jpg", strings.Repeat("a", 199) + ".jpg"},
+		{"only the start of a name is read", strings.Repeat("!", 800) + "late.jpg", "file.jpg"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := mustIngest(t, newLibrary(t), tc.upload, jpegImage(t, 40, 30))
+
+			if filepath.Base(m.File) != tc.want {
+				t.Errorf("File = %q, want %q", filepath.Base(m.File), tc.want)
 			}
 		})
 	}

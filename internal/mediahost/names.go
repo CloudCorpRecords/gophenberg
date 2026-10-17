@@ -8,9 +8,16 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gopherium/gophenberg/internal/content"
 )
+
+// maxStemBytes bounds the bytes of a stored file stem.
+const maxStemBytes = 200
+
+// maxNameBytes bounds the bytes of an upload name read for its stem.
+const maxNameBytes = 4 * maxStemBytes
 
 // lookalikeSuffix matches a stem that could collide with sub-size naming.
 var lookalikeSuffix = regexp.MustCompile(`-(\d+x\d+|scaled)$`)
@@ -30,7 +37,7 @@ func titleOf(name string) string {
 func stemOf(name string) string {
 	var b strings.Builder
 	separated := false
-	for _, r := range content.FoldAccents(strings.ToLower(titleOf(name))) {
+	for _, r := range content.FoldAccents(prefixOf(titleOf(name), maxNameBytes)) {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
 			separated = true
 			continue
@@ -41,7 +48,7 @@ func stemOf(name string) string {
 		separated = false
 		b.WriteRune(r)
 	}
-	stem := b.String()
+	stem := strings.TrimSuffix(prefixOf(b.String(), maxStemBytes), "-")
 	if stem == "" {
 		stem = "file"
 	}
@@ -49,6 +56,18 @@ func stemOf(name string) string {
 		stem += "-file"
 	}
 	return stem
+}
+
+// prefixOf returns the longest prefix of s that holds whole runes within limit bytes.
+func prefixOf(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // numberedStem returns stem for the first attempt, and stem with the attempt
