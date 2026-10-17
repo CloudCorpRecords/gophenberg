@@ -178,14 +178,22 @@ func (f releaseFile) signaturePath() string {
 	return string(f) + signatureSuffix
 }
 
-// writeSignature writes the signature line to a new .sig beside the file.
+// writeSignature writes the signature line to a new .sig beside the file, leaving none when the write fails.
 func (f releaseFile) writeSignature(line string) error {
 	file, err := createNew(f.signaturePath(), publicMode)
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintln(file, line)
-	return errors.Join(err, file.Close())
+	return removeIfFailed(file, errors.Join(err, file.Close()))
+}
+
+// removeIfFailed removes the file a failed write left behind, so a retry is not refused, and returns the failure.
+func removeIfFailed(file *os.File, failure error) error {
+	if failure == nil {
+		return nil
+	}
+	return errors.Join(failure, os.Remove(file.Name()))
 }
 
 // verify checks the .sig beside the file under the key.

@@ -78,6 +78,26 @@ func TestSignWritesNoSignatureWhenAnyFileCannotBeRead(t *testing.T) {
 	}
 }
 
+func TestRemoveIfFailedRemovesTheFileAFailedWriteLeft(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "gophenberg_0.20.0_linux_amd64.tar.gz.sig")
+	file, err := createNew(path, publicMode)
+	if err != nil {
+		t.Fatalf("createNew: %v", err)
+	}
+	failure := errors.New("no room left on the device")
+
+	got := removeIfFailed(file, errors.Join(failure, file.Close()))
+
+	if !errors.Is(got, failure) {
+		t.Errorf("removeIfFailed() = %v, want the write's failure kept", got)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("removeIfFailed left %s behind: %v", path, err)
+	}
+}
+
 func TestVerifyReadsAMultikeyEvenWhenAFileHasItsName(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

@@ -165,9 +165,13 @@ func openOutputs(opts keygenOptions, stdout io.Writer) (keyOutputs, error) {
 	return outputs, nil
 }
 
-// write writes the private key under the sealing and its public key, then closes every file it opened.
+// write writes the private key under the sealing and its public key, then closes every file it opened, removing
+// them all when a write fails.
 func (o keyOutputs) write(key crypto.Signer, s sealing) error {
-	err := errors.Join(writeKey(o.private, key, s), writePublicKey(o.public, key.Public()))
+	if err := errors.Join(writeKey(o.private, key, s), writePublicKey(o.public, key.Public())); err != nil {
+		return errors.Join(err, o.discard())
+	}
+	var err error
 	for _, file := range o.opened {
 		err = errors.Join(err, file.Close())
 	}
