@@ -75,8 +75,10 @@ keygen:
 
 # The folder make build-release writes each platform's binary into, as <os>_<arch>/gophenberg.
 RELEASE_DIR ?= dist
+# The platform of the machine running make, as os/arch.
+RELEASE_HOST = $(shell go env GOOS)/$(shell go env GOARCH)
 # The platforms make build-release builds, as os/arch, the machine's own unless named.
-RELEASE_PLATFORMS ?= $(shell go env GOOS)/$(shell go env GOARCH)
+RELEASE_PLATFORMS ?= $(RELEASE_HOST)
 # The platforms a release publishes, as os/arch, each packed by make release-archives.
 RELEASE_TARGETS ?= linux/amd64 linux/arm64 darwin/arm64
 # The build stamp written into release binaries, which only the release workflow sets, to official.
@@ -102,7 +104,7 @@ build-release:
 			-o "$(RELEASE_DIR)/$${os}_$${arch}/gophenberg" ./cmd/gophenberg || exit 1; \
 	done
 
-release-archives: RELEASE_PLATFORMS = $(RELEASE_TARGETS)
+release-archives: RELEASE_PLATFORMS = $(sort $(RELEASE_TARGETS) $(RELEASE_HOST))
 release-archives: build-release
 	about="$$("$(RELEASE_DIR)/$$(go env GOOS)_$$(go env GOARCH)/gophenberg" about -json)" && \
 	version="$$(printf '%s' "$$about" | jq -r .version)" && \
@@ -112,7 +114,7 @@ release-archives: build-release
 			'. + {platform: $$platform, notes: $$notes}' > "$$folder/release.json" && \
 		cp LICENSE NOTICE "$$folder/" && rm -rf "$$folder/LICENSES" && cp -R LICENSES "$$folder/LICENSES" && \
 		tar -C "$$folder" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$(RELEASE_EPOCH) \
-			--use-compress-program='gzip -n' \
+			--mode='a+rX,u+w,go-w' --use-compress-program='gzip -n' \
 			-cf "$(RELEASE_DIR)/gophenberg_$${version}_$${platform%/*}_$${platform#*/}.tar.gz" \
 			LICENSE LICENSES NOTICE gophenberg release.json || exit 1; \
 	done

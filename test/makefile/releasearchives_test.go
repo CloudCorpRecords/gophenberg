@@ -102,6 +102,60 @@ func TestMakeReleaseArchivesStampsNothingAndDatesTheLastCommitUnlessTold(t *test
 	}
 }
 
+func TestMakeReleaseArchivesPacksATargetThisMachineCannotRun(t *testing.T) {
+	t.Parallel()
+
+	root := archivesRepo(t)
+	host := runtime.GOOS + "/" + runtime.GOARCH
+	other := anotherPlatform(host)
+
+	entries := readArchive(t, packedArchive(t, root, other, "release-archives", "RELEASE_TARGETS="+other))
+
+	if facts := factsOf(t, entries); facts.Platform != other {
+		t.Errorf("the %s archive's release.json names %q", other, facts.Platform)
+	}
+	hostArchive := filepath.Join(root, "dist", "gophenberg_0.20.0_"+platformFolder(host)+".tar.gz")
+	if _, err := os.Stat(hostArchive); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("make release-archives packed %s, a platform the targets leave out: %v", host, err)
+	}
+}
+
+func TestMakeReleaseArchivesPacksTheSameBytesWhateverTheUmask(t *testing.T) {
+	t.Parallel()
+
+	open := packedUnderUmask(t, "022")
+	closed := packedUnderUmask(t, "077")
+
+	if !bytes.Equal(open, closed) {
+		t.Error("the archive packed under umask 077 differs from the one packed under 022, want the same bytes")
+	}
+	for _, entry := range readArchive(t, closed) {
+		want := int64(0o644)
+		if entry.header.Typeflag == tar.TypeDir || entry.header.Name == "gophenberg" {
+			want = 0o755
+		}
+		if entry.header.Mode != want {
+			t.Errorf("%s has mode %o under umask 077, want %o", entry.header.Name, entry.header.Mode, want)
+		}
+	}
+}
+
+// packedUnderUmask packs this machine's archive in a new release repository under the file mode mask, and returns it.
+func packedUnderUmask(t *testing.T, mask string) []byte {
+	t.Helper()
+	root := archivesRepo(t)
+	platform := runtime.GOOS + "/" + runtime.GOARCH
+	args := []string{"release-archives", "RELEASE_TARGETS=" + platform, "RELEASE_EPOCH=" + strconv.Itoa(releaseEpoch)}
+	path := "PATH=" + filepath.Join(root, "bin") + string(os.PathListSeparator) + os.Getenv("PATH")
+	command := exec.Command("sh", append([]string{"-c", `umask "$0" && exec make "$@"`, mask}, append(args, path)...)...)
+	command.Dir = root
+	command.Env = append(isolated(), "GOWORK=off", "GOFLAGS=", "MAKEFLAGS=", "MFLAGS=", "MAKELEVEL=")
+	if out, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("make %v under umask %s = %v with output %q", args, mask, err, out)
+	}
+	return archiveBytes(t, root, platform)
+}
+
 // archivesRepo returns a release repository, skipping when a tool release-archives runs is missing.
 func archivesRepo(t *testing.T) string {
 	t.Helper()
