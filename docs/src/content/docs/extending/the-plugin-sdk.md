@@ -524,11 +524,19 @@ trash, hides the header, so give that row action
 `hideModalHeader: true`. A plain confirm, such as making an item the
 default, keeps its header, which shows the action's `modalHeader` or
 else its label. Either way, give the row action
-`modalFocusOnMount: 'firstContentElement'` and render godmin's
-`RunConfirm` with the question as its child, the words of **Cancel**
-and of a button named after the action, and `run`, a function that
-takes the picked rows and settles once your screen shows how it went.
-It keeps Cancel inert while the run goes and closes once it settles.
+`modalFocusOnMount: 'firstContentElement'` and render `RunConfirm`
+with the question as its child, the words of **Cancel** and of a
+button named after the action, and `run`, a function that takes the
+picked rows and settles once your screen shows how it went. It keeps
+Cancel inert while the run goes and closes once it settles.
+
+Import `RunConfirm` from `@gophenberg/frontend-sdk`, beside
+`useListRun` and `useBulkRun`, the hooks the admin's own lists run
+their actions with. `useListRun` holds the failure notice, the ticked
+rows and the focus after a run, and `useBulkRun` makes one call per
+picked row, refreshes your list and shows one toast in the words you
+pass as `BulkWords`. Taking them from the SDK keeps your plugin on the
+admin's own copy.
 
 ## Versions
 
