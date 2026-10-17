@@ -198,6 +198,10 @@ func archivesRepo(t *testing.T) string {
 			t.Skipf("%s is not on PATH, so make release-archives cannot be exercised here", tool)
 		}
 	}
+	version, err := exec.Command("tar", "--version").Output()
+	if err != nil || !strings.Contains(string(version), "GNU tar") {
+		t.Skip("tar is not GNU tar, which make release-archives packs with, so it cannot be exercised here")
+	}
 	return releaseRepo(t, "<p>the built admin</p>")
 }
 
