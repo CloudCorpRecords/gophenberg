@@ -2,13 +2,13 @@
 
 import { AlertDialog, Button } from '@gophenberg/frontend-sdk'
 import { useToaster } from '@gopherium/godmin'
+import type { ListRun } from '@gopherium/godmin'
 import { formatNumber } from '@gopherium/gottext'
 import { __, _n, sprintf } from '@wordpress/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { useRefresh } from './actions'
-import type { ListRun } from './actions'
 import { emptyTrash } from './api'
 import type { Emptied, Post } from './api'
 

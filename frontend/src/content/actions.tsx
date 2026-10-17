@@ -1,32 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { backupIcon, sessionMayChange, trashIcon } from '@gophenberg/frontend-sdk'
-import type { Action, RenderModalProps } from '@gophenberg/frontend-sdk/dataviews'
-import { ConfirmBody, bulkNotes, runEach, useToaster } from '@gopherium/godmin'
-import type { BulkWords } from '@gopherium/godmin'
+import type { Action } from '@gophenberg/frontend-sdk/dataviews'
+import { RunConfirm, useBulkRun, useToaster } from '@gopherium/godmin'
+import type { BulkRun, ListRun } from '@gopherium/godmin'
 import { useSession } from '@gopherium/react-auth'
 import { __, _x } from '@wordpress/i18n'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 
-import { deleteQuestion, deleteWords, restoreWords, trashQuestion, trashWords } from './actionWords'
-import type { NameCut } from './actionWords'
+import { deleteQuestion, deleteWords } from '../lists/itemWords'
+import type { NameCut } from '../lists/itemWords'
+import { postName, restoreWords, trashQuestion, trashWords } from './actionWords'
 import { deletePost, restorePost, trashPost } from './api'
 import type { Post } from './api'
-import { DuplicateModal, RenameModal } from './NameModals'
+import { DuplicateModal, RenamePostModal } from './NameModals'
 import type { ContentType } from './types'
-
-/** Shows the failure of a run above the list, none when every post finished, and focuses the list once a post moved. */
-type RunSettled = (failure: string | undefined, moved: boolean) => void
-
-/** What the list does around a run over its posts. */
-export interface ListRun {
-	/** Clears the failure the last run left above the list and returns what settles this run on the list. */
-	onStart: () => RunSettled
-}
-
-/** Runs one call over each post and reports what the run reached in the given words. */
-type RunOver = (items: Post[], call: (post: Post) => Promise<unknown>, words: BulkWords<Post>) => Promise<void>
 
 /**
  * Returns the handler that reloads the listing and forgets the cached copy of each post moved or renamed.
@@ -45,55 +34,14 @@ export function useRefresh(): (moved?: string[]) => Promise<unknown> {
 }
 
 /**
- * Returns the handler running one call over each post and reporting what the run reached.
+ * Returns the handler running one call over each post, reloading the listing and forgetting each post it acted on.
  * @param list - What the list does around a run.
  * @returns The run handler.
  */
-function useRunOver(list: ListRun): RunOver {
+function useRunOver(list: ListRun): BulkRun<Post> {
 	const refresh = useRefresh()
-	const toaster = useToaster()
-	return useCallback(
-		async (items, call, words) => {
-			const settle = list.onStart()
-			const outcome = await runEach(items, call)
-			await refresh(items.map((post) => post.id))
-			const notes = bulkNotes(items, outcome, words)
-			if (notes.toast !== undefined) {
-				toaster.show(notes.toast)
-			}
-			settle(notes.notice, outcome.done > 0)
-		},
-		[list, refresh, toaster],
-	)
-}
-
-/**
- * Renders the confirmation asked for before a run over the picked posts, closing once the run settles.
- * @param props - The posts, the handler closing the modal, the question, the confirm label and the run.
- * @returns The confirmation body.
- */
-function RunConfirm({
-	items,
-	closeModal,
-	question,
-	confirmLabel,
-	run,
-}: RenderModalProps<Post> & { question: string, confirmLabel: string, run: (items: Post[]) => Promise<void> }) {
-	const [busy, setBusy] = useState(false)
-	return (
-		<ConfirmBody
-			confirmLabel={confirmLabel}
-			cancelLabel={__('Cancel', 'gophenberg')}
-			busy={busy}
-			onCancel={busy ? undefined : closeModal}
-			onConfirm={() => {
-				setBusy(true)
-				void run(items).then(() => closeModal?.())
-			}}
-		>
-			{question}
-		</ConfirmBody>
-	)
+	const refreshPosts = useCallback((posts: Post[]) => refresh(posts.map((post) => post.id)), [refresh])
+	return useBulkRun(list, refreshPosts)
 }
 
 /**
@@ -104,7 +52,12 @@ function RunConfirm({
  * @param type - The content type the list shows.
  * @returns The restore first, a primary action DataViews also draws on the row, then the permanent delete.
  */
-function trashViewActions(mine: (post: Post) => boolean, run: RunOver, name: NameCut, type: string): Action<Post>[] {
+function trashViewActions(
+	mine: (post: Post) => boolean,
+	run: BulkRun<Post>,
+	name: NameCut,
+	type: string,
+): Action<Post>[] {
 	const confirmLabel = __('Permanently delete', 'gophenberg')
 	return [
 		{
@@ -127,10 +80,12 @@ function trashViewActions(mine: (post: Post) => boolean, run: RunOver, name: Nam
 			RenderModal: (props) => (
 				<RunConfirm
 					{...props}
-					question={deleteQuestion(props.items, name)}
 					confirmLabel={confirmLabel}
-					run={(items) => run(items, (post) => deletePost(post.id), deleteWords(name))}
-				/>
+					cancelLabel={__('Cancel', 'gophenberg')}
+					run={(items) => run(items, (post) => deletePost(post.id), deleteWords(name, postName))}
+				>
+					{deleteQuestion(props.items, name, postName)}
+				</RunConfirm>
 			),
 		},
 	]
@@ -146,7 +101,12 @@ function trashViewActions(mine: (post: Post) => boolean, run: RunOver, name: Nam
  *   in the trash since every role may create, then the rename and the trash, offered on a post the session may change
  *   that is not in the trash yet.
  */
-function listActions(mine: (post: Post) => boolean, run: RunOver, name: NameCut, served: boolean): Action<Post>[] {
+function listActions(
+	mine: (post: Post) => boolean,
+	run: BulkRun<Post>,
+	name: NameCut,
+	served: boolean,
+): Action<Post>[] {
 	const confirmLabel = __('Move to trash', 'gophenberg')
 	const changeable = (post: Post) => post.status !== 'trash' && mine(post)
 	return [
@@ -165,7 +125,7 @@ function listActions(mine: (post: Post) => boolean, run: RunOver, name: NameCut,
 			isEligible: changeable,
 			modalHeader: __('Rename', 'gophenberg'),
 			modalFocusOnMount: 'firstContentElement',
-			RenderModal: RenameModal,
+			RenderModal: RenamePostModal,
 		},
 		{
 			id: 'trash',
@@ -178,10 +138,12 @@ function listActions(mine: (post: Post) => boolean, run: RunOver, name: NameCut,
 			RenderModal: (props) => (
 				<RunConfirm
 					{...props}
-					question={trashQuestion(props.items, name)}
 					confirmLabel={confirmLabel}
+					cancelLabel={__('Cancel', 'gophenberg')}
 					run={(items) => run(items, (post) => trashPost(post.id), trashWords(name))}
-				/>
+				>
+					{trashQuestion(props.items, name)}
+				</RunConfirm>
 			),
 		},
 	]

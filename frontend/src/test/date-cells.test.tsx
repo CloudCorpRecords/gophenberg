@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { LIST_CHROME_DOMAIN, listChromeCatalogFor, startListDates } from '@gopherium/godmin'
+import { LIST_CHROME_DOMAIN, listChromeCatalogFor } from '@gopherium/godmin'
+import { startListDates } from '@gopherium/godmin/dates'
 import { render, screen } from '@testing-library/react'
 import { getSettings, setSettings } from '@wordpress/date'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'

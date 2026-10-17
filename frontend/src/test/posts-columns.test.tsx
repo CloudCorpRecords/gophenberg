@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { authorIcon, Icon } from '@gophenberg/frontend-sdk'
+import type { View } from '@gophenberg/frontend-sdk/dataviews'
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { offeredView } from '@gopherium/godmin'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
@@ -9,7 +11,7 @@ import type { ReactElement } from 'react'
 import { expect, onTestFinished, test, vi } from 'vitest'
 
 import type { Post } from '../content/api'
-import { fieldTerms, levelOf, offeredView, postFields } from '../content/fields'
+import { fieldTerms, levelOf, POST_VIEW_GUARD, postFields } from '../content/fields'
 import { placeholderType } from '../content/useContentType'
 import { catalogFor } from '../i18n/catalog'
 import { renderAt, renderRoutedAt } from './render'
@@ -479,7 +481,7 @@ test('counts the levels of a nesting type with no route word from its first slas
 })
 
 test('reads a view naming no sort and no filter as the opening order, narrowed by nothing', () => {
-	const view = offeredView({ type: 'table' }, postFields(placeholderType('post')))
+	const view = offeredView<View>({ type: 'table' }, postFields(placeholderType('post')), POST_VIEW_GUARD)
 
 	expect(view.sort).toEqual({ field: 'date', direction: 'desc' })
 	expect(view.filters).toEqual([])

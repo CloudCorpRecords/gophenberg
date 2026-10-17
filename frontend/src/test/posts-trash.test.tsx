@@ -7,8 +7,9 @@ import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 import type { BulkFailure } from '@gopherium/godmin'
 
-import { deleteQuestion, deleteWords, restoreWords, trashQuestion, trashWords } from '../content/actionWords'
+import { postName, restoreWords, trashQuestion, trashWords } from '../content/actionWords'
 import type { Post } from '../content/api'
+import { deleteQuestion, deleteWords } from '../lists/itemWords'
 import { catalogFor } from '../i18n/catalog'
 import type { Router } from './anotherPost'
 import { bulkBar } from './bulkBar'
@@ -590,8 +591,9 @@ test('asks the Spanish permanent delete in the words of its title, button and to
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
 	const named = (title: string) => title
 
-	expect(deleteQuestion([OLD_NOTES], named)).toBe('¿Borrar permanentemente «Old Notes»? Esto no se puede deshacer.')
-	expect(deleteQuestion([OLD_NOTES, { ...OLD_NOTES, id: SECOND_ID }], named))
+	expect(deleteQuestion([OLD_NOTES], named, postName))
+		.toBe('¿Borrar permanentemente «Old Notes»? Esto no se puede deshacer.')
+	expect(deleteQuestion([OLD_NOTES, { ...OLD_NOTES, id: SECOND_ID }], named, postName))
 		.toBe('¿Borrar permanentemente 2 elementos? Esto no se puede deshacer.')
 })
 
@@ -605,7 +607,7 @@ test('counts exact millions with "de" in the Spanish trash, restore and delete w
 	const refused = Array.from({ length: million }, () => failure)
 
 	expect(trashQuestion(picked, named)).toBe('¿Mover 1.000.000 de elementos a la papelera?')
-	expect(deleteQuestion(picked, named))
+	expect(deleteQuestion(picked, named, postName))
 		.toBe('¿Borrar permanentemente 1.000.000 de elementos? Esto no se puede deshacer.')
 	expect(trashWords(named).done(million, undefined)).toBe('1.000.000 de elementos movidos a la papelera.')
 	expect(trashWords(named).failed(refused, million)).toBe('No se han podido mover 1.000.000 de elementos a la papelera.')
@@ -613,8 +615,8 @@ test('counts exact millions with "de" in the Spanish trash, restore and delete w
 	expect(restoreWords(named, 'post').done(million, undefined)).toBe('Se han restaurado 1.000.000 de entradas.')
 	expect(restoreWords(named, 'post').failed(refused, million))
 		.toBe('No se han podido restaurar 1.000.000 de elementos.')
-	expect(deleteWords(named).done(million, undefined)).toBe('1.000.000 de elementos borrados permanentemente.')
-	expect(deleteWords(named).failed(refused, million))
+	expect(deleteWords(named, postName).done(million, undefined)).toBe('1.000.000 de elementos borrados permanentemente.')
+	expect(deleteWords(named, postName).failed(refused, million))
 		.toBe('No se han podido borrar permanentemente 1.000.000 de elementos.')
 })
 
