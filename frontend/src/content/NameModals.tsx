@@ -2,12 +2,13 @@
 
 import { Button, InputControl, Stack } from '@gophenberg/frontend-sdk'
 import type { RenderModalProps } from '@gophenberg/frontend-sdk/dataviews'
-import { ErrorNotice, RenameBody, useToaster } from '@gopherium/godmin'
+import { ErrorNotice, useToaster } from '@gopherium/godmin'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import { useState } from 'react'
 
+import { RenameModal } from '../lists/RenameModal'
 import { useRefresh } from './actions'
 import { createPost, fetchPost, renamePost } from './api'
 import type { Post } from './api'
@@ -99,32 +100,19 @@ async function renamed(client: QueryClient, post: Post, title: string): Promise<
 }
 
 /**
- * Renders the modal writing a new name for one item, its failure kept inside under the field.
+ * Renders the modal writing a new title for one item, its failure kept inside under the field.
  * @param props - The item and the handler closing the modal.
  * @returns The rename form.
  */
-export function RenameModal({ items: [post], closeModal }: RenderModalProps<Post>) {
+export function RenamePostModal(props: RenderModalProps<Post>) {
 	const client = useQueryClient()
 	const refresh = useRefresh()
-	const toaster = useToaster()
-	const rename = useMutation({
-		mutationFn: (title: string) => renamed(client, post, title),
-		onSuccess: async () => {
-			await refresh([post.id])
-			toaster.show(__('Name updated.', 'gophenberg'))
-			closeModal?.()
-		},
-	})
 	return (
-		<RenameBody
-			name={post.title}
-			fieldLabel={__('Name', 'gophenberg')}
-			submitLabel={__('Rename', 'gophenberg')}
-			cancelLabel={__('Cancel', 'gophenberg')}
-			busy={rename.isPending}
-			failure={rename.error?.message}
-			onSubmit={(title) => rename.mutate(title)}
-			onCancel={rename.isPending ? undefined : closeModal}
+		<RenameModal
+			{...props}
+			nameOf={(post) => post.title}
+			rename={(post, title) => renamed(client, post, title)}
+			refresh={(post) => refresh([post.id])}
 		/>
 	)
 }

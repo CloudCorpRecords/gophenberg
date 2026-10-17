@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { LIST_CHROME_DOMAIN, listChromeCatalogFor, startListDates } from '@gopherium/godmin'
+import { LIST_CHROME_DOMAIN, listChromeCatalogFor } from '@gopherium/godmin'
+import { startListDates } from '@gopherium/godmin/dates'
 import { DOMAIN as BRICK_DOMAIN, catalogFor as brickCatalogFor } from '@gopherium/react-auth'
 
 import { startLocale as start } from '@gopherium/gottext'

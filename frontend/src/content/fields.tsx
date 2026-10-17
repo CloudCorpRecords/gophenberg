@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { authorIcon, Badge, Icon } from '@gophenberg/frontend-sdk'
-import type { Field, Filter, View } from '@gophenberg/frontend-sdk/dataviews'
-import { InitialsAvatar, listDate } from '@gopherium/godmin'
+import { Badge } from '@gophenberg/frontend-sdk'
+import type { Field, Filter } from '@gophenberg/frontend-sdk/dataviews'
+import type { ViewGuard } from '@gopherium/godmin'
+import { listDate } from '@gopherium/godmin/dates'
 import { formatDate } from '@gopherium/gottext'
 import { getSettings } from '@wordpress/date'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import type { ComponentProps } from 'react'
 
 import { everyDecimal } from '../i18n/numbers'
+import { authorField, authorNarrowing, namesAccounts } from '../lists/author'
+import { dateNarrowing, isMoment, narrowedBy } from '../lists/narrowing'
+import type { Narrowing } from '../lists/narrowing'
 import type { Post, PostQuery } from './api'
-import { authorElements } from './authors'
 import { pairsOf } from './types'
 import type { ContentField, ContentType } from './types'
 
@@ -84,28 +87,6 @@ function DateCell({ item }: { item: Post }) {
 }
 
 /**
- * Renders the author of a post as WordPress draws one, its avatar before its name, the author icon with no avatar.
- * @param props - The row being rendered.
- * @returns The author cell.
- */
-function AuthorCell({ item }: { item: Post }) {
-	return (
-		<span className="gophenberg-author">
-			{item.authorAvatar === '' ? (
-				<span className="gophenberg-author__icon">
-					<Icon icon={authorIcon} />
-				</span>
-			) : (
-				<span className="gophenberg-author__avatar">
-					<InitialsAvatar name={item.authorName} size={16} src={item.authorAvatar} />
-				</span>
-			)}
-			<span className="gophenberg-author__name">{item.authorName}</span>
-		</span>
-	)
-}
-
-/**
  * Returns the columns every content type's list offers, in the order WordPress lists them.
  * @returns The title, excerpt, author, status, date and slug columns.
  */
@@ -119,13 +100,7 @@ function builtInFields(): Field<Post>[] {
 			enableHiding: false,
 		},
 		{ id: 'excerpt', label: __('Excerpt', 'gophenberg'), enableSorting: false },
-		{
-			id: 'author',
-			label: __('Author', 'gophenberg'),
-			render: AuthorCell,
-			getElements: authorElements,
-			filterBy: { operators: ['isAny', 'isNone'] },
-		},
+		authorField<Post>(),
 		{ id: 'status', label: _x('Status', 'post', 'gophenberg'), render: StatusCell, enableSorting: false },
 		{
 			id: 'date',
@@ -307,103 +282,22 @@ export function fieldTerms(
 	return terms
 }
 
-/** The shape of an account id. */
-const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/**
- * Reports whether a filter value names accounts, each by an id in the shape account ids take.
- * @param value - The value the filter holds.
- * @returns Whether the value is a list of account ids.
- */
-function namesAccounts(value: unknown): boolean {
-	return Array.isArray(value) && value.every((id) => ACCOUNT_ID.test(String(id)))
-}
-
-/**
- * Reports whether a filter value is a moment the server reads, one falling in a year of four digits.
- * @param value - The value the filter holds.
- * @returns Whether the value is text a date can be read from, in the years 0 to 9999.
- */
-function isMoment(value: unknown): boolean {
-	const year = typeof value === 'string' ? new Date(value).getUTCFullYear() : Number.NaN
-	return year >= 0 && year <= 9999
-}
-
-/** How each filtering column that offers no elements of its own checks the value a filter holds. */
-const valueChecks: Record<string, (value: unknown) => boolean> = { author: namesAccounts, date: isMoment }
+/** The order a list of items opens in, and how its author and date filters check the value they hold. */
+export const POST_VIEW_GUARD: ViewGuard = { opening: OPENING_SORT, checks: { author: namesAccounts, date: isMoment } }
 
 /** The part of a listing request a filter of each column narrows it by, keyed by the column, none for a field. */
-const narrowings: Record<string, ((filter: Filter) => PostQuery) | undefined> = {
-	author: (filter) => {
-		const ids = filter.value as string[]
-		return filter.operator === 'isAny' ? { author: ids } : { authorExclude: ids }
-	},
-	date: (filter) => {
-		const at = new Date(String(filter.value)).toISOString()
-		return filter.operator === 'before' ? { before: at } : { after: at }
-	},
+const narrowings: Record<string, Narrowing<PostQuery> | undefined> = {
+	author: authorNarrowing,
+	date: dateNarrowing('before', 'after'),
 }
-
-/** A view as the columns of its list can draw it, every filter it holds one the list offers. */
-export type OfferedView = View & { filters: Filter[] }
 
 /**
  * Returns the part of a listing request the filters of a view narrow it by.
  * @param filters - The filters the view carries, each one the list offers.
  * @returns The field terms, the authors kept or left out and the dates the filters name.
  */
-export function narrowedBy(filters: Filter[]): PostQuery {
-	let narrowed: PostQuery = { fields: fieldTerms(filters) }
-	for (const filter of filters) {
-		const narrow = narrowings[filter.field]
-		if (narrow !== undefined && filter.value !== undefined) {
-			narrowed = { ...narrowed, ...narrow(filter) }
-		}
-	}
-	return narrowed
-}
-
-/**
- * Reports whether a column takes the value a filter holds.
- * @param column - The column the filter narrows by.
- * @param value - The value the filter holds.
- * @returns Whether the value is one of the column's elements, or passes the check of a column offering none.
- */
-function takes(column: Field<Post>, value: unknown): boolean {
-	if (column.elements !== undefined) {
-		return column.elements.some((element) => element.value === value)
-	}
-	return valueChecks[column.id](value)
-}
-
-/**
- * Reports whether a filter names a column the list filters by, with an operator and a value that column offers.
- * @param filter - The filter the view carries.
- * @param columns - The columns the list shows.
- * @returns Whether the list can apply the filter, one still waiting for its value included.
- */
-function offers(filter: Filter, columns: Field<Post>[]): boolean {
-	const column = columns.find((held) => held.id === filter.field)
-	if (column === undefined) {
-		return false
-	}
-	const operators: string[] = (column.filterBy || {}).operators ?? []
-	return operators.includes(filter.operator) && (filter.value === undefined || takes(column, filter.value))
-}
-
-/**
- * Returns the view as the columns can draw it, a sort or a filter naming what the list never offers dropped.
- * @param view - The view the address and the reader hold.
- * @param columns - The columns the list shows.
- * @returns The view the list shows and asks the server for.
- */
-export function offeredView(view: View, columns: Field<Post>[]): OfferedView {
-	const sorted = columns.some((column) => column.id === view.sort?.field && column.enableSorting !== false)
-	return {
-		...view,
-		sort: sorted ? view.sort : { ...OPENING_SORT },
-		filters: (view.filters ?? []).filter((filter) => offers(filter, columns)),
-	}
+export function postNarrowing(filters: Filter[]): PostQuery {
+	return { fields: fieldTerms(filters), ...narrowedBy(filters, narrowings) }
 }
 
 /**

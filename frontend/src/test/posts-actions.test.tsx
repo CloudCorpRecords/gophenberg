@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { LIST_CHROME_DOMAIN, listChromeCatalogFor } from '@gopherium/godmin'
+import { buttonClasses } from '@gopherium/godmin/testing'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
@@ -9,6 +11,7 @@ import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 import { trashQuestion } from '../content/actionWords'
 import type { Post } from '../content/api'
 import { catalogFor } from '../i18n/catalog'
+import { listenAt } from './announcements'
 import { gate } from './gate'
 import { renderAt, renderRoutedAt } from './render'
 import { storedPostWithId } from './postFixture'
@@ -224,6 +227,16 @@ test('asks the trash confirm under no header, as WordPress does, and confirms wi
 	expect(within(dialog).queryByRole('button', { name: 'Trash' })).not.toBeInTheDocument()
 })
 
+test('draws Cancel of the trash confirm as accent text, as WordPress Site Editor dialogs do', async () => {
+	renderAt('/content/post')
+	await openRowActions()
+
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
+
+	const cancel = within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' })
+	expect([...cancel.classList]).toEqual(buttonClasses('minimal'))
+})
+
 test('opens the trash confirm at the medium width WordPress gives it', async () => {
 	renderAt('/content/post')
 	await openRowActions()
@@ -394,6 +407,29 @@ test('keeps the confirm open when Cancel is pressed while the trash runs', async
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
 
 	expect(dialog).toBeInTheDocument()
+	answer.release()
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+})
+
+test('speaks Cargando to a Spanish reader while the trash runs, as WordPress es_ES does', async () => {
+	const answer = gate()
+	server.use(
+		http.delete('/api/content/:id', async () => {
+			await answer.held
+			return HttpResponse.json({ ...PUBLISHED, status: 'trash' })
+		}),
+	)
+	renderAt('/content/post')
+	await openRowActions()
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
+	const dialog = await screen.findByRole('dialog')
+	setLocaleData(await listChromeCatalogFor('es-ES'), LIST_CHROME_DOMAIN)
+	onTestFinished(() => resetLocaleData({}, LIST_CHROME_DOMAIN))
+	const polite = listenAt('polite')
+
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
+
+	await waitFor(() => expect(polite()).toContain('Cargando'))
 	answer.release()
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 })
