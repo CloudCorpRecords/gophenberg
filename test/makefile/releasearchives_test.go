@@ -120,6 +120,27 @@ func TestMakeReleaseArchivesPacksATargetThisMachineCannotRun(t *testing.T) {
 	}
 }
 
+func TestMakeReleaseArchivesStopsBeforeBuildingWithoutGNUTar(t *testing.T) {
+	t.Parallel()
+
+	root := archivesRepo(t)
+	bsdtar := filepath.Join(root, "bin", "bsdtar")
+	writeFile(t, bsdtar, "#!/bin/sh\necho 'bsdtar 3.5.3 - libarchive 3.5.3'\n")
+	if err := os.Chmod(bsdtar, 0o755); err != nil {
+		t.Fatalf("making the stand-in bsdtar runnable: %v", err)
+	}
+
+	out, err := releaseIn(t, root, "release-archives", "TAR=bsdtar")
+
+	if err == nil || !strings.Contains(out, "needs GNU tar") || !strings.Contains(out, "TAR=gtar") {
+		t.Errorf("make release-archives with bsdtar = %v with output %q, want it stopped, naming GNU tar and TAR=gtar",
+			err, out)
+	}
+	if _, err := os.Stat(filepath.Join(root, "pnpm-args")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("make release-archives built the admin before it found no GNU tar: %v", err)
+	}
+}
+
 func TestMakeReleaseArchivesBuildsItsTargetsAfterABuildRelease(t *testing.T) {
 	t.Parallel()
 

@@ -91,6 +91,8 @@ RELEASE_EPOCH ?= $(shell git log -1 --format=%ct)
 RELEASE_NOTES_URL ?= https://github.com/gopherium/gophenberg/releases/tag
 # The package whose variables carry the build stamp and the commit.
 VERSION_PACKAGE = github.com/gopherium/gophenberg/internal/version
+# The GNU tar make release-archives packs archives with, such as gtar on macOS.
+TAR ?= tar
 
 build-release:
 	pnpm --filter @gophenberg/frontend build
@@ -105,6 +107,8 @@ build-release:
 	done
 
 release-archives:
+	@$(TAR) --version 2>/dev/null | grep -q 'GNU tar' || \
+		{ echo "make release-archives needs GNU tar, so install it and run make release-archives TAR=gtar"; exit 1; }
 	$(MAKE) build-release RELEASE_PLATFORMS="$(sort $(RELEASE_TARGETS) $(RELEASE_HOST))"
 	about="$$("$(RELEASE_DIR)/$$(go env GOOS)_$$(go env GOARCH)/gophenberg" about -json)" && \
 	version="$$(printf '%s' "$$about" | jq -r .version)" && \
@@ -113,7 +117,7 @@ release-archives:
 		printf '%s' "$$about" | jq --arg platform "$$platform" --arg notes "$(RELEASE_NOTES_URL)/v$$version" \
 			'. + {platform: $$platform, notes: $$notes}' > "$$folder/release.json" && \
 		cp LICENSE NOTICE "$$folder/" && rm -rf "$$folder/LICENSES" && cp -R LICENSES "$$folder/LICENSES" && \
-		tar -C "$$folder" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$(RELEASE_EPOCH) \
+		$(TAR) -C "$$folder" --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$(RELEASE_EPOCH) \
 			--mode='a+rX,u+w,go-w' --use-compress-program='gzip -n' \
 			-cf "$(RELEASE_DIR)/gophenberg_$${version}_$${platform%/*}_$${platform#*/}.tar.gz" \
 			LICENSE LICENSES NOTICE gophenberg release.json || exit 1; \
