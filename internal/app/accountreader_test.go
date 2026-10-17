@@ -4,15 +4,21 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
+	"github.com/gopherium/gouncer"
 	authkitpg "github.com/gopherium/gouncer/authkit/postgres"
+	authkitsqlite "github.com/gopherium/gouncer/authkit/sqlite"
 	"github.com/gopherium/gouncer/avatar"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -24,6 +30,20 @@ import (
 
 // readSize is the avatar size the accounts plugin asks for.
 const readSize = 64
+
+// accountsAdded is the stamp every account a reading test adds carries.
+var accountsAdded = time.Date(2026, time.January, 5, 8, 0, 0, 0, time.UTC)
+
+// gravatarSettings are the avatar settings a reading test draws avatars under.
+var gravatarSettings = map[string]string{
+	"GOPHENBERG_AVATARS": "gravatar", "GOPHENBERG_AVATAR_DEFAULT": "identicon", "GOPHENBERG_AVATAR_RATING": "PG",
+}
+
+// readAccounts are the author and the member a reading test adds and a plugin reads back, in that order.
+var readAccounts = []gouncer.User{
+	{Email: seed.AuthorEmail, Name: seed.AuthorName, Role: role.Author},
+	{Email: seed.MemberEmail, Name: seed.MemberName, Role: role.Member},
+}
 
 // accountsPlugin reads the accounts it was asked for once the host starts it.
 type accountsPlugin struct {
@@ -76,7 +96,6 @@ func TestAPluginReadsTheSeededAccountsByID(t *testing.T) {
 	env := map[string]string{
 		"GOPHENBERG_DATABASE_URL":   databaseURL,
 		"GOPHENBERG_ADDR":           "localhost:0",
-		"GOPHENBERG_WEB_DIR":        t.TempDir(),
 		"GOPHENBERG_AVATARS":        "gravatar",
 		"GOPHENBERG_AVATAR_DEFAULT": "identicon",
 		"GOPHENBERG_AVATAR_RATING":  "PG",
@@ -149,5 +168,98 @@ func TestAPluginReadingAccountsEndsAtThePluginQueryTimeout(t *testing.T) {
 
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("People() under a 1ns plugin query timeout = %v, want the read ended at the timeout", err)
+	}
+}
+
+// addedAccounts stores each of readAccounts in the SQLite file behind db under a new id and returns the ids in order.
+func addedAccounts(t *testing.T, db *sql.DB) []sdk.ID {
+	t.Helper()
+	users := authkitsqlite.NewUserStore(db)
+	ids := make([]sdk.ID, 0, len(readAccounts))
+	for _, account := range readAccounts {
+		account.ID, account.PasswordHash, account.Confirmed = uuid.Must(uuid.NewV7()), "hash", true
+		account.CreatedAt = accountsAdded
+		if err := users.CreateUser(t.Context(), account); err != nil {
+			t.Fatalf("adding the account %s: %v", account.Email, err)
+		}
+		ids = append(ids, sdk.ID(account.ID))
+	}
+	return ids
+}
+
+// readPeople returns each of readAccounts under its id in ids, as a plugin reads it under gravatarSettings.
+func readPeople(ids []sdk.ID) map[sdk.ID]sdk.Person {
+	options := avatar.Options{Mode: avatar.ModeGravatar, Default: avatar.DefaultIdenticon, Rating: avatar.RatingPG}
+	people := make(map[sdk.ID]sdk.Person, len(ids))
+	for place, account := range readAccounts {
+		people[ids[place]] = sdk.Person{
+			ID: ids[place], Name: account.Name, Role: account.Role,
+			Avatar: avatar.Address(account.Name, account.Email, readSize, options),
+		}
+	}
+	return people
+}
+
+// readingSQLite returns the settings of a site on the SQLite file at path drawing avatars under gravatarSettings.
+func readingSQLite(path string) func(string) string {
+	env := maps.Clone(gravatarSettings)
+	env["GOPHENBERG_DATABASE_URL"] = sqlitePrefix + path
+	return testkit.Getenv(env)
+}
+
+// peopleReader returns the plugins whose one command, naming no capability, reads the accounts holding ids into read.
+func peopleReader(ids []sdk.ID, read *map[sdk.ID]sdk.Person) func(sdk.Deps) ([]sdk.Plugin, error) {
+	return func(deps sdk.Deps) ([]sdk.Plugin, error) {
+		reading := &commanding{command: sdk.Command{
+			Name: "commanding:people", Summary: "read the accounts",
+			Run: func(ctx context.Context, _ sdk.Call) error {
+				people, err := deps.Accounts.People(ctx, ids, readSize)
+				*read = people
+				return err
+			},
+		}}
+		return []sdk.Plugin{reading}, nil
+	}
+}
+
+func TestAPluginCommandReadsTheAccountsOfASQLiteFile(t *testing.T) {
+	t.Parallel()
+
+	path := migratedSQLiteFile(t)
+	ids := addedAccounts(t, openSQLiteFile(t, path))
+	var read map[sdk.ID]sdk.Person
+
+	got := testkit.Run(t, Program(readingSQLite(path), peopleReader(ids, &read)), "", "commanding:people")
+
+	if got.Code != gonsole.ExitDone {
+		t.Fatalf("commanding:people = %d with stderr %q, want 0", got.Code, got.Stderr)
+	}
+	if want := readPeople(ids); !maps.Equal(read, want) {
+		t.Errorf("the plugin command read %+v, want %+v", read, want)
+	}
+}
+
+func TestAPluginReadsTheAccountsOfASQLiteFileByID(t *testing.T) {
+	t.Parallel()
+
+	path := migratedSQLiteFile(t)
+	db := openSQLiteFile(t, path)
+	ids := addedAccounts(t, db)
+	var handed sdk.Deps
+	built, err := compose(composeConfig{
+		databaseURL: sqlitePrefix + path, handle: db, fieldDepth: 4, getenv: readingSQLite(path),
+	}, func(deps sdk.Deps) ([]sdk.Plugin, error) {
+		handed = deps
+		return []sdk.Plugin{}, nil
+	})
+	if err != nil {
+		t.Fatalf("compose() error = %v, want nil", err)
+	}
+	defer built.close()
+
+	people, err := handed.Accounts.People(t.Context(), ids, readSize)
+
+	if want := readPeople(ids); err != nil || !maps.Equal(people, want) {
+		t.Errorf("People() = %+v, %v, want %+v", people, err, want)
 	}
 }

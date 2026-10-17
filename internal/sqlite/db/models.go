@@ -90,11 +90,11 @@ type CoreContentType struct {
 
 type CoreCronJob struct {
 	Name           string
-	NextRunAt      int64
-	LeasedUntil    *int64
+	NextRunAt      dbkit.Time
+	LeasedUntil    *dbkit.Time
 	LeaseToken     *string
-	LastStartedAt  *int64
-	LastFinishedAt *int64
+	LastStartedAt  *dbkit.Time
+	LastFinishedAt *dbkit.Time
 	LastError      *string
 }
 

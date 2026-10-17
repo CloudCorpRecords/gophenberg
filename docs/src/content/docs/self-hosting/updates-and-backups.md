@@ -220,6 +220,13 @@ Some things work differently after this update:
   `migrate records: postgres: apply the records schema:` followed by
   dbkit's own text. Update any script or alert that matches the old
   wording.
+- On a SQLite file, every account command and every plugin command
+  that names a capability now run as on PostgreSQL, and the accounts
+  and their records are kept in the file. The release before this one
+  stops each of them with the `account commands:` error. `serve` and
+  `seed -yes` still stop, and their error no longer names accounts. A
+  plugin can read account names on SQLite too, see
+  [reading account names](/extending/the-plugin-sdk/#reading-account-names).
 
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
@@ -326,6 +333,10 @@ all. While you run it:
   `deps.DB`, `deps.Accounts`, `Needs` or `RoleProvider`, or requires
   the SDK module, does not build against it.
 - Its PostgreSQL pool holds the larger of 4 and the number of CPUs.
+- On a SQLite file it stops every account command, and every plugin
+  command that names a capability, with the `account commands:`
+  error. The accounts and their records stay in the file, and the
+  commands reach them again once you update.
 - Its screens come back, with the home screen, the older lists with
   their counts and the **Undo** after a trash. An author sees
   **Empty Trash** again. The author column shows the name alone, with

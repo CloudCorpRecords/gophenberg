@@ -6,8 +6,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
+	"maps"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,8 +23,8 @@ import (
 // binaryRunLimit is how long one run of the built binary may take before the test stops it.
 const binaryRunLimit = 30 * time.Second
 
-// runBinary runs the built binary with args under env from a folder of its own and returns what it answered.
-func runBinary(t *testing.T, binary string, env []string, args ...string) testkit.Result {
+// runBinary runs the built binary with args and stdin under env from a folder of its own and returns its answer.
+func runBinary(t *testing.T, binary string, env []string, stdin io.Reader, args ...string) testkit.Result {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
 	defer cancel()
@@ -28,6 +32,7 @@ func runBinary(t *testing.T, binary string, env []string, args ...string) testki
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = env
+	cmd.Stdin = stdin
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	var exitErr *exec.ExitError
@@ -55,10 +60,10 @@ func TestSQLiteBinaryMigratesChecksAndNamesWhatItCannotRun(t *testing.T) {
 	path := emptySQLiteFile(t)
 	env = append(env, "GOPHENBERG_DATABASE_URL="+sqlitePrefix+path, "GOPHENBERG_ADDR=localhost:0")
 
-	migrated := runBinary(t, binary, env, "migrate")
-	checked := runBinary(t, binary, env, "check")
-	served := runBinary(t, binary, env, "serve")
-	listed := runBinary(t, binary, env, "account:list")
+	migrated := runBinary(t, binary, env, nil, "migrate")
+	checked := runBinary(t, binary, env, nil, "check")
+	served := runBinary(t, binary, env, nil, "serve")
+	listed := runBinary(t, binary, env, nil, "account:list")
 
 	if migrated.Code != gonsole.ExitDone || migrated.Stdout != migratedLines {
 		t.Errorf("gophenberg migrate = %d, stdout %q, stderr %q, want 0 and %q",
@@ -84,8 +89,87 @@ func TestSQLiteBinaryMigratesChecksAndNamesWhatItCannotRun(t *testing.T) {
 	if jobs := cronJobCount(t, db); jobs != 0 {
 		t.Errorf("core_cron_jobs holds %d rows after gophenberg serve, want none since no cron job ran", jobs)
 	}
-	if want := "account commands: " + errPostgresOnly.Error(); listed.Code != gonsole.ExitFailed ||
-		!strings.Contains(listed.Stderr, want) {
-		t.Errorf("gophenberg account:list = %d with stderr %q, want 1 and %q", listed.Code, listed.Stderr, want)
+	if listed.Code != gonsole.ExitDone || listed.Stdout != "" {
+		t.Errorf("gophenberg account:list = %d, stdout %q, stderr %q, want 0 and no account listed",
+			listed.Code, listed.Stdout, listed.Stderr)
+	}
+}
+
+func TestSQLiteBinaryRunsTheAccountCommandsAndKeepsTheirRecords(t *testing.T) {
+	t.Parallel()
+
+	binary, env := testkit.CoverBinary(t, "GOPHENBERG_", "gophenberg")
+	path := emptySQLiteFile(t)
+	env = append(env, "GOPHENBERG_DATABASE_URL="+sqlitePrefix+path)
+	succeeds(t, runBinary(t, binary, env, nil, "migrate"), "migrated accounts")
+	for _, role := range []string{"admin", "author"} {
+		succeeds(t, runBinary(t, binary, env, strings.NewReader(typedPassword+"\n"),
+			"account:create-admin", "-email", role+"@example.com", "-name", "Holder", "-role", role),
+			"created user "+role+"@example.com")
+	}
+
+	changed := runBinary(t, binary, env, nil,
+		"account:role", "author@example.com", "editor", "-yes", "-as", "admin@example.com")
+	execSQLiteFile(t, path, "UPDATE auth_users SET role = '' WHERE email = 'author@example.com'")
+	granted := runBinary(t, binary, env, nil,
+		"account:grant-role", "-role", "author", "-yes", "-as", "admin@example.com")
+	listed := runBinary(t, binary, env, nil, "account:list", "-json")
+	recorded := runBinary(t, binary, env, nil, "account:records")
+
+	succeeds(t, changed, "set author@example.com to editor")
+	succeeds(t, granted, "granted author to 1 account")
+	want := map[string]string{"admin@example.com": "admin", "author@example.com": "author"}
+	if held := listedRoles(t, listed); !maps.Equal(held, want) {
+		t.Errorf("gophenberg account:list -json holds the roles %v, want %v", held, want)
+	}
+	lines := strings.FieldsFunc(succeeds(t, recorded, ""), func(r rune) bool { return r == '\n' })
+	for _, applied := range []string{"admin@example.com  account:role", "admin@example.com  account:grant-role"} {
+		if !slices.ContainsFunc(lines, func(line string) bool { return strings.Contains(line, applied) }) {
+			t.Errorf("gophenberg account:records lists %q, want a record of %s", lines, applied)
+		}
+	}
+	if len(lines) != 2 {
+		t.Errorf("gophenberg account:records lists %d records, want the 2 changes applied", len(lines))
+	}
+}
+
+// succeeds fails t unless got exited with 0 and its output carries text, and returns that output.
+func succeeds(t *testing.T, got testkit.Result, text string) string {
+	t.Helper()
+	if got.Code != gonsole.ExitDone || !strings.Contains(got.Stdout, text) {
+		t.Fatalf("gophenberg = %d, stdout %q, stderr %q, want 0 and %q", got.Code, got.Stdout, got.Stderr, text)
+	}
+	return got.Stdout
+}
+
+// listedRoles returns the role of each account the document account:list -json answered holds, keyed by address.
+func listedRoles(t *testing.T, listed testkit.Result) map[string]string {
+	t.Helper()
+	var listing struct {
+		Accounts []struct {
+			Email string `json:"email"`
+			Role  string `json:"role"`
+		} `json:"accounts"`
+	}
+	if err := json.Unmarshal([]byte(succeeds(t, listed, "")), &listing); err != nil {
+		t.Fatalf("reading the account:list -json document %q: %v", listed.Stdout, err)
+	}
+	roles := make(map[string]string, len(listing.Accounts))
+	for _, account := range listing.Accounts {
+		roles[account.Email] = account.Role
+	}
+	return roles
+}
+
+// execSQLiteFile runs statement on the SQLite file at path through a handle it closes before it returns.
+func execSQLiteFile(t *testing.T, path, statement string) {
+	t.Helper()
+	db, err := openDefaultSQLite(sqlitePrefix + path)
+	if err != nil {
+		t.Fatalf("opening the SQLite file: %v", err)
+	}
+	_, err = db.ExecContext(t.Context(), statement)
+	if err := errors.Join(err, db.Close()); err != nil {
+		t.Fatalf("%s: %v", statement, err)
 	}
 }

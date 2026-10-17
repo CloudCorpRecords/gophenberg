@@ -123,6 +123,13 @@ func markedRoot() shelf {
 	return stocked
 }
 
+// underscoredRoot returns the library shelf with the root type labelled with an underscore.
+func underscoredRoot() shelf {
+	stocked := library()
+	stocked.types[0].PluralLabel = "FAQ_Items"
+	return stocked
+}
+
 // The type keys the library shelf holds, in stored order, and the sweeps that spare one of them.
 var (
 	everyTypeKey  = []string{"page", "book", "person"}
@@ -248,6 +255,12 @@ var demotedResumes = TypeRow{
 // demotedPageByKey is what writing the root type under its key binds when its label has no valid route word.
 var demotedPageByKey = TypeRow{
 	Key: "page", SingularLabel: "Page", PluralLabel: "Pages 2️⃣", RouteWord: "page", PageKind: "single",
+	Hierarchical: true, Revisions: true, Active: true, RevisionCap: 100, UpdatedAt: editedAt,
+}
+
+// demotedFAQItems is what writing the underscored root type under a word of its own binds when it hands the root over.
+var demotedFAQItems = TypeRow{
+	Key: "page", SingularLabel: "Page", PluralLabel: "FAQ_Items", RouteWord: "faq-items", PageKind: "single",
 	Hierarchical: true, Revisions: true, Active: true, RevisionCap: 100, UpdatedAt: editedAt,
 }
 
@@ -382,6 +395,20 @@ var typeSequences = map[string]sequence{
 			begun, sent("LockContentType", keyed{"book"}), lockedRoot,
 			sent("UpdateContentType", demotedResumes), deferredAddresses,
 			sent("RetypeContentPaths", retyped{Key: "page", RouteWord: "resumes", UpdatedAt: editedAt}),
+			sent("UpdateContentType", rootBookRow(true)), deferredAddresses,
+			sent("RetypeContentPaths", retyped{Key: "book", Was: "books", UpdatedAt: editedAt}),
+			committed,
+		},
+	},
+	"Update taking the root a type with an underscored label holds": {
+		stocked: underscoredRoot,
+		run: func(ctx context.Context, s *Store, _ content.Recheck) (any, error) {
+			return valued(s.Update(ctx, rootBook(true)))
+		},
+		golden: []step{
+			begun, sent("LockContentType", keyed{"book"}), lockedRoot,
+			sent("UpdateContentType", demotedFAQItems), deferredAddresses,
+			sent("RetypeContentPaths", retyped{Key: "page", RouteWord: "faq-items", UpdatedAt: editedAt}),
 			sent("UpdateContentType", rootBookRow(true)), deferredAddresses,
 			sent("RetypeContentPaths", retyped{Key: "book", Was: "books", UpdatedAt: editedAt}),
 			committed,

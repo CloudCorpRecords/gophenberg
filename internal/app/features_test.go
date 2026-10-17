@@ -4,6 +4,9 @@ package app
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +17,9 @@ import (
 	"github.com/gopherium/framework/gonsole/testkit"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gopherium/gophenberg/internal/sqlite"
+	"github.com/gopherium/gophenberg/internal/themehost"
+	"github.com/gopherium/gophenberg/internal/version"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -23,9 +29,44 @@ const operatorCommandsFeature = "../../test/features/features/operator-commands.
 // typedPassword is the password the operator types for an account a scenario creates.
 const typedPassword = "correct horse battery"
 
+// operatorEngine is what the operator steps ask of the database engine one run of the feature keeps its data on.
+type operatorEngine struct {
+	empty     func(t *testing.T) string
+	answers   func(ctx context.Context, address, query string, args ...any) (bool, error)
+	noSchema  func(ctx context.Context, address string) error
+	noContent func(ctx context.Context, address string) error
+	roleHeld  string
+	enabled   string
+}
+
+// postgresOperators returns the engine of the feature's run on a PostgreSQL database.
+func postgresOperators() operatorEngine {
+	return operatorEngine{
+		empty:     emptyDatabaseURL,
+		answers:   postgresAnswers,
+		noSchema:  postgresHoldsNoSchema,
+		noContent: postgresHoldsNoContent,
+		roleHeld:  "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND role = $2)",
+		enabled:   "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND NOT disabled)",
+	}
+}
+
+// sqliteOperators returns the engine of the feature's run on a SQLite file.
+func sqliteOperators() operatorEngine {
+	return operatorEngine{
+		empty:     emptySQLiteAddress,
+		answers:   sqliteAnswers,
+		noSchema:  untouchedSQLiteFile,
+		noContent: untouchedSQLiteFile,
+		roleHeld:  "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND role = ?)",
+		enabled:   "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND NOT disabled)",
+	}
+}
+
 // operatorScenario is what one operator scenario keeps between its steps.
 type operatorScenario struct {
 	t       *testing.T
+	engine  operatorEngine
 	env     map[string]string
 	result  testkit.Result
 	plugins []sdk.Plugin
@@ -33,10 +74,10 @@ type operatorScenario struct {
 	notes   *noting
 }
 
-// initializeOperatorCommands returns the binding of the operator command steps, t holding their databases.
-func initializeOperatorCommands(t *testing.T) func(*godog.ScenarioContext) {
+// initializeOperatorCommands returns the binding of the operator command steps on engine, t holding their databases.
+func initializeOperatorCommands(t *testing.T, engine operatorEngine) func(*godog.ScenarioContext) {
 	return func(sc *godog.ScenarioContext) {
-		s := &operatorScenario{t: t, env: map[string]string{}}
+		s := &operatorScenario{t: t, engine: engine, env: map[string]string{}}
 		sc.Given(`^the settings point at an empty database$`, s.pointAtAnEmptyDatabase)
 		sc.Given(`^the settings name no database$`, s.nameNoDatabase)
 		sc.When(`^the operator runs gophenberg with no command$`, s.runWithNoCommand)
@@ -69,7 +110,24 @@ func initializeOperatorCommands(t *testing.T) func(*godog.ScenarioContext) {
 		sc.Given(`^a plugin declaring the role "([^"]*)" with the capability "([^"]*)"$`, s.declareRole)
 		sc.Given(`^a plugin offering "([^"]*)", which asks for "([^"]*)"$`, s.offerAsking)
 		sc.Given(`^the administrator "([^"]*)" gave "([^"]*)" the role "([^"]*)"$`, s.gaveRole)
+		sc.Then(`^the answer names the version, the build stamp and the theme kits of this binary$`, s.namesTheBuildFacts)
 	}
+}
+
+// namesTheBuildFacts fails unless the answer is the one document that holds this binary's build facts.
+func (s *operatorScenario) namesTheBuildFacts() error {
+	var facts buildFacts
+	if err := json.Unmarshal([]byte(s.result.Stdout), &facts); err != nil {
+		return fmt.Errorf("the answer %q is no JSON document: %w", s.result.Stdout, err)
+	}
+	want := buildFacts{
+		Schema: 1, Name: "gophenberg", Version: version.Version(),
+		Commit: version.Commit(), Stamp: version.Stamp(), Kits: themehost.ServedKits(),
+	}
+	if !facts.equal(want) {
+		return fmt.Errorf("the answer %q holds %+v, want %+v", s.result.Stdout, facts, want)
+	}
+	return nil
 }
 
 // declareRole has the notes plugin declare the role name carrying the capability.
@@ -190,7 +248,7 @@ func (s *operatorScenario) giveRoleAsBlank(email, role string) {
 
 // isEnabled fails unless the account at email is enabled.
 func (s *operatorScenario) isEnabled(ctx context.Context, email string) error {
-	held, err := s.answers(ctx, "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND NOT disabled)", email)
+	held, err := s.answers(ctx, s.engine.enabled, email)
 	if err != nil || !held {
 		return fmt.Errorf("the account %s is enabled %v (%v), want it enabled", email, held, err)
 	}
@@ -252,7 +310,7 @@ func (s *operatorScenario) recordsChange(command, actor string) error {
 
 // pointAtAnEmptyDatabase points the settings at a fresh database holding no schema.
 func (s *operatorScenario) pointAtAnEmptyDatabase() {
-	s.env["GOPHENBERG_DATABASE_URL"] = emptyDatabaseURL(s.t)
+	s.env["GOPHENBERG_DATABASE_URL"] = s.engine.empty(s.t)
 }
 
 // nameNoDatabase leaves the database setting out.
@@ -334,31 +392,17 @@ func (s *operatorScenario) saysNothingChanged() error {
 
 // holdsNoSchema fails when the database holds any schema Gophenberg migrates.
 func (s *operatorScenario) holdsNoSchema(ctx context.Context) error {
-	for _, schema := range []string{"auth", "core", "gonsole"} {
-		held, err := s.answers(ctx, "SELECT to_regnamespace($1) IS NOT NULL", schema)
-		if err != nil || held {
-			return fmt.Errorf("the %s schema is held %v (%v), want no schema", schema, held, err)
-		}
-	}
-	return nil
+	return s.engine.noSchema(ctx, s.env["GOPHENBERG_DATABASE_URL"])
 }
 
 // holdsNoDemoContent fails when the database holds any content item.
 func (s *operatorScenario) holdsNoDemoContent(ctx context.Context) error {
-	table, err := s.answers(ctx, "SELECT to_regclass('core.content') IS NOT NULL")
-	if err != nil || !table {
-		return err
-	}
-	stored, err := s.answers(ctx, "SELECT EXISTS (SELECT FROM core.content)")
-	if err != nil || stored {
-		return fmt.Errorf("the database holds content %v (%v), want none", stored, err)
-	}
-	return nil
+	return s.engine.noContent(ctx, s.env["GOPHENBERG_DATABASE_URL"])
 }
 
 // holdsRole fails unless the account at email holds the role.
 func (s *operatorScenario) holdsRole(ctx context.Context, email, role string) error {
-	held, err := s.answers(ctx, "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND role = $2)", email, role)
+	held, err := s.answers(ctx, s.engine.roleHeld, email, role)
 	if err != nil || !held {
 		return fmt.Errorf("the account %s holds the role %s %v (%v), want it to", email, role, held, err)
 	}
@@ -367,7 +411,36 @@ func (s *operatorScenario) holdsRole(ctx context.Context, email, role string) er
 
 // answers returns what the yes or no query answers on the scenario's database.
 func (s *operatorScenario) answers(ctx context.Context, query string, args ...any) (bool, error) {
-	pool, err := pgxpool.New(ctx, s.env["GOPHENBERG_DATABASE_URL"])
+	return s.engine.answers(ctx, s.env["GOPHENBERG_DATABASE_URL"], query, args...)
+}
+
+// postgresHoldsNoSchema fails when the PostgreSQL database at address holds any schema Gophenberg migrates.
+func postgresHoldsNoSchema(ctx context.Context, address string) error {
+	for _, schema := range []string{"auth", "core", "gonsole"} {
+		held, err := postgresAnswers(ctx, address, "SELECT to_regnamespace($1) IS NOT NULL", schema)
+		if err != nil || held {
+			return fmt.Errorf("the %s schema is held %v (%v), want no schema", schema, held, err)
+		}
+	}
+	return nil
+}
+
+// postgresHoldsNoContent fails when the PostgreSQL database at address holds any content item.
+func postgresHoldsNoContent(ctx context.Context, address string) error {
+	table, err := postgresAnswers(ctx, address, "SELECT to_regclass('core.content') IS NOT NULL")
+	if err != nil || !table {
+		return err
+	}
+	stored, err := postgresAnswers(ctx, address, "SELECT EXISTS (SELECT FROM core.content)")
+	if err != nil || stored {
+		return fmt.Errorf("the database holds content %v (%v), want none", stored, err)
+	}
+	return nil
+}
+
+// postgresAnswers returns what the yes or no query answers on the PostgreSQL database at address.
+func postgresAnswers(ctx context.Context, address, query string, args ...any) (bool, error) {
+	pool, err := pgxpool.New(ctx, address)
 	if err != nil {
 		return false, err
 	}
@@ -377,22 +450,68 @@ func (s *operatorScenario) answers(ctx context.Context, query string, args ...an
 	return held, err
 }
 
+// emptySQLiteAddress returns the sqlite: address of a new empty file, alone in a folder of its own.
+func emptySQLiteAddress(t *testing.T) string {
+	t.Helper()
+	return sqlitePrefix + emptySQLiteFile(t)
+}
+
+// sqliteAnswers returns what the yes or no query answers on the SQLite file at address, closing its handle after.
+func sqliteAnswers(ctx context.Context, address, query string, args ...any) (bool, error) {
+	db, err := openDefaultSQLite(address)
+	if err != nil {
+		return false, err
+	}
+	var held bool
+	err = db.QueryRowContext(ctx, query, args...).Scan(&held)
+	return held, errors.Join(err, db.Close())
+}
+
+// openDefaultSQLite returns a handle on the SQLite file at address under the default SQLite settings.
+func openDefaultSQLite(address string) (*sql.DB, error) {
+	settings, err := sqlite.SettingsFrom(settingsEnv(testkit.Getenv(nil)))
+	if err != nil {
+		return nil, err
+	}
+	return sqlite.Open(address, settings)
+}
+
+// untouchedSQLiteFile fails unless the SQLite file at address still holds no byte, never opening it.
+func untouchedSQLiteFile(_ context.Context, address string) error {
+	info, err := os.Stat(strings.TrimPrefix(address, sqlitePrefix))
+	if err != nil {
+		return err
+	}
+	if info.Size() != 0 {
+		return fmt.Errorf("the SQLite file holds %d bytes, want 0 since no command opened it", info.Size())
+	}
+	return nil
+}
+
 func TestOperatorCommands(t *testing.T) {
+	t.Parallel()
+
 	tags := "~@wip"
 	if os.Getenv("GOPHENBERG_BDD_WIP") != "" {
 		tags = ""
 	}
-	suite := godog.TestSuite{
-		ScenarioInitializer: initializeOperatorCommands(t),
-		Options: &godog.Options{
-			Format:   "pretty",
-			Paths:    []string{operatorCommandsFeature},
-			Tags:     tags,
-			Strict:   true,
-			TestingT: t,
-		},
-	}
-	if suite.Run() != 0 {
-		t.Error("the feature did not pass")
+	for name, engine := range map[string]operatorEngine{"postgres": postgresOperators(), "sqlite": sqliteOperators()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			suite := godog.TestSuite{
+				ScenarioInitializer: initializeOperatorCommands(t, engine),
+				Options: &godog.Options{
+					Format:   "pretty",
+					Paths:    []string{operatorCommandsFeature},
+					Tags:     tags,
+					Strict:   true,
+					TestingT: t,
+				},
+			}
+			if suite.Run() != 0 {
+				t.Error("the feature did not pass")
+			}
+		})
 	}
 }

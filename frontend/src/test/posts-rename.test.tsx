@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { buttonClasses } from '@gopherium/godmin/testing'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest'
@@ -92,6 +93,14 @@ test('renames in a medium dialog headed Rename, as WordPress sizes it, its Name 
 	expect(within(dialog).getByRole('heading', { name: 'Rename' })).toBeInTheDocument()
 	expect(within(dialog).getByRole('textbox', { name: 'Name' })).toHaveValue('Welcome to Gophenberg')
 	expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+})
+
+test('draws Cancel of the rename dialog as accent text, as WordPress Site Editor dialogs do', async () => {
+	renderAt('/content/post')
+
+	const dialog = await openRename()
+
+	expect([...within(dialog).getByRole('button', { name: 'Cancel' }).classList]).toEqual(buttonClasses('minimal'))
 })
 
 test('keeps Rename off while the name is blank or unchanged', async () => {
