@@ -13,7 +13,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 )
 
-// maxStemBytes bounds the bytes of a stored file stem.
+// maxStemBytes bounds the bytes of the stem an upload name gives, before any suffix.
 const maxStemBytes = 200
 
 // maxNameBytes bounds the bytes of an upload name read for its stem.
