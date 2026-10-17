@@ -104,8 +104,8 @@ build-release:
 			-o "$(RELEASE_DIR)/$${os}_$${arch}/gophenberg" ./cmd/gophenberg || exit 1; \
 	done
 
-release-archives: RELEASE_PLATFORMS = $(sort $(RELEASE_TARGETS) $(RELEASE_HOST))
-release-archives: build-release
+release-archives:
+	$(MAKE) build-release RELEASE_PLATFORMS="$(sort $(RELEASE_TARGETS) $(RELEASE_HOST))"
 	about="$$("$(RELEASE_DIR)/$$(go env GOOS)_$$(go env GOARCH)/gophenberg" about -json)" && \
 	version="$$(printf '%s' "$$about" | jq -r .version)" && \
 	for platform in $(RELEASE_TARGETS); do \

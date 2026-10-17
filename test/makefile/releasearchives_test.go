@@ -120,6 +120,19 @@ func TestMakeReleaseArchivesPacksATargetThisMachineCannotRun(t *testing.T) {
 	}
 }
 
+func TestMakeReleaseArchivesBuildsItsTargetsAfterABuildRelease(t *testing.T) {
+	t.Parallel()
+
+	root := archivesRepo(t)
+	other := anotherPlatform(runtime.GOOS + "/" + runtime.GOARCH)
+
+	packed := packedArchive(t, root, other, "build-release", "release-archives", "RELEASE_TARGETS="+other)
+
+	if facts := factsOf(t, readArchive(t, packed)); facts.Platform != other {
+		t.Errorf("the %s archive's release.json names %q", other, facts.Platform)
+	}
+}
+
 func TestMakeReleaseArchivesPacksTheSameBytesWhateverTheUmask(t *testing.T) {
 	t.Parallel()
 
