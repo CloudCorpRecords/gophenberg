@@ -250,6 +250,7 @@ func TestSlugifyKeepsUnderscoresAndDropsWordPressStrippedSymbols(t *testing.T) {
 		"dots and slashes split":          {in: "v1.2/notes", want: "v1-2-notes"},
 		"ascii punctuation drops":         {in: "C++ & C#", want: "c-c"},
 		"listed trademark sign drops":     {in: "Brand\U00002122 Name", want: "brand-name"},
+		"listed modifier acute drops":     {in: "Q\U000002CAA", want: "qa"},
 	}
 
 	for testName, tc := range tests {

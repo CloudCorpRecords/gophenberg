@@ -149,11 +149,13 @@ func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	switch {
 	case isApostrophe(r) || isSeparateAccent(r):
 		return slugRuneSkip
+	case strippedSymbols[r]:
+		return slugRuneDrop
 	case isSlugWord(r):
 		return slugRuneWord
 	case afterKept && unicode.Is(unicode.M, r):
 		return slugRuneMark
-	case isStrippedSymbol(r):
+	case isStrippedASCII(r):
 		return slugRuneDrop
 	default:
 		return slugRuneSeparator
@@ -165,12 +167,9 @@ func isSlugWord(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-// isStrippedSymbol reports whether r is a character a slug drops without splitting a word.
-func isStrippedSymbol(r rune) bool {
-	if r >= utf8.RuneSelf {
-		return strippedSymbols[r]
-	}
-	return !unicode.IsSpace(r) && !strings.ContainsRune("./-", r)
+// isStrippedASCII reports whether r is an ASCII character a slug drops without splitting a word.
+func isStrippedASCII(r rune) bool {
+	return r < utf8.RuneSelf && !unicode.IsSpace(r) && !strings.ContainsRune("./-", r)
 }
 
 // isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.
