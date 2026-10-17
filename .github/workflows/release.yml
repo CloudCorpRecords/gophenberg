@@ -241,6 +241,9 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    concurrency:
+      group: release-image
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
