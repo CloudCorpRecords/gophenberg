@@ -4,11 +4,13 @@
 package content
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"golang.org/x/text/unicode/norm"
@@ -98,7 +100,6 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 func Slugify(title string) string {
 	var b strings.Builder
 	separated, afterKept := false, false
-	// WordPress writes the multiplication sign as a plain x before it strips symbols.
 	for _, r := range FoldAccents(strings.ReplaceAll(title, "×", "x")) {
 		switch slugRuneKindOf(r, afterKept) {
 		case slugRuneWord:
@@ -111,23 +112,19 @@ func Slugify(title string) string {
 			b.WriteRune(r)
 		case slugRuneSeparator:
 			separated, afterKept = true, false
+		case slugRuneDrop:
+			afterKept = false
 		}
 	}
-	slug := truncateSlug(norm.NFC.String(b.String()))
-	if slug == "" {
-		return untitledSlug
-	}
-	return slug
+	return cmp.Or(truncateSlug(norm.NFC.String(b.String())), untitledSlug)
 }
 
-// RouteWord returns label as a route word: its slug with underscores broken
-// as separators, because route words keep splitting words at underscores
-// while slugs no longer do.
+// RouteWord returns label as a route word, with its underscores read as spaces.
 func RouteWord(label string) string {
 	return Slugify(strings.ReplaceAll(label, "_", " "))
 }
 
-// slugRuneKind is the role of one title character in a slug: skipped, a word character, a kept mark or a separator.
+// slugRuneKind is the role of one title character in a slug: skipped, a word, a kept mark, a separator or dropped.
 type slugRuneKind int
 
 const (
@@ -135,10 +132,19 @@ const (
 	slugRuneWord
 	slugRuneMark
 	slugRuneSeparator
+	slugRuneDrop
 )
 
+// strippedSymbols holds the characters beyond ASCII that a slug drops without splitting a word.
+var strippedSymbols = map[rune]bool{
+	0x00A1: true, 0x00A9: true, 0x00AB: true, 0x00AD: true, 0x00AE: true, 0x00B0: true, 0x00B4: true,
+	0x00BB: true, 0x00BF: true, 0x02CA: true, 0x200B: true, 0x200C: true, 0x200D: true, 0x200E: true,
+	0x200F: true, 0x2018: true, 0x201A: true, 0x201B: true, 0x201C: true, 0x201D: true, 0x201E: true,
+	0x201F: true, 0x2022: true, 0x2026: true, 0x202A: true, 0x202B: true, 0x202C: true, 0x202D: true,
+	0x202E: true, 0x2039: true, 0x203A: true, 0x2122: true, 0xFEFF: true, 0xFFFC: true,
+}
+
 // slugRuneKindOf returns the [slugRuneKind] of r, given whether the previous character was kept.
-// Punctuation, symbols and invisible characters that WordPress strips are skipped without splitting the word.
 func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 	switch {
 	case isApostrophe(r) || isSeparateAccent(r):
@@ -147,10 +153,10 @@ func slugRuneKindOf(r rune, afterKept bool) slugRuneKind {
 		return slugRuneWord
 	case afterKept && unicode.Is(unicode.M, r):
 		return slugRuneMark
-	case unicode.Is(unicode.M, r) || isWordSeparator(r):
-		return slugRuneSeparator
+	case isStrippedSymbol(r):
+		return slugRuneDrop
 	default:
-		return slugRuneSkip
+		return slugRuneSeparator
 	}
 }
 
@@ -159,10 +165,12 @@ func isSlugWord(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-// isWordSeparator reports whether r splits words in a slug: whitespace, a dot, a slash or a dash,
-// where the dashes include the en and em dashes WordPress folds into hyphens.
-func isWordSeparator(r rune) bool {
-	return unicode.IsSpace(r) || r == '.' || r == '/' || r == '-' || r == 0x2013 || r == 0x2014
+// isStrippedSymbol reports whether r is a character a slug drops without splitting a word.
+func isStrippedSymbol(r rune) bool {
+	if r >= utf8.RuneSelf {
+		return strippedSymbols[r]
+	}
+	return !unicode.IsSpace(r) && !strings.ContainsRune("./-", r)
 }
 
 // isSeparateAccent reports whether r is a combining grave, acute, macron or caron, or the grapheme joiner.
