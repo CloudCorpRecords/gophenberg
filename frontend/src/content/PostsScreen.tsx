@@ -5,20 +5,30 @@ import type { Session } from '@gophenberg/frontend-sdk'
 import { DataViews } from '@gophenberg/frontend-sdk/dataviews'
 import type { Action, Field, View } from '@gophenberg/frontend-sdk/dataviews'
 import { __, sprintf } from '@wordpress/i18n'
-import { ErrorNotice, ListEmpty, Page, paginationOf, useMediaQuery } from '@gopherium/godmin'
+import {
+	ErrorNotice,
+	ListEmpty,
+	Page,
+	offeredSize,
+	offeredView,
+	paginationOf,
+	sizedView,
+	useListRun,
+	useMediaQuery,
+	viewNarrows,
+} from '@gopherium/godmin'
+import type { ListRun, OfferedView } from '@gopherium/godmin'
 import { openOnTap, useListView } from '@gopherium/godmin/router'
 import type { ListView } from '@gopherium/godmin/router'
 import { useSession } from '@gopherium/react-auth'
 import { useQuery } from '@tanstack/react-query'
 import type { QueryKey, UseQueryResult } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import { useMemo } from 'react'
 
 import type { ListSettings } from '../settings/api'
 import { useListSettings } from '../settings/useListSettings'
 import { usePostActions } from './actions'
-import type { ListRun } from './actions'
 import { listPosts } from './api'
 import type { Post, PostPage, PostQuery } from './api'
 import { EmptyTrash } from './EmptyTrash'
@@ -26,14 +36,13 @@ import {
 	BELOW_HUGE_QUERY,
 	OPENING_SORT,
 	PHONE_COLUMNS,
+	POST_VIEW_GUARD,
 	TABLE_LAYOUT,
 	levelOf,
-	narrowedBy,
-	offeredView,
 	openingColumns,
 	postFields,
+	postNarrowing,
 } from './fields'
-import type { OfferedView } from './fields'
 import { typesQueryKey } from './nav'
 import { StatusTabs } from './StatusTabs'
 import { pluralOf, typeText } from './typeText'
@@ -47,48 +56,6 @@ const NO_POSTS: Post[] = []
 
 /** What the All tab asks for: every status but the trash, the scheduled one included. */
 const EVERY_STATUS_BUT_TRASH = 'draft,pending,private,scheduled,published'
-
-/**
- * Holds the failure shown above the list of one type and status, and the list a finished run focuses.
- * @param scope - The type and status the list shows.
- * @param setTicks - Replaces the ticked rows.
- * @returns The failure on show, what the list does around a run, and the list element.
- */
-function useListRun(
-	scope: string,
-	setTicks: (ids: string[]) => void,
-): { failure?: string, run: ListRun, list: RefObject<HTMLDivElement | null> } {
-	const [shown, setShown] = useState<{ scope: string, failure?: string }>({ scope })
-	const list = useRef<HTMLDivElement>(null)
-	const latest = useRef(0)
-	useLayoutEffect(() => {
-		latest.current += 1
-	}, [scope])
-	if (shown.scope !== scope) {
-		setShown({ scope })
-		setTicks([])
-	}
-	const run = useMemo<ListRun>(
-		() => ({
-			onStart: () => {
-				const id = latest.current + 1
-				latest.current = id
-				setShown({ scope })
-				return (failure, moved) => {
-					if (latest.current !== id) {
-						return
-					}
-					setShown({ scope, failure })
-					if (moved) {
-						list.current?.focus()
-					}
-				}
-			},
-		}),
-		[scope],
-	)
-	return { failure: shown.failure, run, list }
-}
 
 /**
  * Reports whether the list offers to empty the trash.
@@ -160,15 +127,14 @@ function useTrashTotal(type: string, status: string): number {
  * @param settings - The list settings, absent when they could not be read.
  * @returns The request, leaving the page size to the server while the settings name none.
  */
-function listingOf(view: OfferedView, settings: ListSettings | undefined): PostQuery {
+function listingOf(view: OfferedView<View>, settings: ListSettings | undefined): PostQuery {
 	return {
 		search: view.search,
-		page: view.page,
-		perPage: settings === undefined ? undefined : view.perPage,
+		...sizedView(view, settings?.list_page_sizes),
 		orderBy: view.sort?.field,
 		order: view.sort?.direction,
 		orderHierarchy: view.showLevels,
-		...narrowedBy(view.filters),
+		...postNarrowing(view.filters),
 	}
 }
 
@@ -179,19 +145,6 @@ function listingOf(view: OfferedView, settings: ListSettings | undefined): PostQ
  */
 function opensSorted(view: View): boolean {
 	return view.sort?.field === OPENING_SORT.field && view.sort.direction === OPENING_SORT.direction
-}
-
-/**
- * Returns the page size a list shows, the one the address names only while the settings offer it.
- * @param asked - The page size the address names, absent when it names none.
- * @param settings - The list settings, absent when they could not be read.
- * @returns The page size, the one the settings name in place of a size they do not offer.
- */
-function offeredSize(asked: number | undefined, settings: ListSettings | undefined): number | undefined {
-	if (settings === undefined || settings.list_page_sizes.some((size) => size === asked)) {
-		return asked
-	}
-	return settings.list_page_size
 }
 
 /**
@@ -213,10 +166,10 @@ function usePostList(listed: ContentType, status: string) {
 		perPage: settings?.list_page_size,
 		layoutSettings: { table: TABLE_LAYOUT },
 	})
-	const offered = offeredView(list.view, columns)
+	const offered = offeredView(list.view, columns, POST_VIEW_GUARD)
 	const view = {
 		...offered,
-		perPage: offeredSize(offered.perPage, settings),
+		perPage: offeredSize(offered.perPage, settings?.list_page_sizes, settings?.list_page_size),
 		showLevels: listed.hierarchical && opensSorted(offered),
 	}
 	return { list, columns, view, settings, ...usePostPage(listed.key, status, listingOf(view, settings)) }
@@ -261,22 +214,13 @@ function pageProps(listed: ContentType, page: PostPage | undefined, settings: Li
 }
 
 /**
- * Reports whether a filter holds a value, a pick of none being no value.
- * @param value - The value the filter holds.
- * @returns Whether the value narrows the list.
- */
-function holdsValue(value: unknown): boolean {
-	return Array.isArray(value) ? value.length > 0 : value !== undefined
-}
-
-/**
  * Reports whether a search, a filter holding a value, or a tab other than All narrows a list.
  * @param view - The view the list shows.
  * @param status - The status the list shows, empty for All.
  * @returns Whether the list shows fewer items than the type holds.
  */
-function narrows(view: OfferedView, status: string): boolean {
-	return status !== '' || Boolean(view.search) || view.filters.some((filter) => holdsValue(filter.value))
+function narrows(view: OfferedView<View>, status: string): boolean {
+	return status !== '' || viewNarrows(view)
 }
 
 /**
@@ -304,7 +248,7 @@ function PostsTable(props: {
 	posts: UseQueryResult<PostPage>
 	waiting: boolean
 	list: ListView<View>
-	view: OfferedView
+	view: OfferedView<View>
 	columns: Field<Post>[]
 	settings: ListSettings | undefined
 	actions: Action<Post>[]
@@ -370,7 +314,7 @@ export function PostsScreen() {
 	const current = useSearch({ strict: false, select: (search) => search.status })
 	const status = current ?? ''
 	const { list, columns, view, settings, posts, waiting } = usePostList(listed, status)
-	const { failure, run, list: region } = useListRun(`${listed.key} ${status}`, list.onChangeSelection)
+	const { failure, run, region } = useListRun(`${listed.key} ${status}`, list.onChangeSelection)
 	const actions = usePostActions(status, listed, run)
 	const held = useTrashTotal(listed.key, status)
 	const session = useSession().data
@@ -387,21 +331,22 @@ export function PostsScreen() {
 				</>
 			}
 			tabs={<StatusTabs current={current} />}
+			list
+			listLabel={pluralOf(listed)}
+			listRef={region}
 		>
-			<div ref={region} className="godmin-page__list" role="region" aria-label={pluralOf(listed)} tabIndex={-1}>
-				{failure === undefined ? null : <ErrorNotice>{failure}</ErrorNotice>}
-				<PostsTable
-					listed={listed}
-					status={status}
-					posts={posts}
-					waiting={waiting}
-					list={list}
-					view={view}
-					columns={columns}
-					settings={settings}
-					actions={actions}
-				/>
-			</div>
+			{failure === undefined ? null : <ErrorNotice>{failure}</ErrorNotice>}
+			<PostsTable
+				listed={listed}
+				status={status}
+				posts={posts}
+				waiting={waiting}
+				list={list}
+				view={view}
+				columns={columns}
+				settings={settings}
+				actions={actions}
+			/>
 		</Page>
 	)
 }

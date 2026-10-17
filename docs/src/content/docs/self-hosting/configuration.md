@@ -207,8 +207,8 @@ such as `%40` for `@`, `%23` for `#` and `%3F` for `?`.
 
 Gophenberg can also keep its data in one SQLite file instead of a
 PostgreSQL server. Only part of Gophenberg runs on SQLite so far:
-`check` and `migrate` work, but the site cannot serve from the file
-yet.
+`check`, `migrate` and the account commands work, but the site cannot
+serve from the file yet.
 
 ### The address
 
@@ -233,7 +233,7 @@ touch /srv/gophenberg/site.db
 ```
 
 Without it, each command that opens the file, such as `check`,
-`migrate`, `seed -yes` and `account:create-admin`, stops with:
+`migrate`, `seed -yes` and every account command, stops with:
 
 ```text
 gophenberg: open the database: sqlite: the database file does not exist: /srv/gophenberg/site.db, create an empty file at that path to start a new site
@@ -270,8 +270,10 @@ checks the cron settings.
 
 Plugins get no database on SQLite. Their database address is empty,
 their share of the database answers every statement with an error,
-and they cannot read posts or account names yet, see
-[the plugin SDK](/extending/the-plugin-sdk/#the-database).
+and they cannot read posts yet, see
+[the plugin SDK](/extending/the-plugin-sdk/#the-database). They can
+read account names, see
+[reading account names](/extending/the-plugin-sdk/#reading-account-names).
 
 ### The SQLite settings
 

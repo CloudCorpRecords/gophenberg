@@ -5,7 +5,8 @@ import type { ComponentProps, ComponentType, ReactElement } from 'react'
 
 import type { Capability } from './capabilities'
 
-export type { CanvasMode } from '@gopherium/godmin'
+export type { BulkRun, BulkWords, CanvasMode, ListRun, RunConfirmProps } from '@gopherium/godmin'
+export { RunConfirm, useBulkRun, useListRun } from '@gopherium/godmin'
 
 declare module '@tanstack/react-router' {
 	interface StaticDataRouteOption {

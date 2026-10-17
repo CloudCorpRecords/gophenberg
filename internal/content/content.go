@@ -99,7 +99,7 @@ func Slugify(title string) string {
 	var b strings.Builder
 	separated, afterKept := false, false
 	// WordPress writes the multiplication sign as a plain x before it strips symbols.
-	for _, r := range foldAccents(strings.ReplaceAll(strings.ToLower(title), "×", "x")) {
+	for _, r := range FoldAccents(strings.ReplaceAll(title, "×", "x")) {
 		switch slugRuneKindOf(r, afterKept) {
 		case slugRuneWord:
 			if separated && b.Len() > 0 {

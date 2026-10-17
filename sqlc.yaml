@@ -81,6 +81,25 @@ sql:
             go_type:
               import: "github.com/gopherium/framework/dbkit"
               type: "Time"
+          - column: "core_cron_jobs.next_run_at"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+          - column: "core_cron_jobs.leased_until"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+              pointer: true
+          - column: "core_cron_jobs.last_started_at"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+              pointer: true
+          - column: "core_cron_jobs.last_finished_at"
+            go_type:
+              import: "github.com/gopherium/framework/dbkit"
+              type: "Time"
+              pointer: true
           - column: "core_media.sizes"
             go_type:
               import: "github.com/gopherium/gophenberg/internal/sqlite/columns"

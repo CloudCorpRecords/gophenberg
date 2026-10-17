@@ -24,6 +24,8 @@ var storeCases = []Case{
 	{"SettleRefusesATokenThatNoLongerHolds", settleRefusesATokenThatNoLongerHolds},
 	{"SettleRecordsAndThenClearsAFailure", settleRecordsAndThenClearsAFailure},
 	{"SlotsListEveryStoredJob", slotsListEveryStoredJob},
+	{"SlotsShowWhenAHeldLeaseEnds", slotsShowWhenAHeldLeaseEnds},
+	{"TakeAndSettleKeepTimesToTheMicrosecond", takeAndSettleKeepTimesToTheMicrosecond},
 }
 
 // start is the moment every case's first take happens.
@@ -187,5 +189,37 @@ func slotsListEveryStoredJob(t *testing.T, s Stores) {
 	slices.Sort(names)
 	if !slices.Equal(names, []string{"archive", "tidy"}) {
 		t.Errorf("Slots() names %v, want archive and tidy", names)
+	}
+}
+
+// slotsShowWhenAHeldLeaseEnds lists each held job with the end of the lease that holds it.
+func slotsShowWhenAHeldLeaseEnds(t *testing.T, s Stores) {
+	leases := []cron.Lease{leaseOf("tidy", "first", start), leaseOf("archive", "second", start.Add(30*time.Second))}
+	for _, lease := range leases {
+		mustTake(t, s, lease)
+	}
+
+	for _, lease := range leases {
+		if slot := slotOf(t, s, lease.Name); !slot.LeasedUntil.Equal(lease.Until) {
+			t.Errorf("slot = %+v, want it held until %s", slot, lease.Until)
+		}
+	}
+}
+
+// takeAndSettleKeepTimesToTheMicrosecond keeps a take's start, its lease end and the next run to the microsecond.
+func takeAndSettleKeepTimesToTheMicrosecond(t *testing.T, s Stores) {
+	lease := leaseOf("tidy", "first", start.Add(123456*time.Microsecond))
+	taken := mustTake(t, s, lease)
+	if !taken.NextRun.Equal(lease.Taken) {
+		t.Errorf("Take() = %+v, want its rhythm starting at %s", taken, lease.Taken)
+	}
+	if slot := slotOf(t, s, "tidy"); !slot.LeasedUntil.Equal(lease.Until) {
+		t.Errorf("slot after the take = %+v, want it held until %s", slot, lease.Until)
+	}
+
+	next := lease.Taken.Add(time.Hour + 654321*time.Microsecond)
+	mustSettle(t, s, taken, cron.Outcome{NextRun: next, Finished: lease.Taken})
+	if slot := slotOf(t, s, "tidy"); !slot.NextRun.Equal(next) {
+		t.Errorf("slot after the settle = %+v, want it due at %s", slot, next)
 	}
 }

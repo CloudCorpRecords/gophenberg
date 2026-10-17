@@ -24,6 +24,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/cron"
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/server"
+	"github.com/gopherium/gophenberg/internal/sqlite"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -353,6 +354,20 @@ func TestOpenStoresPicksThePostgresCronStore(t *testing.T) {
 	}
 }
 
+func TestOpenStoresPicksTheSQLiteCronStore(t *testing.T) {
+	t.Parallel()
+
+	built, err := openStores(composeConfig{databaseURL: sqliteAddress})
+	if err != nil {
+		t.Fatalf("openStores() error = %v", err)
+	}
+	defer built.close()
+
+	if _, picked := built.cronStore.(*sqlite.CronStore); !picked {
+		t.Errorf("openStores() holds the cron store %T, want the SQLite one", built.cronStore)
+	}
+}
+
 func TestTheServerCutsTheCronJobsWhenItBeginsToShutDown(t *testing.T) {
 	t.Parallel()
 
@@ -420,7 +435,13 @@ func expiredSessionIn(t *testing.T, databaseURL string) *pgxpool.Pool {
 		t.Fatalf("connecting pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	users := authkitpg.NewUserStore(pool)
+	storeExpiredSession(t, authkitpg.NewUserStore(pool))
+	return pool
+}
+
+// storeExpiredSession stores an account through users with a session that expired an hour ago.
+func storeExpiredSession(t *testing.T, users gouncer.Store) {
+	t.Helper()
 	account, err := gouncer.NewUser("maria@example.com", "Maria Perez", "correct horse battery")
 	if err != nil {
 		t.Fatalf("building the account: %v", err)
@@ -435,7 +456,6 @@ func expiredSessionIn(t *testing.T, databaseURL string) *pgxpool.Pool {
 	}); err != nil {
 		t.Fatalf("storing the expired session: %v", err)
 	}
-	return pool
 }
 
 // cronCallTo posts the cron call holding the test secret to the site at base and returns its answer.
@@ -477,6 +497,38 @@ func TestTheSessionSweepRunsAsACronJobOnPostgres(t *testing.T) {
 	}
 	var left int
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM auth.sessions").Scan(&left); err != nil || left != 0 {
+		t.Errorf("%d sessions left after the sweep (%v), want the expired one gone", left, err)
+	}
+}
+
+func TestTheSessionSweepRunsAsACronJobOnSQLite(t *testing.T) {
+	t.Parallel()
+
+	path := migratedSQLiteFile(t)
+	built := sqliteStores(composeConfig{handle: openSQLiteFile(t, path), fieldDepth: 4})
+	storeExpiredSession(t, built.users)
+	settings, err := cronSettingsWith(nil)
+	if err != nil {
+		t.Fatalf("cronSettingsWith() error = %v", err)
+	}
+	jobs := cronOf(settings, built, slog.New(slog.DiscardHandler))
+
+	first, err := jobs.runs.RunNow()
+	second, againErr := jobs.runs.RunNow()
+
+	if err != nil || first.Ran != 1 {
+		t.Fatalf("the first RunNow() = %+v, %v, want the sweep run once", first, err)
+	}
+	if againErr != nil || second.Ran != 0 {
+		t.Errorf("the second RunNow() = %+v, %v, want nothing run while the sweep is not due", second, againErr)
+	}
+	other := openSQLiteFile(t, path)
+	if stored := cronJobCount(t, other); stored != 1 {
+		t.Errorf("a second handle on the file reads %d cron jobs, want the session sweep's one", stored)
+	}
+	var left int
+	if err := other.QueryRowContext(t.Context(), "SELECT count(*) FROM auth_sessions").Scan(&left); err != nil ||
+		left != 0 {
 		t.Errorf("%d sessions left after the sweep (%v), want the expired one gone", left, err)
 	}
 }

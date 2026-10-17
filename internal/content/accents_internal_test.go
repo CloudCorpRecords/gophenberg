@@ -22,6 +22,29 @@ func TestLetterFoldsHoldEveryLatinLetterThatDoesNotDecompose(t *testing.T) {
 	}
 }
 
+func TestFoldAccentsLowercasesItsInput(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"capital ligature and stroke": {in: "\U000000C6R\U000000D8", want: "aero"},
+		"capital stroked l":           {in: "\U00000141odz", want: "lodz"},
+		"capital sharp s":             {in: "STRA\U00001E9EE", want: "strasse"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if got := FoldAccents(tc.in); got != tc.want {
+				t.Errorf("FoldAccents(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFoldAccentsReadsAnApostropheAsPartOfTheWord(t *testing.T) {
 	t.Parallel()
 
@@ -38,8 +61,8 @@ func TestFoldAccentsReadsAnApostropheAsPartOfTheWord(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			if got := foldAccents(tc.in); got != tc.want {
-				t.Errorf("foldAccents(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := FoldAccents(tc.in); got != tc.want {
+				t.Errorf("FoldAccents(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
