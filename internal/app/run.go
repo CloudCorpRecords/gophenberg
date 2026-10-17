@@ -418,14 +418,22 @@ func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	return err
 }
 
-// webDirFrom returns the admin folder the settings name, refusing one that holds no index.html.
+// webDirFrom returns the admin folder the settings name, refusing one whose index.html it cannot read.
 func webDirFrom(env gonsole.Env) (string, error) {
 	dir := env.Value("WEB_DIR")
-	if _, err := fs.Stat(os.DirFS(dir), "index.html"); dir == "" || err == nil {
-		return dir, nil
+	if dir == "" {
+		return "", nil
 	}
-	return "", fmt.Errorf("%s names %q, which holds no index.html, so unset it to serve the admin built into this binary",
-		env.Key("WEB_DIR"), dir)
+	_, err := fs.ReadFile(os.DirFS(dir), "index.html")
+	switch {
+	case err == nil:
+		return dir, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return "", fmt.Errorf("%s names %q, which holds no index.html, so unset it to serve the admin built into "+
+			"this binary", env.Key("WEB_DIR"), dir)
+	}
+	return "", fmt.Errorf("%s names %q, whose index.html cannot be read, so fix it or unset it to serve the admin "+
+		"built into this binary: %w", env.Key("WEB_DIR"), dir, err)
 }
 
 // valueOr returns the setting's value, or fallback when it is empty.

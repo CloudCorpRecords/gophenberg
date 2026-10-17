@@ -53,28 +53,56 @@ func TestServerConfigServesTheBuiltInAdminWhenNoFolderIsNamed(t *testing.T) {
 func TestLoadRunConfigRefusesAWebFolderWithoutAnIndex(t *testing.T) {
 	t.Parallel()
 
-	for name, folder := range map[string]string{
-		"an empty folder":   t.TempDir(),
-		"a missing folder":  filepath.Join(t.TempDir(), "web"),
-		"a file, no folder": writeAdminPage(t, t.TempDir()),
+	pageFolder := t.TempDir()
+	if err := os.Mkdir(filepath.Join(pageFolder, "index.html"), 0o755); err != nil {
+		t.Fatalf("making a folder named index.html: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		folder string
+		why    string
+	}{
+		"an empty folder":                  {t.TempDir(), "holds no index.html"},
+		"a missing folder":                 {filepath.Join(t.TempDir(), "web"), "holds no index.html"},
+		"a file, no folder":                {writeAdminPage(t, t.TempDir()), "not a directory"},
+		"a folder whose index.html is one": {pageFolder, "is a directory"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := loadRunConfig(testkit.Getenv(map[string]string{
-				"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL,
-				"GOPHENBERG_WEB_DIR":      folder,
-			}))
-
-			if err == nil {
-				t.Fatalf("loadRunConfig() error = nil, want %s refused", folder)
-			}
-			for _, want := range []string{"GOPHENBERG_WEB_DIR", folder, "no index.html", "built into this binary"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error = %v, want it to name %q", err, want)
-				}
-			}
+			refuseWebFolder(t, tc.folder, tc.why)
 		})
+	}
+}
+
+func TestLoadRunConfigNamesWhyItCannotReadTheAdminPage(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a page whatever its mode, so an unreadable page cannot be staged here")
+	}
+	folder := t.TempDir()
+	if err := os.Chmod(writeAdminPage(t, folder), 0o000); err != nil {
+		t.Fatalf("making the admin page unreadable: %v", err)
+	}
+
+	refuseWebFolder(t, folder, "permission denied")
+}
+
+// refuseWebFolder fails unless the settings refuse folder, naming the setting, the folder, why and the way out.
+func refuseWebFolder(t *testing.T, folder, why string) {
+	t.Helper()
+	_, err := loadRunConfig(testkit.Getenv(map[string]string{
+		"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL,
+		"GOPHENBERG_WEB_DIR":      folder,
+	}))
+
+	if err == nil {
+		t.Fatalf("loadRunConfig() error = nil, want %s refused", folder)
+	}
+	for _, want := range []string{"GOPHENBERG_WEB_DIR", folder, why, "built into this binary"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to name %q", err, want)
+		}
 	}
 }
 
