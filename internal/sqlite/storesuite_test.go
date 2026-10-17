@@ -20,6 +20,7 @@ import (
 	"github.com/gopherium/gouncer/authkit/storetest"
 
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
+	"github.com/gopherium/gophenberg/internal/cron/crontest"
 	"github.com/gopherium/gophenberg/internal/media/mediatest"
 	"github.com/gopherium/gophenberg/internal/sqlite"
 )
@@ -91,6 +92,19 @@ func TestUserSettingStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	contenttest.RunUserSettings(t, sqliteStores)
+}
+
+// sqliteCronStores returns a fresh cron store over a migrated copy of its own.
+func sqliteCronStores(t *testing.T) crontest.Stores {
+	t.Helper()
+	handle := migrated(t)
+	return crontest.Stores{Store: sqlite.NewCronStore(handle), LastFailure: lastFailureIn(handle)}
+}
+
+func TestCronStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	crontest.Run(t, sqliteCronStores)
 }
 
 // plantTokenOn returns the hook that stores a token in the file behind handle past the store's own checks.
