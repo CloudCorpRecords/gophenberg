@@ -519,10 +519,16 @@ cannot be undone, and the confirm button turns red:
 ```
 
 A confirm on a list row is different: WordPress draws it inside the
-list's own modal with the header hidden. Give the row action
-`hideModalHeader: true` and render godmin's `ConfirmBody` with the
-question as its child, a **Cancel** button and a button named after
-the action.
+list's own modal. A confirm that removes something, such as Move to
+trash, hides the header, so give that row action
+`hideModalHeader: true`. A plain confirm, such as making an item the
+default, keeps its header, which shows the action's `modalHeader` or
+else its label. Either way, give the row action
+`modalFocusOnMount: 'firstContentElement'` and render godmin's
+`RunConfirm` with the question as its child, the words of **Cancel**
+and of a button named after the action, and `run`, a function that
+takes the picked rows and settles once your screen shows how it went.
+It keeps Cancel inert while the run goes and closes once it settles.
 
 ## Versions
 
