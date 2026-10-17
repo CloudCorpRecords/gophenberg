@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/gopherium/gophenberg/internal/testdb"
 )
@@ -28,12 +27,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	if testing.Short() {
 		t.Skip("skipping database test in short mode")
 	}
-	db, err := sql.Open("pgx", testdb.New(t, testdb.Migrator()))
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db
+	return testdb.Open(t, testdb.New(t, testdb.Migrator()))
 }
 
 // insertAuthor stores a user the content table can reference.

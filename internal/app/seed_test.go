@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gopherium/framework/dbkit"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
 	"github.com/gopherium/framework/gonsole/testkit"
@@ -104,7 +105,7 @@ func TestSeedReportsEachDemoAccountItCreatedOrKept(t *testing.T) {
 		t.Fatalf("first seedMigrated() error = %v, want nil", err)
 	}
 
-	if err := seedDemoData(t.Context(), env, &again); err != nil {
+	if err := seedDemoData(t.Context(), poolOf(t, env), env, &again); err != nil {
 		t.Fatalf("second seedDemoData() error = %v, want nil", err)
 	}
 
@@ -336,12 +337,83 @@ func TestSeedStoresBlockContent(t *testing.T) {
 	}
 }
 
-// seedMigrated applies every schema step to the database getenv names, then stores the demo data.
+// applySteps applies every schema step the migrate command takes to the PostgreSQL database getenv names.
+func applySteps(ctx context.Context, getenv func(string) string) error {
+	for _, step := range migrations(getenv) {
+		if err := step.Apply(ctx, getenv("GOPHENBERG_DATABASE_URL"), nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedMigrated applies every schema step to the database getenv names, then stores the demo data on a pool there.
 func seedMigrated(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
-	if err := migrate(ctx, getenv("GOPHENBERG_DATABASE_URL")); err != nil {
+	if err := applySteps(ctx, getenv); err != nil {
 		return err
 	}
-	return seedDemoData(ctx, getenv, stdout)
+	handle, err := openPostgres(settingsEnv(getenv), getenv("GOPHENBERG_DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = handle.Close() }()
+	return seedDemoData(ctx, handle.Pool, getenv, stdout)
+}
+
+// poolOf returns a capped pool on the database getenv names, closed when t ends.
+func poolOf(t *testing.T, getenv func(string) string) *pgxpool.Pool {
+	t.Helper()
+	handle, err := openPostgres(settingsEnv(getenv), getenv("GOPHENBERG_DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("openPostgres() error = %v, want a pool", err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
+	return handle.Pool
+}
+
+// composedSite applies every schema step to the database getenv names and composes the site the way a run does.
+func composedSite(t *testing.T, getenv func(string) string) (gonsole.Program, gonsole.Loaded) {
+	t.Helper()
+	if err := applySteps(t.Context(), getenv); err != nil {
+		t.Fatalf("applySteps() error = %v, want nil", err)
+	}
+	program := Program(getenv, noPlugins)
+	loaded, err := program.Plugins(t.Context(), gonsole.Call{Env: settingsEnv(getenv)})
+	if err != nil {
+		t.Fatalf("Plugins() error = %v, want the site composed", err)
+	}
+	return program, loaded
+}
+
+func TestSeedStoresTheDemoDataThroughTheSiteTheRunComposed(t *testing.T) {
+	t.Parallel()
+
+	databaseURL := emptyDatabaseURL(t)
+	program, loaded := composedSite(t, testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL}))
+	t.Cleanup(func() { _ = loaded.Release(context.WithoutCancel(t.Context())) })
+
+	err := program.Seed(t.Context(), gonsole.Call{Env: settingsEnv(testkit.Getenv(nil)), Stdout: io.Discard})
+
+	if counts := seededCounts(t, databaseURL); err != nil || !maps.Equal(counts, seed.DemoStatuses()) {
+		t.Errorf("Seed() with no database setting of its own = %v with the posts %v, want the demo data stored "+
+			"through the site the run composed", err, counts)
+	}
+}
+
+func TestSeedOpensNoPoolOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": emptyDatabaseURL(t)})
+	program, loaded := composedSite(t, getenv)
+	if err := loaded.Release(t.Context()); err != nil {
+		t.Fatalf("Release() error = %v, want the site closed", err)
+	}
+
+	err := program.Seed(t.Context(), gonsole.Call{Env: settingsEnv(getenv), Stdout: io.Discard})
+
+	if err == nil || !strings.Contains(err.Error(), "closed pool") {
+		t.Errorf("Seed() after the site closed = %v, want the closed pool of the site, not a pool of its own", err)
+	}
 }
 
 func TestSeedYesValidatesItsEnvironment(t *testing.T) {
@@ -370,26 +442,36 @@ func TestSeedYesValidatesItsEnvironment(t *testing.T) {
 	}
 }
 
-func TestSeedNamesAnAddressItCannotUse(t *testing.T) {
+func TestSeedYesNamesTheDatabaseSettingItCannotUse(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		env  map[string]string
 		want string
 	}{
-		"no database address": {map[string]string{}, "GOPHENBERG_DATABASE_URL is required"},
+		"no database address": {map[string]string{}, "gophenberg: GOPHENBERG_DATABASE_URL is required\n"},
 		"a database address it cannot parse": {
-			map[string]string{"GOPHENBERG_DATABASE_URL": "not a url \x00"}, "parse database url",
+			map[string]string{"GOPHENBERG_DATABASE_URL": "not a url \x00"},
+			"gophenberg: migrate accounts: GOPHENBERG_DATABASE_URL: " + dbkit.ErrAddress.Error() +
+				": pgx cannot parse the address or one of its settings\n",
+		},
+		"a pool cap in the database address": {
+			map[string]string{"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL + "&pool_max_conns=4"},
+			"gophenberg: migrate accounts: " + poolSettingError("pool_max_conns") + "\n",
+		},
+		"a connection cap of one": {
+			map[string]string{"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL, "GOPHENBERG_DATABASE_MAX_CONNS": "1"},
+			"gophenberg: migrate accounts: GOPHENBERG_DATABASE_MAX_CONNS: must be 2 or more, got \"1\"\n",
 		},
 	}
 	for testName, tc := range tests {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			err := seedDemoData(t.Context(), testkit.Getenv(tc.env), io.Discard)
+			got := testkit.Run(t, Program(testkit.Getenv(tc.env), noPlugins), "", "seed", "-yes")
 
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("seedDemoData() error = %v, want %q", err, tc.want)
+			if got.Code != gonsole.ExitFailed || got.Stderr != tc.want {
+				t.Errorf("seed -yes = %d with stderr %q, want 1 and %q", got.Code, got.Stderr, tc.want)
 			}
 		})
 	}
@@ -425,8 +507,9 @@ func TestSeedLeavesTheSchemaToTheCommandLine(t *testing.T) {
 	t.Parallel()
 
 	databaseURL := emptyDatabaseURL(t)
+	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL})
 
-	err := seedDemoData(t.Context(), testkit.Getenv(map[string]string{"GOPHENBERG_DATABASE_URL": databaseURL}), io.Discard)
+	err := seedDemoData(t.Context(), poolOf(t, getenv), getenv, io.Discard)
 
 	if held := schemaHeld(t, databaseURL, "core"); err == nil || held {
 		t.Errorf("seedDemoData() over an empty database = %v with the core schema held %v, want a failure and no schema",
@@ -451,10 +534,12 @@ func TestSeedLeavesTheDevelopmentWarningToTheCommandLine(t *testing.T) {
 func TestSeedReportsAFieldDepthItCannotStand(t *testing.T) {
 	t.Parallel()
 
-	err := seedDemoData(t.Context(), testkit.Getenv(map[string]string{
+	getenv := testkit.Getenv(map[string]string{
 		"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL,
 		"GOPHENBERG_FIELD_DEPTH":  "0",
-	}), io.Discard)
+	})
+
+	err := seedDemoData(t.Context(), poolOf(t, getenv), getenv, io.Discard)
 
 	if err == nil || !strings.Contains(err.Error(), "GOPHENBERG_FIELD_DEPTH") {
 		t.Errorf("seedDemoData() error = %v, want GOPHENBERG_FIELD_DEPTH refused", err)

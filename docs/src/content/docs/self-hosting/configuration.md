@@ -17,7 +17,8 @@ so it takes the default.
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `GOPHENBERG_DATABASE_URL` | Yes | | The PostgreSQL connection string |
+| `GOPHENBERG_DATABASE_URL` | Yes | | The PostgreSQL connection string, or `sqlite:` and the absolute path of a SQLite file. [The PostgreSQL address](#the-postgresql-address) lists what a connection string may not hold. [A SQLite database](#a-sqlite-database) says what runs on one and lists its settings |
+| `GOPHENBERG_DATABASE_MAX_CONNS` | No | The larger of 4 and the number of CPUs | How many connections to the database stay open at most, from 2 to 2147483647, see [the database connections](#the-database-connections) |
 | `GOPHENBERG_ADDR` | No | `localhost:8081` | Address the server listens on. The container image sets `0.0.0.0:8081` |
 | `GOPHENBERG_WEB_DIR` | No | | Where the built admin and the public stylesheets live. The image sets `/web` |
 | `GOPHENBERG_SITE_TITLE` | No | `Gophenberg` | The site name shown by the built-in renderer |
@@ -33,7 +34,7 @@ so it takes the default.
 | `GOPHENBERG_DEFINITIONS_IMPORT_CAP_KB` | No | `256` | The largest definitions file an import takes, in kilobytes, from 1 to 1024 |
 | `GOPHENBERG_FIELD_DEPTH` | No | `32` | How many containers a field may stand inside, from 1 to 1000. A Flexible content layout counts as one |
 | `GOPHENBERG_PLUGIN_DB_CONNS` | No | `4` | How many statements, open result sets and transactions each plugin adds to the plugins' database share, from 1 to 1000 |
-| `GOPHENBERG_PLUGIN_DB_RESERVE` | No | `2` | How many of the database pool's connections the plugins' share always leaves to the site, from 1 to 1000. The share holds at most the pool's size less this reserve. The pool's size is the `pool_max_conns` of `GOPHENBERG_DATABASE_URL`, the larger of 4 and the number of CPUs when unset. The server refuses to start when the reserve leaves plugins no connection |
+| `GOPHENBERG_PLUGIN_DB_RESERVE` | No | `2` | How many of the database pool's connections the plugins' share always leaves to the site, from 1 to 1000. The share holds at most `GOPHENBERG_DATABASE_MAX_CONNS` less this reserve. The server refuses to start when the reserve leaves plugins no connection, so a cap of 2 needs a reserve of 1 |
 | `GOPHENBERG_PLUGIN_QUERY_TIMEOUT` | No | `5s` | How long one plugin statement may run, its wait for a slot included. It also ends a plugin's read of account names |
 | `GOPHENBERG_PLUGIN_TX_TIMEOUT` | No | `30s` | How long one plugin transaction may stay open |
 | `GOPHENBERG_AVATARS` | No | `initials` | How the site draws avatars: `initials`, `gravatar` or `off`, see [avatars](#avatars) |
@@ -91,6 +92,207 @@ address nothing holds, a file that is missing or a request the server
 refused is never kept by any cache, however the windows are set. An
 answer to a signed in account is never kept by any cache either, not
 even that person's own browser.
+
+## The database connections
+
+`GOPHENBERG_DATABASE_MAX_CONNS` caps how many connections to the
+database stay open at once. It takes a whole number from 2 to
+2147483647. Left unset, it is the larger of 4 and the number of CPUs.
+
+On PostgreSQL Gophenberg opens one pool of that size. Everything the
+site does draws from it, the cron jobs and the plugins' share
+included. `seed -yes` stores the demo data through the same pool, and
+the core migration opens its connections under the same cap. Two
+things open short-lived connections of their own, outside the cap:
+
+- The migration of the account and record tables, at every start and
+  in every command that migrates, such as `migrate`, `seed -yes` and
+  `account:create-admin`.
+- The `account:` commands, while they read or change an account.
+
+PostgreSQL turns away connections past its own `max_connections`, 100
+by default, so keep the caps of every copy of Gophenberg on one
+database server added together below it, with room left for those.
+On a SQLite file each connection keeps its own page cache, see
+[the SQLite settings](#the-sqlite-settings).
+
+On PostgreSQL, the plugins' share always leaves
+`GOPHENBERG_PLUGIN_DB_RESERVE` of these connections to the site, 2 by
+default. At a cap of 2 that leaves the plugins nothing, so set the
+reserve to 1 there. Otherwise the server does not start, and `check`
+says why:
+
+```text
+gophenberg: GOPHENBERG_PLUGIN_DB_RESERVE=2 leaves plugins no connection in a pool of 2, raise GOPHENBERG_DATABASE_MAX_CONNS or lower the reserve
+```
+
+A cap outside its range stops the server too, for example:
+
+```text
+gophenberg: GOPHENBERG_DATABASE_MAX_CONNS: must be 2 or more, got "1"
+```
+
+### The PostgreSQL address
+
+A PostgreSQL connection string takes no `pool_` setting, because
+`GOPHENBERG_DATABASE_MAX_CONNS` sizes the pool. Every key that starts
+with `pool_` is refused by name, whatever its value, such as
+`pool_max_conns` or `pool_max_conn_lifetime`:
+
+```text
+gophenberg: GOPHENBERG_DATABASE_URL: remove pool_max_conns from the address, GOPHENBERG_DATABASE_MAX_CONNS sizes the pool
+```
+
+Gophenberg also refuses a connection string that two versions of its
+PostgreSQL driver read differently, so that an update can never send
+the site to another server, database or account. The message names
+the setting and the reason:
+
+```text
+gophenberg: GOPHENBERG_DATABASE_URL: dbkit: refused database address: the address holds a #, write it as %23
+```
+
+`check` runs these checks, and the check of
+`GOPHENBERG_DATABASE_MAX_CONNS`, without connecting. `serve` runs them
+before it connects. `migrate`, `seed -yes` and every `account:`
+command but `account:list` and `account:records` run them before they
+touch the database, so a value they refuse changes nothing there. A
+command that migrates names its first schema step in front of the
+message, though that step applied nothing:
+
+```text
+gophenberg: migrate accounts: GOPHENBERG_DATABASE_MAX_CONNS: must be 2 or more, got "1"
+```
+
+`account:list` and `account:records` only read, and connect without
+these checks.
+
+The connection string is refused when it:
+
+- Lists several hosts with an empty one among them, such as
+  `db1,,db2`.
+- Cannot be read at all, such as a port that is not a number.
+
+A `postgres://` address is also refused when it:
+
+- Holds an `@` inside the user name or the password. Write it as `%40`.
+- Holds a `?` or a `#` before the `@`, such as in the password. Write
+  them as `%3F` and `%23`.
+- Holds a sign in the user name or the password other than an
+  unaccented letter, a digit, a semicolon or one of `-._:~!$&'()*+,=%`,
+  such as `"`, `^`, `|` or an accented letter. Write it as its `%`
+  code.
+- Holds a `#` anywhere else, a space or a control character. Write
+  them as `%23` and `%20`.
+- Holds a `%` that starts no `%` code, or `%00`. Write a `%` as `%25`.
+- Gives a port to some hosts of its host list only.
+- Names a database that starts with a `/`. Give it as
+  `?dbname=%2Fname` instead.
+- Holds a `+` or a semicolon in the part after the `?`. Write them as
+  `%2B` and `%3B`.
+- Holds a pair after the `?` with no `=` or with two, sets `ssl`
+  instead of `sslmode`, or sets one key twice. `dbname` and `database`
+  count as one key.
+
+A connection string written as `key=value` pairs, such as
+`host=db user=postgres dbname=gophenberg`, is also refused when it
+holds a backslash. Write it as a `postgres://` address with `%5C`
+instead.
+
+The safest password holds only letters and digits. In a
+`postgres://` address, write every other sign in it as its `%` code,
+such as `%40` for `@`, `%23` for `#` and `%3F` for `?`.
+
+## A SQLite database
+
+Gophenberg can also keep its data in one SQLite file instead of a
+PostgreSQL server. Only part of Gophenberg runs on SQLite so far:
+`check`, `migrate` and the account commands work, but the site cannot
+serve from the file yet.
+
+### The address
+
+Write `sqlite:` and the absolute path of the file:
+
+```sh
+GOPHENBERG_DATABASE_URL=sqlite:/srv/gophenberg/site.db
+```
+
+- The path must be absolute, so `sqlite:site.db` is refused.
+- Write no `//` after `sqlite:`, and no `?`, `#` or `%` anywhere in
+  the address. It takes no options. The settings below do that job.
+- An address that does not start with `sqlite:` is read as a
+  PostgreSQL one, as before.
+
+### Before the first run
+
+Gophenberg never creates the database file. Create an empty one first:
+
+```sh
+touch /srv/gophenberg/site.db
+```
+
+Without it, each command that opens the file, such as `check`,
+`migrate`, `seed -yes` and every account command, stops with:
+
+```text
+gophenberg: open the database: sqlite: the database file does not exist: /srv/gophenberg/site.db, create an empty file at that path to start a new site
+```
+
+SQLite runs on Linux and macOS only, and the file must sit on a local
+disk. A file on a network file system, such as NFS, SMB or a Windows
+folder seen from WSL2 like `/mnt/c`, is refused, because SQLite's locks
+are not reliable there.
+
+The folder holding the file must stay writable for the user that runs
+Gophenberg, because SQLite keeps more files beside it:
+
+- `site.db-wal` and `site.db-shm` while a command has the database
+  open. SQLite removes them when the command ends cleanly. If a
+  command failed or was cut short, they can stay behind. Leave them
+  in place. The next run reads the changes they still hold.
+- `site.db.migrate.lock`, which every migration takes so that two
+  runs never migrate at once. It stays after the run. Never delete it.
+
+All three sit beside the file the path finally points at, so when
+the path is a symbolic link, they sit beside the file the link points
+at, not beside the link.
+
+### What runs on SQLite
+
+[On a SQLite database](/self-hosting/commands/#on-a-sqlite-database)
+lists what each command does on a SQLite file, and the error a
+command gives when it stops.
+
+[Cron jobs](/self-hosting/cron/), the session sweep included, run only
+while `serve` runs, so none run on a SQLite site yet. `check` still
+checks the cron settings.
+
+Plugins get no database on SQLite. Their database address is empty,
+their share of the database answers every statement with an error,
+and they cannot read posts yet, see
+[the plugin SDK](/extending/the-plugin-sdk/#the-database). They can
+read account names, see
+[reading account names](/extending/the-plugin-sdk/#reading-account-names).
+
+### The SQLite settings
+
+Only a `sqlite:` address reads these. A PostgreSQL address ignores
+them, so a bad value beside one stops nothing.
+[`GOPHENBERG_DATABASE_MAX_CONNS`](#the-database-connections) caps the
+connections to the file, as it caps a PostgreSQL pool.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GOPHENBERG_SQLITE_BUSY_TIMEOUT` | `5s` | How long a connection waits for a lock another one holds, in whole milliseconds, up to `596h31m23.647s` |
+| `GOPHENBERG_SQLITE_CACHE_SIZE` | `2000` | The page cache of each connection, in kibibytes, up to 2147483647. All the caches together may take this times `GOPHENBERG_DATABASE_MAX_CONNS` |
+| `GOPHENBERG_SQLITE_SYNCHRONOUS` | `full` | `full` writes the log to disk at every commit. `normal` writes it only at each checkpoint, which is faster, but a power cut can lose the last commits |
+| `GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT` | | The size in bytes the write-ahead log is cut back to after a checkpoint. Unset sets no limit, so the log keeps the largest size it reached |
+| `GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT` | `30s` | How long a migration waits for the lock file before it stops with an error |
+| `GOPHENBERG_SQLITE_MIGRATE_LOCK_POLL` | `250ms` | How often a waiting migration tries the lock file again |
+
+`check` refuses a bad value and names it, for example
+`GOPHENBERG_SQLITE_SYNCHRONOUS: must be full or normal, got "off"`.
 
 ## The admin lists
 
@@ -266,6 +468,16 @@ folder could lose an upload it is saving at that moment.
 The server refuses to start, and says why, when:
 
 - `GOPHENBERG_DATABASE_URL` is missing.
+- `GOPHENBERG_DATABASE_URL` names a SQLite file, which the site cannot
+  serve from yet, see [a SQLite database](#a-sqlite-database).
+- `GOPHENBERG_DATABASE_URL` is a PostgreSQL connection string that
+  holds any `pool_` setting, which the message names, or a form
+  Gophenberg refuses, see
+  [the PostgreSQL address](#the-postgresql-address).
+- `GOPHENBERG_DATABASE_MAX_CONNS` is not a whole number from 2 to
+  2147483647.
+- `GOPHENBERG_PLUGIN_DB_RESERVE` leaves the plugins no connection
+  under `GOPHENBERG_DATABASE_MAX_CONNS`.
 - `GOPHENBERG_TRUSTED_PROXIES` is not valid CIDR notation.
 - `GOPHENBERG_PUBLIC_URL` is not an `http` or `https` address naming
   only a host.
@@ -320,8 +532,12 @@ refuse to run.
 Run `check` before every rollout, with the new image and the settings
 it will run with. It reads every setting, the two above included,
 and loads the plugins, without starting anything or touching the
-database. It answers `settings, plugins and command names are valid`,
-or names the settings it refuses and exits with code 1:
+database. On a PostgreSQL address it also checks the connection
+string, every `pool_` setting in it included, and the connection cap.
+On a `sqlite:` address it also checks the SQLite settings and that the
+file exists on a local disk, still without connecting to it. It
+answers `settings, plugins and command names are valid`, or names the
+settings it refuses and exits with code 1:
 
 ```sh
 docker compose run --rm -T gophenberg check

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -164,7 +165,7 @@ func TestSettingsNameARefusedAddressAndWhereToSetIt(t *testing.T) {
 			file := map[string]string{addressKey: address, maxAgeKey: "1h"}
 			_, _, err := settings(lookup(nil), fileOf(file))
 			if !errors.Is(err, dbkit.ErrAddress) {
-				t.Fatalf("settings() error = %v, want the pgtest refusal of the address", err)
+				t.Fatalf("settings() error = %v, want the address refused by pgtest", err)
 			}
 			if want := addressKey + " to an address pgtest takes, " + where; !strings.Contains(err.Error(), want) {
 				t.Errorf("settings() error = %v, want one holding %q", err, want)
@@ -192,6 +193,56 @@ func TestSettingsNameABadMaxAgeAndWhereToSetIt(t *testing.T) {
 				t.Errorf("settings() error = %v, want one naming %s and %q", err, maxAgeKey, where)
 			}
 		})
+	}
+}
+
+func TestConnectionCapReadsTheEnvironmentThenTheFile(t *testing.T) {
+	t.Parallel()
+
+	fallback := max(4, runtime.NumCPU())
+	cases := map[string]struct {
+		environ map[string]string
+		file    map[string]string
+		want    int
+	}{
+		"the environment over the file": {
+			environ: map[string]string{maxConnsKey: "3"}, file: map[string]string{maxConnsKey: "5"}, want: 3,
+		},
+		"the file when the environment lacks it": {file: map[string]string{maxConnsKey: "5"}, want: 5},
+		"empty in the environment over a value": {
+			environ: map[string]string{maxConnsKey: ""}, file: map[string]string{maxConnsKey: "5"}, want: fallback,
+		},
+		"set nowhere": {want: fallback},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := connectionCap(lookup(c.environ), fileOf(c.file))
+			if err != nil || got != c.want {
+				t.Errorf("connectionCap() = %d, %v, want %d, nil", got, err, c.want)
+			}
+		})
+	}
+}
+
+func TestConnectionCapNamesTheCapItRefusesInTheFile(t *testing.T) {
+	t.Parallel()
+
+	_, err := connectionCap(lookup(nil), fileOf(map[string]string{maxConnsKey: "1"}))
+
+	if want := `testdb: GOPHENBERG_DATABASE_MAX_CONNS: must be 2 or more, got "1"`; err == nil || err.Error() != want {
+		t.Errorf("connectionCap() error = %v, want %s", err, want)
+	}
+}
+
+func TestConnectionCapReportsAnUnreadableFileOnlyWhenTheEnvironmentLacksTheCap(t *testing.T) {
+	t.Parallel()
+
+	if _, err := connectionCap(lookup(nil), unreadable); !errors.Is(err, errUnreadable) {
+		t.Errorf("connectionCap() error = %v, want one wrapping %v", err, errUnreadable)
+	}
+	if got, err := connectionCap(lookup(map[string]string{maxConnsKey: "3"}), unreadable); err != nil || got != 3 {
+		t.Errorf("connectionCap() over an unreadable file = %d, %v, want 3 from the environment", got, err)
 	}
 }
 

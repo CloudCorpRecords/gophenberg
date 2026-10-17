@@ -47,6 +47,8 @@ func FoldAccents(s string) string {
 		case folds:
 			b.WriteString(fold)
 			afterLatin = true
+		case isApostrophe(r):
+			b.WriteRune(r)
 		case !unicode.Is(unicode.M, r):
 			b.WriteRune(r)
 			afterLatin = isLatinLetter(r)
@@ -55,6 +57,11 @@ func FoldAccents(s string) string {
 		}
 	}
 	return norm.NFC.String(b.String())
+}
+
+// isApostrophe reports whether r is a straight or curly apostrophe.
+func isApostrophe(r rune) bool {
+	return r == '\'' || r == '’'
 }
 
 // isLatinLetter reports whether r is a letter of the Latin script.

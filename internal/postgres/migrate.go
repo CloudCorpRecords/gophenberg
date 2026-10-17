@@ -8,47 +8,20 @@ import (
 	"fmt"
 	"io/fs"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"github.com/pressly/goose/v3/lock"
+	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 )
+
+// versionTable is goose's default version table, which records the core migrations.
+const versionTable = "goose_db_version"
 
 var migrationSource = mustSub(Migrations, "migrations")
 
-// Migrate applies the core schema migrations to the database at databaseURL.
-func Migrate(ctx context.Context, databaseURL string) error {
-	return migrateDatabase(ctx, "pgx", databaseURL)
-}
-
-// migrateDatabase opens a database connection using driverName and databaseURL and applies the migrations.
-func migrateDatabase(ctx context.Context, driverName, databaseURL string) error {
-	db, err := sql.Open(driverName, databaseURL)
-	if err != nil {
-		return fmt.Errorf("postgres: open database: %w", err)
-	}
-	defer func() { _ = db.Close() }()
-	return migrate(ctx, db)
-}
-
-// migrate runs all pending up migrations against db using the goose Postgres provider under goose's session lock.
-func migrate(ctx context.Context, db *sql.DB) error {
-	locker := mustLocker(lock.NewPostgresSessionLocker())
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrationSource, goose.WithSessionLocker(locker))
-	if err != nil {
-		return fmt.Errorf("postgres: migration provider: %w", err)
-	}
-	if _, err := provider.Up(ctx); err != nil {
+// Migrate applies the core schema migrations on db under goose's advisory lock, opening nothing itself.
+func Migrate(ctx context.Context, db *sql.DB) error {
+	if err := dbkitpg.Migrate(ctx, db, dbkitpg.Migrations{Table: versionTable, FS: migrationSource}); err != nil {
 		return fmt.Errorf("postgres: apply migrations: %w", err)
 	}
 	return nil
-}
-
-// mustLocker returns locker and panics if goose could not build it.
-func mustLocker(locker lock.SessionLocker, err error) lock.SessionLocker {
-	if err != nil {
-		panic(err)
-	}
-	return locker
 }
 
 // mustSub returns the dir subtree of fsys and panics if it cannot be created.

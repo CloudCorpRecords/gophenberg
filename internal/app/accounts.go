@@ -10,6 +10,8 @@ import (
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
+	accountpg "github.com/gopherium/framework/gonsole/auth/postgres"
+	accountsqlite "github.com/gopherium/framework/gonsole/auth/sqlite"
 
 	"github.com/gopherium/gophenberg/internal/role"
 )
@@ -21,13 +23,24 @@ const recordTimeout = 5 * time.Second
 const recordsLimit = 50
 
 // accountConfig returns the configuration of the account commands and of the check on the acting account over registry.
-func accountConfig(registry *goncierge.Registry) accounts.Config {
+func accountConfig(registry *goncierge.Registry, getenv func(string) string) accounts.Config {
 	return accounts.Config{
 		Roles:         declaredRoles(registry),
 		Capability:    string(role.ManageUsers),
 		RecordTimeout: recordTimeout,
 		RecordsLimit:  recordsLimit,
+		Stores:        accountStores(getenv),
 	}
+}
+
+// accountStores returns accountsqlite.Stores on a sqlite: address, accountpg.Stores on any other.
+func accountStores(
+	getenv func(string) string,
+) func(context.Context, gonsole.Call) (accounts.Stores, func(context.Context) error, error) {
+	if onSQLite(settingsEnv(getenv).Value("DATABASE_URL")) {
+		return accountsqlite.Stores
+	}
+	return accountpg.Stores
 }
 
 // declaredRoles returns the hook answering the roles the core and the call's plugins declared into registry.

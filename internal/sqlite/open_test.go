@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -85,10 +84,8 @@ func TestSettingsFallBackToTheDocumentedDefaults(t *testing.T) {
 		t.Fatalf("SettingsFrom() error = %v, want nil", err)
 	}
 
-	want := sqlite.Settings{
-		BusyTimeout: 5 * time.Second, CacheSize: 2000, MaxConns: max(4, runtime.NumCPU()),
-		Synchronous: dbsqlite.SynchronousFull,
-	}
+	got.MaxConns = 0
+	want := sqlite.Settings{BusyTimeout: 5 * time.Second, CacheSize: 2000, Synchronous: dbsqlite.SynchronousFull}
 	if got != want {
 		t.Errorf("SettingsFrom() = %+v, want %+v", got, want)
 	}
@@ -124,7 +121,6 @@ func TestSettingsTakeTheEdgeValues(t *testing.T) {
 	t.Parallel()
 
 	got, err := sqlite.SettingsFrom(environment(map[string]string{
-		"GOPHENBERG_DATABASE_MAX_CONNS":        "2",
 		"GOPHENBERG_SQLITE_BUSY_TIMEOUT":       "596h31m23.647s",
 		"GOPHENBERG_SQLITE_CACHE_SIZE":         "2147483647",
 		"GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT": "1",
@@ -137,22 +133,12 @@ func TestSettingsTakeTheEdgeValues(t *testing.T) {
 		t.Fatalf("SettingsFrom().JournalSizeLimit = %v, want 1", got.JournalSizeLimit)
 	}
 	got.JournalSizeLimit = nil
+	got.MaxConns = 0
 	want := sqlite.Settings{
-		BusyTimeout: math.MaxInt32 * time.Millisecond, CacheSize: math.MaxInt32, MaxConns: 2,
-		Synchronous: dbsqlite.SynchronousFull,
+		BusyTimeout: math.MaxInt32 * time.Millisecond, CacheSize: math.MaxInt32, Synchronous: dbsqlite.SynchronousFull,
 	}
 	if got != want {
 		t.Errorf("SettingsFrom() = %+v, want %+v", got, want)
-	}
-}
-
-func TestSettingsQuoteTheConnectionCapTheyRefuse(t *testing.T) {
-	t.Parallel()
-
-	_, err := sqlite.SettingsFrom(environment(map[string]string{"GOPHENBERG_DATABASE_MAX_CONNS": "1"}))
-
-	if err == nil || !strings.HasSuffix(err.Error(), `got "1"`) {
-		t.Errorf("SettingsFrom() with one connection error = %v, want the value quoted as the other settings quote it", err)
 	}
 }
 
@@ -177,7 +163,6 @@ func TestSettingsRefuseABadValueByItsName(t *testing.T) {
 
 	for _, bad := range []struct{ name, value string }{
 		{"GOPHENBERG_DATABASE_MAX_CONNS", "1"},
-		{"GOPHENBERG_DATABASE_MAX_CONNS", "many"},
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "0s"},
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "1500us"},
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "596h31m23.648s"},

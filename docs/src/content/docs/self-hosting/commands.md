@@ -96,6 +96,41 @@ Every error goes to standard error, on a line that starts with
 `gophenberg:`. When the command itself was found, a misuse is followed
 by its help page.
 
+## On a SQLite database
+
+When `GOPHENBERG_DATABASE_URL` names a SQLite file, such as
+`sqlite:/srv/gophenberg/site.db`, only some commands run so far:
+
+| Command | On a SQLite database |
+| --- | --- |
+| `list`, `help` and `version` | Work as on PostgreSQL |
+| `check` | Works, and also checks the SQLite settings and the file |
+| `migrate` | Works |
+| `seed` | Without `-yes` it still prints `would store the demo data` and exits with code 0. With `-yes` it migrates the file, then exits with code 1 |
+| `serve` | Exits with code 1 before it opens anything |
+| `account:create-admin` | Works as on PostgreSQL. It migrates the file first, then asks for the password |
+| Every other `account:` command | Works as on PostgreSQL, on the accounts and the records kept in the file |
+| A plugin command that names a capability | Checks the account in `-as`, then runs, as on PostgreSQL |
+
+`serve` and `seed -yes` stop and name what they need:
+
+```text
+gophenberg: serve: content and types do not run on SQLite yet, so this command needs GOPHENBERG_DATABASE_URL to name a PostgreSQL database
+```
+
+`seed -yes` says `seed:` in place of `serve:`.
+
+`seed -yes` migrates the file before it stops, `account:create-admin`
+migrates it first, and every other account command and every plugin
+command opens it. So a missing file, a bad address or a bad SQLite
+setting stops each of them with its own error, as it stops `migrate`.
+On a file that was never migrated, run `migrate` first. Until then
+`account:records` and every command that takes `-as` stop with
+`the command records are missing, run migrate first`, and
+`account:list` stops with SQLite's own error.
+[A SQLite database](/self-hosting/configuration/#a-sqlite-database)
+covers the address, the file and its settings.
+
 ## Dry runs and -yes
 
 Five commands only show what they would change until you add `-yes`:
@@ -186,8 +221,9 @@ updated from an earlier release, start the new server or run
 ## The records
 
 Every change those four commands apply with `-yes` is kept as one
-record in the `gonsole.records` table of the database, so the usual
-database backup carries it. A record names the time, the account in
+record, in the `gonsole.records` table on PostgreSQL or in the
+`gonsole_records` table of a SQLite file, so a backup of the database
+carries it. A record names the time, the account in
 `-as`, the command, its arguments and its other flags. A dry run
 records nothing, and neither do `account:create-admin` and `seed`.
 
@@ -201,8 +237,11 @@ records nothing, and neither do `account:create-admin` and `seed`.
 It lists the latest 50, unless `-limit` or
 `GOPHENBERG_COMMAND_RECORDS_LIMIT` names another number. Storing one
 record may take up to `GOPHENBERG_COMMAND_RECORD_TIMEOUT`, 5 seconds
-unless set. When a record cannot be stored, the change stays applied,
-and the command exits with code 1 and says so.
+unless set. On a SQLite database, a record that waits for another
+command's write can take up to `GOPHENBERG_SQLITE_BUSY_TIMEOUT`
+instead, when that setting is longer. When a record cannot be stored,
+the change stays applied, and the command exits with code 1 and says
+so.
 
 ## Renamed commands
 
@@ -234,7 +273,13 @@ Reads every setting, registers the plugins and checks the command
 names, without touching the database. It prints
 `settings, plugins and command names are valid`, or names what it
 refuses, one line each, and exits with code 1. Run it before a
-rollout.
+rollout. On a SQLite database it also checks the SQLite settings and
+that the file exists on a local disk, still without connecting to it.
+It does not open the file, so a folder, a file that is not a SQLite
+database or a read-only file still passes `check` and stops at
+`migrate`. A command that stops on a read-only file leaves the
+`-wal` and `-shm` files beside it read-only too. When you make the
+database file writable, make those two files writable as well.
 
 ### help
 
@@ -268,6 +313,17 @@ lock in the database, so two servers starting together, or a server
 and `migrate`, never apply the same step at once. The second waits,
 then finds nothing left to do.
 
+On a SQLite database the lock is the file `<database file>.migrate.lock`,
+such as `site.db.migrate.lock`. It sits beside the file the path
+finally points at, so when the path is a symbolic link, the lock sits
+beside the file the link points at. A step waits for it up to
+`GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT`, 30 seconds unless set, then
+stops with an error. Never delete that file.
+
+On a new empty file, two `migrate` runs started at the same moment can
+still stop at once with `the database is busy`, before either reaches
+the lock. Nothing is written, so run `migrate` again.
+
 ### seed
 
 ```text
@@ -285,6 +341,11 @@ A later run stops with an error naming the group when the demo's
 Post fields or Category fields group is turned off or no longer
 reaches its type. Never seed a production database.
 
+On a SQLite database the dry run still prints
+`would store the demo data` and exits with code 0, although `-yes`
+stops with code 1 after it migrates the file, see
+[on a SQLite database](#on-a-sqlite-database).
+
 ### serve
 
 ```text
@@ -296,6 +357,9 @@ see [stopping the server](/self-hosting/configuration/#stopping-the-server).
 The container image runs `serve` when it is given no command. A
 compose file or deployment that sets its own `command` must start it
 with `serve`, since a run with no command only prints the listing.
+
+On a SQLite database `serve` exits with code 1 before it opens
+anything, see [on a SQLite database](#on-a-sqlite-database).
 
 ### version
 
@@ -323,6 +387,13 @@ It needs no `-as`, since it is how a site gets its first admin:
 docker compose run --rm -T gophenberg \
   account:create-admin -email admin@example.com -name "Maria Perez" -role admin
 ```
+
+On a SQLite database it works the same way and creates the account in
+the file, but `serve` still cannot serve a site from that file, see
+[on a SQLite database](#on-a-sqlite-database). On a new empty file,
+two `account:create-admin` runs started at the same moment can stop
+with `the database is busy`, as two `migrate` runs can. The run that
+stops creates no account, so run it again.
 
 ### account:disable
 
@@ -367,9 +438,13 @@ covers the whole upgrade.
 gophenberg account:list [flags]
 ```
 
-Lists every account with its role, or a dash when it holds none, and
-whether it is enabled. With `-json` it answers one document holding
-each account's `id`, `email`, `name`, `role` and `disabled`.
+Lists every account, ordered by display name, with its role, or a
+dash when it holds none, and whether it is enabled. With `-json` it
+answers one document holding each account's `id`, `email`, `name`,
+`role` and `disabled`. On a SQLite database a letter with an accent
+sorts after z, so Álvaro lists after Zoe. PostgreSQL follows the
+database's own collation, so a database the official PostgreSQL image
+made, under `en_US.utf8`, lists Álvaro beside alba.
 
 ### account:records
 

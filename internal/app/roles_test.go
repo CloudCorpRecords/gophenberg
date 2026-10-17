@@ -99,7 +99,7 @@ func TestDeclareRolesRefusesANewCapabilityOutsideThePluginsPrefix(t *testing.T) 
 	err := declareRoles(goncierge.New(), role.Core(), []sdk.Plugin{declaringRole("notes", "archivist", "manage_archive")})
 
 	if !errors.Is(err, goncierge.ErrOutsidePrefix) || !strings.Contains(err.Error(), "plugin notes") {
-		t.Errorf("declareRoles() = %v, want the prefix refusal naming the plugin", err)
+		t.Errorf("declareRoles() = %v, want the prefix error naming the plugin", err)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestDeclareRolesRefusesAnAddOnRegisteredBeforeItsParent(t *testing.T) {
 		t.Errorf("declareRoles() with the parent first = %v, want the add-on's grant accepted", inOrder)
 	}
 	if !errors.Is(early, goncierge.ErrOutsidePrefix) || !strings.Contains(early.Error(), "plugin archive") {
-		t.Errorf("declareRoles() with the add-on first = %v, want the prefix refusal naming the add-on", early)
+		t.Errorf("declareRoles() with the add-on first = %v, want the prefix error naming the add-on", early)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestDeclareRolesRefusesACoreTableNoRoleAdministers(t *testing.T) {
 	err := declareRoles(goncierge.New(), core, nil)
 
 	if err == nil || !strings.Contains(err.Error(), string(role.ManageUsers)) {
-		t.Errorf("declareRoles() = %v, want a refusal naming the capability no role carries", err)
+		t.Errorf("declareRoles() = %v, want an error naming the capability no role carries", err)
 	}
 }
 
@@ -155,14 +155,14 @@ func TestDeclareRolesRefusesACoreTableTheRegistryRefuses(t *testing.T) {
 	err := declareRoles(goncierge.New(), []goncierge.Role{{Name: "Admin"}}, nil)
 
 	if !errors.Is(err, goncierge.ErrInvalidName) {
-		t.Errorf("declareRoles() = %v, want the registry's name refusal", err)
+		t.Errorf("declareRoles() = %v, want the registry's name error", err)
 	}
 }
 
 func TestComposeHoldsTheRolesThePluginsDeclare(t *testing.T) {
 	t.Parallel()
 
-	built, err := compose(t.Context(), composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
+	built, err := compose(composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
 		func(sdk.Deps) ([]sdk.Plugin, error) {
 			return []sdk.Plugin{declaringRole("notes", "archivist", "notes.manage")}, nil
 		})
@@ -181,7 +181,7 @@ func TestComposeKeepsTheRegistryItIsHanded(t *testing.T) {
 
 	handed := goncierge.New()
 
-	built, err := compose(t.Context(), composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4, roles: handed},
+	built, err := compose(composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4, roles: handed},
 		noPlugins)
 	if err != nil {
 		t.Fatalf("compose() error = %v, want the core's roles declared", err)
@@ -196,13 +196,13 @@ func TestComposeKeepsTheRegistryItIsHanded(t *testing.T) {
 func TestComposeRefusesAPluginDeclarationTheRulesRefuse(t *testing.T) {
 	t.Parallel()
 
-	_, err := compose(t.Context(), composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
+	_, err := compose(composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
 		func(sdk.Deps) ([]sdk.Plugin, error) {
 			return []sdk.Plugin{declaringRole("notes", "archivist", "manage_archive")}, nil
 		})
 
 	if !errors.Is(err, goncierge.ErrOutsidePrefix) || !strings.Contains(err.Error(), "plugin notes") {
-		t.Errorf("compose() = %v, want the prefix refusal naming the plugin", err)
+		t.Errorf("compose() = %v, want the prefix error naming the plugin", err)
 	}
 }
 
@@ -211,12 +211,12 @@ func TestComposeKeepsARegistrationFailureBesideTheDeclarationItBroke(t *testing.
 
 	failed := errors.New("plugin notes: a setting is missing")
 
-	_, err := compose(t.Context(), composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
+	_, err := compose(composeConfig{databaseURL: emptyDatabaseURL(t), fieldDepth: 4},
 		func(sdk.Deps) ([]sdk.Plugin, error) {
 			return []sdk.Plugin{declaringRole("notes-tags", role.Editor, "notes.manage")}, failed
 		})
 
 	if !errors.Is(err, failed) || !errors.Is(err, goncierge.ErrOutsidePrefix) {
-		t.Errorf("compose() = %v, want the registration failure beside the prefix refusal", err)
+		t.Errorf("compose() = %v, want the registration failure beside the prefix error", err)
 	}
 }

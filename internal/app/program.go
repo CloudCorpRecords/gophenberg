@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 
+	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole"
 	accounts "github.com/gopherium/framework/gonsole/auth"
@@ -17,7 +18,8 @@ import (
 // Program returns the gophenberg command line over getenv and the compiled plugins.
 func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, error)) gonsole.Program {
 	roles := goncierge.New()
-	accountCommands := accountConfig(roles)
+	accountCommands := accountConfig(roles, getenv)
+	composed := &sitePool{}
 	return gonsole.Program{
 		Name:       "gophenberg",
 		Title:      "Gophenberg",
@@ -25,12 +27,13 @@ func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, e
 		Footer:     "Every command is described at https://docs.gophenberg.org/self-hosting/commands/",
 		Env:        settingsEnv(getenv),
 		Database:   "DATABASE_URL",
-		Serve:      serve(plugins),
+		Open:       handleOpener(getenv),
+		Serve:      postgresOnly(getenv, "serve", serve(plugins)),
 		Validate:   validate(accountCommands),
-		Migrations: migrations(),
-		Seed:       seedSite,
+		Migrations: migrations(getenv),
+		Seed:       postgresOnly(getenv, "seed", composed.seed),
 		Commands:   append(accounts.Commands(accountCommands), accounts.Records(accountCommands)),
-		Plugins:    loadPlugins(plugins, roles),
+		Plugins:    loadPlugins(plugins, roles, composed),
 		Authorize:  accounts.Authorize(accountCommands),
 		Record:     accounts.Record(accountCommands),
 	}
@@ -43,17 +46,28 @@ func serve(plugins func(sdk.Deps) ([]sdk.Plugin, error)) func(context.Context, g
 	}
 }
 
-// validate returns the check of every setting the site serves under and the account hooks of cfg read.
+// validate returns the check of every setting the site serves under, the SQLite ones on SQLite, and cfg's hooks.
 func validate(cfg accounts.Config) func(context.Context, gonsole.Call) error {
 	return func(_ context.Context, call gonsole.Call) error {
-		if _, err := loadRunConfig(call.Env.Getenv); err != nil {
+		settings, err := loadRunConfig(call.Env.Getenv)
+		if err != nil {
 			return err
+		}
+		if onSQLite(settings.databaseURL) {
+			if err := checkSQLite(call.Env, settings.databaseURL); err != nil {
+				return err
+			}
 		}
 		return cfg.Validate(call.Env)
 	}
 }
 
-// seedSite stores the demo data in the database the call's settings name.
-func seedSite(ctx context.Context, call gonsole.Call) error {
-	return seedDemoData(ctx, call.Env.Getenv, call.Stdout)
+// sitePool holds the PostgreSQL handle of the site the run's plugin registration composed, nil on SQLite or describing.
+type sitePool struct {
+	handle *dbkitpg.Handle
+}
+
+// seed stores the demo data on the pool of the site the run composed.
+func (p *sitePool) seed(ctx context.Context, call gonsole.Call) error {
+	return seedDemoData(ctx, p.handle.Pool, call.Env.Getenv, call.Stdout)
 }

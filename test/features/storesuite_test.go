@@ -4,6 +4,7 @@ package features_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gopherium/gouncer"
+	"github.com/gopherium/gouncer/authkit/storetest"
 
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
 	"github.com/gopherium/gophenberg/internal/media/mediatest"
@@ -96,6 +98,21 @@ func TestMediaStoreSuite(t *testing.T) {
 	t.Parallel()
 
 	mediatest.Run(t, memoryMediaStores)
+}
+
+func TestUserStoreSuite(t *testing.T) {
+	t.Parallel()
+
+	storetest.Run(t, func(*testing.T) storetest.Fixture {
+		accounts := newMemoryStore()
+		return storetest.Fixture{
+			Store: accounts,
+			Plant: func(_ context.Context, token gouncer.Token) error {
+				accounts.Tokens[string(token.TokenHash)] = token
+				return nil
+			},
+		}
+	})
 }
 
 func TestSiteSettingStoreSuite(t *testing.T) {

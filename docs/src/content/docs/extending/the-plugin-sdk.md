@@ -28,7 +28,7 @@ each version and how to move your plugin to it.
 | Field | What it is |
 | --- | --- |
 | `DB` | The plugin's share of the site's database, described [below](#the-database) |
-| `DatabaseURL` | The PostgreSQL connection string, for a plugin that still opens its own connection |
+| `DatabaseURL` | The PostgreSQL connection string, for a plugin that still opens its own connection. Empty on a SQLite database |
 | `Content` | A read view of published content |
 | `Accounts` | Reads the names, roles and avatars of many accounts in one call, described [below](#reading-account-names) |
 | `Env` | Reads the settings under the `GOPHENBERG_` prefix, for the plugin's own configuration |
@@ -65,7 +65,8 @@ does that. Commands such as `list`, `check` and `migrate` register
 every plugin and stop it again without ever starting it. Only
 `serve` starts the plugins. So `Stop` must work even when `Start`
 never ran, and return by the time its context ends. When `list` or
-`help` registers the plugins, `DatabaseURL` can be empty.
+`help` registers the plugins, `DatabaseURL` can be empty. On a SQLite
+database it is always empty.
 
 When a plugin fails to register or to declare its types, Gophenberg
 stops every plugin that registered. When one fails to start, it
@@ -86,7 +87,7 @@ _, err := p.db.Exec(ctx, "INSERT INTO greetings (name) VALUES ($1)", name)
 - `Exec`, `Query` and `QueryRow` take PostgreSQL's `$1`, `$2`
   placeholders. `Begin` starts a transaction that offers the same
   three, plus `Commit` and `Rollback`. `Engine` names the engine,
-  `sdk.Postgres` today.
+  `sdk.Postgres` on PostgreSQL and `sdk.SQLite` on SQLite.
 - Each statement, open result set and transaction holds one slot
   until it ends, so close every `Rows`. The share holds
   `GOPHENBERG_PLUGIN_DB_CONNS` slots for each plugin, 4 by default.
@@ -101,6 +102,15 @@ _, err := p.db.Exec(ctx, "INSERT INTO greetings (name) VALUES ($1)", name)
 - The share opens once every plugin registered. Keep `deps.DB` in
   `Register` and use it from `Start` on. A statement during
   `Register` is refused.
+- On a SQLite database the share stays closed for now. `Exec`,
+  `Query`, `QueryRow` and `Begin` each answer
+  `the plugin database share is closed while GOPHENBERG_DATABASE_URL names a SQLite database`.
+  A `Migrate` that runs through `deps.DB` gets the same error, so
+  `gophenberg migrate` stops there. `Engine` tells a plugin which
+  database it runs on before it sends a statement.
+- On a SQLite database the content reads of `Deps` are not ready yet
+  either, so check `deps.DB.Engine()` first and skip them when it
+  answers `sdk.SQLite`. The account reads work there.
 
 ## Reading content
 
@@ -135,6 +145,8 @@ draw, so a page of fifteen authors costs one read:
 ```go
 people, err := deps.Accounts.People(ctx, authorIDs, 96)
 ```
+
+`People` works the same way on a SQLite database.
 
 The answer is a map keyed by `sdk.ID`. Each `sdk.Person` carries
 `ID`, `Name`, `Role`, `Avatar` and `Disabled`. `Name` is the display
@@ -517,7 +529,7 @@ the action.
 Each version below says what it adds and what it changes. When a
 change stops a plugin from compiling, **To move** lists the steps.
 To take a version, pass its number to `go get`, such as
-`github.com/gopherium/gophenberg/sdk@v0.4.0`.
+`github.com/gopherium/gophenberg/sdk@v0.5.0`.
 
 Your plugin compiles into Gophenberg, so it builds against the SDK
 inside the Gophenberg you build. Build with one that holds the
@@ -594,11 +606,12 @@ database.
 Tagged 2026-10-08. The SDK becomes a Go module of its own.
 
 Before this version, the `sdk` package lived inside the Gophenberg
-module, and its last release there was Gophenberg v0.18.1. The import
-path stays `github.com/gopherium/gophenberg/sdk`, so your `import`
-lines do not change. What changes is the module your plugin requires,
-and the SDK now names only its own types and the standard library's.
-Compared with Gophenberg v0.18.1:
+module, and its last release there was Gophenberg v0.18.2, which
+holds the same package as v0.18.1. The import path stays
+`github.com/gopherium/gophenberg/sdk`, so your `import` lines do not
+change. What changes is the module your plugin requires, and the SDK
+now names only its own types and the standard library's. Compared
+with Gophenberg v0.18.2:
 
 - The SDK is the module `github.com/gopherium/gophenberg/sdk`. Its
   versions come from tags such as `sdk/v0.1.0`.
@@ -629,8 +642,9 @@ Compared with Gophenberg v0.18.1:
    go mod tidy
    ```
 
-   Keep no requirement on Gophenberg v0.18.1 or earlier. It holds the
-   `sdk` package too, so Go stops the build with `ambiguous import`.
+   Keep no requirement on Gophenberg v0.18.2 or earlier. Each of those
+   releases holds the `sdk` package too, so Go stops the build with
+   `ambiguous import`.
 2. Where you still need a `uuid.UUID`, convert it. Both are sixteen
    bytes, so `uuid.UUID(item.ID)` and `sdk.ID(someUUID)` work.
 3. A command reads its settings and the database address from the

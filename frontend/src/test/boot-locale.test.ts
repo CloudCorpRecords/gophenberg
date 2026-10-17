@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
+import { listChromeCatalogFor } from '@gopherium/godmin'
 import { dateI18n, getDate, getSettings, setSettings } from '@wordpress/date'
 import { __, getLocaleData, resetLocaleData } from '@wordpress/i18n'
 import { afterEach, beforeEach, expect, test } from 'vitest'
@@ -31,36 +32,32 @@ function serveLocale(locale: string) {
 	server.use(http.get('/api/locale', () => HttpResponse.json({ locale, supported: ['en-US', locale] })))
 }
 
-test('hands the dates the month and weekday names of the reader language and its first weekday', async () => {
-	serveLocale('es-ES')
-
-	await startLocale()
-
-	expect(getSettings().l10n).toMatchObject({
-		locale: 'es-ES',
+test.each([
+	{
+		reader: 'es-ES',
 		months: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
 			'noviembre', 'diciembre'],
 		monthsShort: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
 		weekdays: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
 		weekdaysShort: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
-		startOfWeek: 1,
-	})
-})
-
-test('hands the dates the words the sources are written in, the weeks starting on Monday', async () => {
-	serveLocale('en-US')
-
-	await startLocale()
-
-	expect(getSettings().l10n).toMatchObject({
-		locale: 'en-US',
+	},
+	{
+		reader: 'en-US',
 		months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
 			'November', 'December'],
 		monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
 		weekdays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
 		weekdaysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-		startOfWeek: 1,
-	})
+	},
+])('hands the dates the month and weekday names of $reader, the weeks starting on Monday', async (
+	{ reader, ...words },
+) => {
+	serveLocale(reader)
+
+	await startLocale()
+
+	expect(new Intl.Locale(getSettings().l10n.locale).baseName).toBe(reader)
+	expect(getSettings().l10n).toMatchObject({ ...words, startOfWeek: 1 })
 })
 
 test.each([
@@ -81,10 +78,10 @@ test.each([
 	{ named: 'lunes', first: 1 },
 ])('starts the weeks on day $first when the catalogue names $named as the first day', async ({ named, first }) => {
 	serveLocale('es-ES')
-	const own = { '': { 'plural-forms': 'nplurals=2; plural=(n != 1);' }, 'start of week\u00041': [named] }
+	const chrome = { ...(await listChromeCatalogFor('es-ES')), 'start of week\u00041': [named] }
 	const none = async () => undefined
 
-	await startLocale({ own: async () => own, editor: none, brick: none, chrome: none })
+	await startLocale({ own: none, editor: none, brick: none, chrome: async () => chrome })
 
 	expect(getSettings().l10n.startOfWeek).toBe(first)
 })

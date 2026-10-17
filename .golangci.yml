@@ -87,12 +87,6 @@ linters:
         linters:
           - cyclop
           - gocognit
-      - path: ^internal/postgres/(migrate|migrate_test|export_test|content(_types|_paths)?_migration_test)\.go$
-        linters:
-          - forbidigo
-      - path: ^internal/testdb/testdb_test\.go$
-        linters:
-          - forbidigo
 
 formatters:
   enable:

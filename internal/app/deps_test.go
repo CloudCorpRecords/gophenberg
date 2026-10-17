@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole/testkit"
 	"github.com/gopherium/framework/pluginkit"
 	"github.com/gopherium/gouncer/avatar"
@@ -50,7 +51,7 @@ func TestComposeRegistersThePluginsWithoutMigrating(t *testing.T) {
 	getenv := testkit.Getenv(map[string]string{"GOPHENBERG_FEED_ITEMS": "7"})
 	var handed sdk.Deps
 
-	built, err := compose(t.Context(), composeConfig{databaseURL: databaseURL, fieldDepth: 4, getenv: getenv},
+	built, err := compose(composeConfig{databaseURL: databaseURL, fieldDepth: 4, getenv: getenv},
 		func(deps sdk.Deps) ([]sdk.Plugin, error) {
 			handed = deps
 			return keeping(&keeper{})(deps)
@@ -98,7 +99,7 @@ func TestComposeReadsTheAvatarSettingsWithTheirDefaults(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			built, err := compose(t.Context(), composeConfig{
+			built, err := compose(composeConfig{
 				databaseURL: unreachableDatabaseURL, fieldDepth: 4, getenv: testkit.Getenv(asked.env),
 			}, noPlugins)
 			if err != nil {
@@ -125,7 +126,7 @@ func TestComposeRefusesEachBadAvatarSetting(t *testing.T) {
 		t.Run(bad.name+"="+bad.value, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := compose(t.Context(), composeConfig{
+			_, err := compose(composeConfig{
 				databaseURL: unreachableDatabaseURL, fieldDepth: 4,
 				getenv: testkit.Getenv(map[string]string{bad.name: bad.value}),
 			}, noPlugins)
@@ -143,7 +144,7 @@ func TestComposeInDescribeModeNeedsNoDatabaseSetting(t *testing.T) {
 
 	var handed sdk.Deps
 
-	built, err := compose(t.Context(), composeConfig{fieldDepth: 4}, func(deps sdk.Deps) ([]sdk.Plugin, error) {
+	built, err := compose(composeConfig{describe: true, fieldDepth: 4}, func(deps sdk.Deps) ([]sdk.Plugin, error) {
 		handed = deps
 		return keeping(&keeper{})(deps)
 	})
@@ -163,6 +164,28 @@ func TestComposeInDescribeModeNeedsNoDatabaseSetting(t *testing.T) {
 	}
 }
 
+func TestPluginsAreLentNoDatabaseAddressOnSQLite(t *testing.T) {
+	t.Parallel()
+
+	deps := pluginDeps(composeConfig{databaseURL: sqliteAddress}, site{lane: &pluginLane{sqlite: true}}, nil)
+
+	if deps.DatabaseURL != "" {
+		t.Errorf("DatabaseURL = %q, want no address lent on a SQLite database", deps.DatabaseURL)
+	}
+}
+
+func TestReadyOpensNoPluginShareOnSQLite(t *testing.T) {
+	t.Parallel()
+
+	built := site{lane: &pluginLane{sqlite: true}, roles: goncierge.New()}
+
+	err := built.ready(laneSettings{conns: 4, reserve: 2, queryTimeout: time.Second, txTimeout: time.Second})
+
+	if err != nil || built.lane.share.Load() != nil {
+		t.Errorf("ready() = %v with share %v, want nil and the share left closed", err, built.lane.share.Load())
+	}
+}
+
 func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +202,7 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRunConfig() error = %v, want nil", err)
 	}
-	built, err := compose(t.Context(), composeOf(settings, getenv), noPlugins)
+	built, err := compose(composeOf(settings, getenv), noPlugins)
 	if err != nil {
 		t.Fatalf("compose() error = %v, want nil", err)
 	}

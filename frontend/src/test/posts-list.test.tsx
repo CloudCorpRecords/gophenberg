@@ -397,15 +397,36 @@ test('draws the author icon 4px into a 24px box before the name on a site showin
 	expect(getComputedStyle(icon).getPropertyValue('margin-inline-start')).toBe('-4px')
 })
 
-test('gives the author name the WordPress ellipsis rules and its row the whole cell', async () => {
-	serveRows([PUBLISHED], 1, 20)
-	renderAt('/content/post')
+/** A type the site declares, listed in the same table as the built-in ones. */
+const BOOK_TYPE = {
+	...POST_TYPE,
+	key: 'book',
+	singular_label: 'Book',
+	plural_label: 'Books',
+	route_word: 'books',
+	default: false,
+}
 
-	const name = (await rowOf('Welcome to Gophenberg')).getByText('Maria Perez')
-	const row = name.parentElement as HTMLElement
-	expect([getComputedStyle(name).overflow, getComputedStyle(name).textOverflow]).toEqual(['hidden', 'ellipsis'])
-	expect(getComputedStyle(row).width).toBe('100%')
-})
+test.each([
+	{ listed: 'posts', type: POST_TYPE },
+	{ listed: 'pages', type: PAGE_TYPE },
+	{ listed: 'a declared type', type: BOOK_TYPE },
+])(
+	'gives an author name on $listed the WordPress ellipsis rules, and its column the 15ch floor of a DataViews cell',
+	async ({ type }) => {
+		server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, PAGE_TYPE, BOOK_TYPE] })))
+		serveRows([{ ...PUBLISHED, type: type.key }], 1, 20)
+		renderAt(`/content/${type.key}`)
+
+		const name = (await rowOf('Welcome to Gophenberg')).getByText('Maria Perez')
+		const row = name.parentElement as HTMLElement
+		const cell = row.closest('td') as HTMLElement
+		expect([getComputedStyle(name).overflow, getComputedStyle(name).textOverflow]).toEqual(['hidden', 'ellipsis'])
+		expect(getComputedStyle(row).width).toBe('100%')
+		expect(cell.style.maxWidth).toBe('15ch')
+		expect(screen.getByRole('columnheader', { name: 'Author' }).style.maxWidth).toBe('15ch')
+	},
+)
 
 test('shows the excerpt under the title', async () => {
 	serveRows([{ ...PUBLISHED, excerpt: 'A short tour of the editor.' }], 1, 20)

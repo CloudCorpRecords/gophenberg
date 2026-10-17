@@ -72,8 +72,12 @@ github.com/gopherium/framework/goncierge v0.1.0 h1:9Zn2zxAuWTrhKeMEHNSncAb1jmjFr
 github.com/gopherium/framework/goncierge v0.1.0/go.mod h1:ekTJKyCbU0s659tjHvH/sjEZfPp2S4iuOGaLRRULZuA=
 github.com/gopherium/framework/gonsole v0.7.0 h1:JluS72WcE6LXcBihJB+5zdhX7IUiLZxv0g059z8T3/U=
 github.com/gopherium/framework/gonsole v0.7.0/go.mod h1:6ZLlrT2q5W8Pk2BrD7WgorL6b68nx2n2OX1Rg8FKwAo=
-github.com/gopherium/framework/gonsole/auth v0.7.0 h1:e1s0LJlLK2zPmrzexzMix7pkiTIXqRe0bd83MzYsRiE=
-github.com/gopherium/framework/gonsole/auth v0.7.0/go.mod h1:t9PxTMk18NqcoXgxokdUQnOvNPYfcW2HXVjx8fPxei0=
+github.com/gopherium/framework/gonsole/auth v0.8.0 h1:WddQbi5eRQs98tTR8qx2bLg8clDeW99Kz6mM1T03pvQ=
+github.com/gopherium/framework/gonsole/auth v0.8.0/go.mod h1:Lms8wUhRpxvQd3M8kv1tpMS9Pox0Qh/M+1j4HjLq8PE=
+github.com/gopherium/framework/gonsole/auth/postgres v0.2.0 h1:cGYiPUUfa0arwnvLdnWJshgLU/oXF+gYRAhZUvqc8nM=
+github.com/gopherium/framework/gonsole/auth/postgres v0.2.0/go.mod h1:zNqYCZOIJ+j2RfncueejQ8Tklhvy4xQdWTrF9S8X+GQ=
+github.com/gopherium/framework/gonsole/auth/sqlite v0.2.0 h1:oKuUsdcv+rvaDDdka3l1o+kq3SZSVsSQzhZ4l4kqDYc=
+github.com/gopherium/framework/gonsole/auth/sqlite v0.2.0/go.mod h1:2/v98N1neXVDdJKBVaH7z9HCXRE2PU/Ktwt/V2nO5xE=
 github.com/gopherium/framework/pluginkit v0.6.0 h1:hE/w3Tg6Y0SyhEuBZXvkqGo4AvrgU0Lr3RZ7xsjHfAI=
 github.com/gopherium/framework/pluginkit v0.6.0/go.mod h1:PJqz8GTbhNPTYZB2IPOd9tyjWB3COO5cdRYAoLENRCM=
 github.com/gopherium/gouncer v0.5.0 h1:rHiZfXmwhTgTaEgvFfq5csDmRyfbGtHIk8ySwS+Pyco=

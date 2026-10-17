@@ -11,15 +11,18 @@ import (
 	"time"
 
 	"github.com/gopherium/framework/dbkit"
+	dbkitpg "github.com/gopherium/framework/dbkit/postgres"
 	"github.com/gopherium/framework/gonsole"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/gopherium/gophenberg/sdk"
 )
 
-// errLaneUnopened refuses a statement a plugin runs before every plugin registered.
+// errLaneUnopened refuses a statement a plugin runs before every plugin registered and each one while describing.
 var errLaneUnopened = errors.New("the plugin database share opens once every plugin registered")
+
+// errLaneOnSQLite refuses every statement a plugin runs on a SQLite database, where the share stays closed.
+var errLaneOnSQLite = errors.New("the plugin database share is closed while GOPHENBERG_DATABASE_URL names " +
+	"a SQLite database")
 
 // maxPluginDBConns is the most slots one plugin may be given in the share.
 const maxPluginDBConns = 1000
@@ -54,44 +57,37 @@ func laneSettingsFrom(getenv func(string) string) (laneSettings, error) {
 	return laneSettings{conns: conns, reserve: reserve, queryTimeout: queryTimeout, txTimeout: txTimeout}, nil
 }
 
-// pluginLane is the one database share every plugin draws from, opened once every plugin registered.
+// pluginLane is the one database share every plugin draws from, opened once every plugin registered, never on SQLite.
 type pluginLane struct {
 	sdk.HostOnly
-	share atomic.Pointer[dbkit.Share]
-	db    *sql.DB
+	sqlite bool
+	share  atomic.Pointer[dbkit.Share]
 }
 
-// open lends the share over the pool, with the setting's slots for each registered plugin, leaving the reserve free.
-func (l *pluginLane) open(pool *pgxpool.Pool, plugins int, lane laneSettings) error {
-	connections := int(pool.Config().MaxConns)
+// open lends the share over the handle's view, with the setting's slots for each plugin, leaving the reserve free.
+func (l *pluginLane) open(handle *dbkitpg.Handle, plugins int, lane laneSettings) error {
+	connections := int(handle.Pool.Config().MaxConns)
 	room := connections - lane.reserve
 	if room < 1 {
 		return fmt.Errorf("GOPHENBERG_PLUGIN_DB_RESERVE=%d leaves plugins no connection in a pool of %d, "+
-			"raise pool_max_conns in GOPHENBERG_DATABASE_URL or lower the reserve", lane.reserve, connections)
+			"raise GOPHENBERG_DATABASE_MAX_CONNS or lower the reserve", lane.reserve, connections)
 	}
-	db := stdlib.OpenDBFromPool(pool)
-	share, err := dbkit.NewShare(db, dbkit.Postgres, dbkit.ShareOptions{
+	share, err := dbkit.NewShare(handle.DB, dbkit.Postgres, dbkit.ShareOptions{
 		ID: "plugins", Slots: min(lane.conns*max(plugins, 1), room),
 		StatementTimeout: lane.queryTimeout, TransactionTimeout: lane.txTimeout,
 	})
 	if err != nil {
-		_ = db.Close()
 		return err
 	}
-	l.db = db
 	l.share.Store(share)
 	return nil
 }
 
-// close closes the handle the share runs on, once it opened.
-func (l *pluginLane) close() {
-	if l.db != nil {
-		_ = l.db.Close()
-	}
-}
-
-// opened returns the share, refusing while the plugins register.
+// opened returns the share, refusing while the plugins register and on a SQLite database.
 func (l *pluginLane) opened() (*dbkit.Share, error) {
+	if l.sqlite {
+		return nil, errLaneOnSQLite
+	}
 	if share := l.share.Load(); share != nil {
 		return share, nil
 	}
@@ -126,7 +122,10 @@ func (l *pluginLane) QueryRow(ctx context.Context, query string, args ...any) sd
 }
 
 // Engine names the engine the share runs on.
-func (*pluginLane) Engine() sdk.Engine {
+func (l *pluginLane) Engine() sdk.Engine {
+	if l.sqlite {
+		return sdk.SQLite
+	}
 	return sdk.Postgres
 }
 
@@ -186,12 +185,12 @@ type refusedRow struct {
 	err error
 }
 
-// Scan answers the refusal.
+// Scan answers the error the query was refused with.
 func (r refusedRow) Scan(...any) error {
 	return r.err
 }
 
-// Err answers the refusal.
+// Err answers the error the query was refused with.
 func (r refusedRow) Err() error {
 	return r.err
 }
