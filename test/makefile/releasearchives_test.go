@@ -43,7 +43,7 @@ type archiveFacts struct {
 func TestMakeReleaseArchivesPacksEachTargetFlatTheSameWayEveryTime(t *testing.T) {
 	t.Parallel()
 
-	root := archivesRepo(t)
+	root := packingRepo(t)
 	host := runtime.GOOS + "/" + runtime.GOARCH
 	other := anotherPlatform(host)
 	args := []string{"release-archives", "RELEASE_TARGETS=" + host + " " + other, "RELEASE_STAMP=official",
@@ -83,7 +83,7 @@ func TestMakeReleaseArchivesPacksEachTargetFlatTheSameWayEveryTime(t *testing.T)
 func TestMakeReleaseArchivesStampsNothingAndDatesTheLastCommitUnlessTold(t *testing.T) {
 	t.Parallel()
 
-	root := archivesRepo(t)
+	root := packingRepo(t)
 	host := runtime.GOOS + "/" + runtime.GOARCH
 
 	entries := readArchive(t, packedArchive(t, root, host, "release-archives", "RELEASE_TARGETS="+host))
@@ -105,7 +105,7 @@ func TestMakeReleaseArchivesStampsNothingAndDatesTheLastCommitUnlessTold(t *test
 func TestMakeReleaseArchivesPacksATargetThisMachineCannotRun(t *testing.T) {
 	t.Parallel()
 
-	root := archivesRepo(t)
+	root := packingRepo(t)
 	host := runtime.GOOS + "/" + runtime.GOARCH
 	other := anotherPlatform(host)
 
@@ -144,7 +144,7 @@ func TestMakeReleaseArchivesStopsBeforeBuildingWithoutGNUTar(t *testing.T) {
 func TestMakeReleaseArchivesBuildsItsTargetsAfterABuildRelease(t *testing.T) {
 	t.Parallel()
 
-	root := archivesRepo(t)
+	root := packingRepo(t)
 	other := anotherPlatform(runtime.GOOS + "/" + runtime.GOARCH)
 
 	packed := packedArchive(t, root, other, "build-release", "release-archives", "RELEASE_TARGETS="+other)
@@ -177,7 +177,7 @@ func TestMakeReleaseArchivesPacksTheSameBytesWhateverTheUmask(t *testing.T) {
 // packedUnderUmask packs this machine's archive in a new release repository under the file mode mask, and returns it.
 func packedUnderUmask(t *testing.T, mask string) []byte {
 	t.Helper()
-	root := archivesRepo(t)
+	root := packingRepo(t)
 	platform := runtime.GOOS + "/" + runtime.GOARCH
 	args := []string{"release-archives", "RELEASE_TARGETS=" + platform, "RELEASE_EPOCH=" + strconv.Itoa(releaseEpoch)}
 	path := "PATH=" + filepath.Join(root, "bin") + string(os.PathListSeparator) + os.Getenv("PATH")
@@ -198,11 +198,18 @@ func archivesRepo(t *testing.T) string {
 			t.Skipf("%s is not on PATH, so make release-archives cannot be exercised here", tool)
 		}
 	}
+	return releaseRepo(t, "<p>the built admin</p>")
+}
+
+// packingRepo returns a release repository for a test that packs with the system tar, skipping when it is not GNU tar.
+func packingRepo(t *testing.T) string {
+	t.Helper()
+	root := archivesRepo(t)
 	version, err := exec.Command("tar", "--version").Output()
 	if err != nil || !strings.Contains(string(version), "GNU tar") {
 		t.Skip("tar is not GNU tar, which make release-archives packs with, so it cannot be exercised here")
 	}
-	return releaseRepo(t, "<p>the built admin</p>")
+	return root
 }
 
 // anotherPlatform returns a platform a release builds other than host.
