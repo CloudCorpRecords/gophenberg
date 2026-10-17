@@ -484,9 +484,10 @@ The server refuses to start, and says why, when:
 - `GOPHENBERG_TRUSTED_PROXIES` is not valid CIDR notation.
 - `GOPHENBERG_PUBLIC_URL` is not an `http` or `https` address naming
   only a host.
-- `GOPHENBERG_WEB_DIR` names a folder that holds no `index.html`. The
-  message tells you to unset it to serve the admin built into the
-  binary.
+- `GOPHENBERG_WEB_DIR` names a folder that holds no `index.html`, or
+  one whose `index.html` the server cannot read, such as a page only
+  another user may read. The message names the reason and tells you
+  to unset the setting to serve the admin built into the binary.
 - `GOPHENBERG_FEED_ITEMS` is not a positive whole number.
 - `GOPHENBERG_MEDIA_UPLOAD_CAP_MB` is not a positive whole number, or
   names more megabytes than the server can count in bytes.
