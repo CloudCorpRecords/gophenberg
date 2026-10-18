@@ -45,7 +45,6 @@ export function errorTemplates(): Record<string, string> {
 			'This request carried %(attribute)s, which fields do not take. Reload the page so the admin and the server agree again.',
 			DOMAIN,
 		),
-		check_too_soon: __('Gophenberg checked for updates moments ago. Try again later.', DOMAIN),
 		client_assets_missing: __(
 			'The theme %(name)s does not carry %(path)s as a folder, so its styles and scripts are missing. Package the built theme rather than its source.',
 			DOMAIN,
@@ -550,5 +549,15 @@ export function authTemplates(): Record<string, string> {
 		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
 		role_unknown: __('Nothing declares that role.', DOMAIN),
 		self_role_refused: __('You cannot change your own role.', DOMAIN),
+	}
+}
+
+/**
+ * Returns the message each code the update checks answer with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function updateTemplates(): Record<string, string> {
+	return {
+		check_too_soon: __('Gophenberg checked for updates moments ago. Try again later.', DOMAIN),
 	}
 }

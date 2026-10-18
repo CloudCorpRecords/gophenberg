@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 
 import { errorText } from '../i18n/errors'
-import { errorTemplates } from '../i18n/errorTemplates'
+import { errorTemplates, updateTemplates } from '../i18n/errorTemplates'
 import { repositoryRoot } from '../../scripts/config.ts'
 
 test('reads the message a code stands for', () => {
@@ -34,6 +34,12 @@ test('names the capability a refused request lacks', () => {
 	})
 
 	expect(held).toBe('Your role does not allow manage_themes.')
+})
+
+test('asks a reader to wait after an update check run moments ago', () => {
+	const held = errorText({ error: 'the last check is too recent, so try again later', code: 'check_too_soon' })
+
+	expect(held).toBe('Gophenberg checked for updates moments ago. Try again later.')
 })
 
 test('points a reader at an address that holds nothing back to the link, never to a screen the admin lacks', () => {
@@ -88,7 +94,7 @@ test('carries a message for every code the server can answer with', () => {
 	const emitted = execFileSync('sh', [script], { cwd: repositoryRoot(), encoding: 'utf8' })
 		.split('\n')
 		.filter((held) => held !== '')
-	const held = errorTemplates()
+	const held = { ...errorTemplates(), ...updateTemplates() }
 
 	expect(emitted.filter((code) => held[code] === undefined)).toEqual([])
 })
