@@ -23,6 +23,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/internal/sqlite"
+	"github.com/gopherium/gophenberg/internal/update"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -53,7 +54,7 @@ type site struct {
 	registry   *content.Registry
 	saved      mediahost.Saved
 	library    media.Store
-	settings   content.SiteSettingStore
+	settings   update.Settings
 	readers    content.UserSettingStore
 	release    func()
 	registered []sdk.Plugin

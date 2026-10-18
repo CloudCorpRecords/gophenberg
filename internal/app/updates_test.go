@@ -42,6 +42,23 @@ func (h *heldSettings) Save(_ context.Context, values map[string]string) error {
 	return nil
 }
 
+// Update stores what change makes of the values held under keys, as one write.
+func (h *heldSettings) Update(
+	_ context.Context, keys []string, change func(held map[string]string) (map[string]string, error),
+) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	held := map[string]string{}
+	for _, key := range keys {
+		if value, found := h.values[key]; found {
+			held[key] = value
+		}
+	}
+	values, err := change(held)
+	maps.Copy(h.values, values)
+	return err
+}
+
 // updatesAt returns the update settings for the site, and the store a check keeps its state in.
 func updatesAt(t *testing.T, site *updateSite) (updateSettings, *heldSettings) {
 	t.Helper()
