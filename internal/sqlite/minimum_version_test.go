@@ -75,6 +75,25 @@ func TestRaiseMinimumVersionNeverLowersTheStoredOne(t *testing.T) {
 	}
 }
 
+func TestRaiseFromLeavesAMinimumVersionAnotherBinaryStoredSince(t *testing.T) {
+	t.Parallel()
+
+	db := migrated(t)
+	raiseMinimumVersion(t, db, "0.20.0")
+
+	raised, err := sqlite.RaiseFrom(t.Context(), db, "0.19.0", "0.21.0")
+
+	if err != nil || raised {
+		t.Errorf("RaiseFrom() over a stale 0.19.0 = %v, %v, want nothing raised", raised, err)
+	}
+	if got, _ := sqlite.StoredMinimumVersion(t.Context(), db); got != "0.20.0" {
+		t.Errorf("StoredMinimumVersion() = %q, want the 0.20.0 stored since kept", got)
+	}
+	if raised, err := sqlite.RaiseFrom(t.Context(), db, "0.20.0", "0.21.0"); err != nil || !raised {
+		t.Errorf("RaiseFrom() over the stored 0.20.0 = %v, %v, want 0.21.0 raised", raised, err)
+	}
+}
+
 func TestRaiseMinimumVersionFailsBeforeTheCoreTablesExist(t *testing.T) {
 	t.Parallel()
 
