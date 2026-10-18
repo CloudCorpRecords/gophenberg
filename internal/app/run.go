@@ -52,7 +52,7 @@ func run(
 		return errors.Join(
 			fmt.Errorf("register plugins: %w", built.failed), stopPlugins(ctx, host, settings.serving.StopGrace))
 	}
-	if err := migrate(ctx, settings.databaseURL, built.pgHandle.DB); err != nil {
+	if err := prepareDatabase(ctx, settings, built, logger); err != nil {
 		return errors.Join(err, stopPlugins(ctx, host, settings.serving.StopGrace))
 	}
 
@@ -159,6 +159,8 @@ type runConfig struct {
 	lists server.ListSettings
 
 	cron cronSettings
+
+	superuser superuserPolicy
 }
 
 // servingDefaults are the HTTP timeouts and shutdown graces a site runs under when its environment names none.
@@ -404,7 +406,7 @@ func loadRunConfig(getenv func(string) string) (runConfig, error) {
 	return settings, nil
 }
 
-// sectionsFrom reads the admin list settings, the admin folder and the cron job settings into held.
+// sectionsFrom reads the list settings, the admin folder, the cron job settings and the superuser policy into held.
 func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	lists, err := listSettingsFrom(env)
 	if err != nil {
@@ -414,7 +416,10 @@ func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	if held.webDir, err = webDirFrom(env); err != nil {
 		return err
 	}
-	held.cron, err = cronSettingsFrom(env)
+	if held.cron, err = cronSettingsFrom(env); err != nil {
+		return err
+	}
+	held.superuser, err = superuserPolicyFrom(env)
 	return err
 }
 
