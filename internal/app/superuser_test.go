@@ -41,6 +41,18 @@ func TestSuperuserPolicyIsWarnOrRefuse(t *testing.T) {
 	}
 }
 
+func TestLoadRunConfigRefusesASuperuserPolicyItCannotUse(t *testing.T) {
+	t.Parallel()
+
+	_, err := loadRunConfig(testkit.Getenv(map[string]string{
+		"GOPHENBERG_DATABASE_URL": unreachableDatabaseURL, "GOPHENBERG_SUPERUSER_POLICY": "allow",
+	}))
+
+	if err == nil || !strings.Contains(err.Error(), "GOPHENBERG_SUPERUSER_POLICY") {
+		t.Errorf("loadRunConfig() = %v, want the superuser policy refused", err)
+	}
+}
+
 // askedRole returns a question about the connected role that answers super and err.
 func askedRole(super bool, err error) func(context.Context) (bool, error) {
 	return func(context.Context) (bool, error) {

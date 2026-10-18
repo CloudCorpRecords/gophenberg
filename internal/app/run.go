@@ -56,7 +56,7 @@ func run(
 		return errors.Join(err, stopPlugins(ctx, host, settings.serving.StopGrace))
 	}
 
-	jobs := cronOf(settings.cron, built, logger)
+	jobs := cronOf(settings.cron, built, logger, updateJobs(settings.updates, siteUpdatesOf(settings, built))...)
 
 	walked, err := declareTypes(ctx, built.registry, built.registered, logger)
 	if err != nil {
@@ -113,6 +113,8 @@ func serverConfig(
 		Lists:                settings.lists,
 		Roles:                built.roles,
 		Avatars:              built.avatars,
+		Updates:              siteUpdatesOf(settings, built),
+		UpdatesCheckAge:      settings.updates.screenAge,
 	}
 	cfg.Web = webui.FS()
 	if settings.webDir != "" {
@@ -161,6 +163,8 @@ type runConfig struct {
 	cron cronSettings
 
 	superuser superuserPolicy
+
+	updates updateSettings
 }
 
 // servingDefaults are the HTTP timeouts and shutdown graces a site runs under when its environment names none.
@@ -406,7 +410,7 @@ func loadRunConfig(getenv func(string) string) (runConfig, error) {
 	return settings, nil
 }
 
-// sectionsFrom reads the list settings, the admin folder, the cron job settings and the superuser policy into held.
+// sectionsFrom reads the list, admin folder, cron, superuser and update settings into held.
 func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	lists, err := listSettingsFrom(env)
 	if err != nil {
@@ -419,7 +423,10 @@ func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	if held.cron, err = cronSettingsFrom(env); err != nil {
 		return err
 	}
-	held.superuser, err = superuserPolicyFrom(env)
+	if held.superuser, err = superuserPolicyFrom(env); err != nil {
+		return err
+	}
+	held.updates, err = updateSettingsFrom(env)
 	return err
 }
 

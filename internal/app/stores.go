@@ -62,6 +62,7 @@ type site struct {
 	roles      *goncierge.Registry
 	avatars    avatar.Options
 	cronStore  cron.Store
+	major      func(context.Context) (int, error)
 }
 
 // composeOf returns the values compose reads out of the server settings.
@@ -101,6 +102,7 @@ func postgresStores(cfg composeConfig) (site, error) {
 		readers:   postgres.NewUserSettingStore(pool),
 		release:   func() { _ = handle.Close() },
 		cronStore: postgres.NewCronStore(pool),
+		major:     majorOf(handle.DB),
 	}
 	built.registry = registryFrom(cfg.fieldDepth, built.types)
 	return built, nil
@@ -118,6 +120,7 @@ func sqliteStores(cfg composeConfig) site {
 		readers:   sqlite.NewUserSettingStore(cfg.handle),
 		release:   func() {},
 		cronStore: sqlite.NewCronStore(cfg.handle),
+		major:     noMajor,
 	}
 }
 
