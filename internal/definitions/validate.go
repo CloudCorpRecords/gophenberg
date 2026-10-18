@@ -41,7 +41,8 @@ func validateTypes(declared []TypeDefinition, stored []content.Type) error {
 		if err := siteOwns(stored, d.Key); err != nil {
 			return err
 		}
-		if err := typeFrom(d).Validate(); err != nil {
+		held, _ := typeAmong(stored, d.Key)
+		if err := typeFrom(d).ValidateChange(held); err != nil {
 			return err
 		}
 		if d.Default {

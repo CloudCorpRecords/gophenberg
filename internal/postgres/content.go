@@ -110,6 +110,9 @@ func (s *ContentStore) createHeld(
 			return err
 		}
 		params.Path = content.AddressUnder(prefix, params.Slug)
+		if err := checkPaginationPaths([]string{params.Path}); err != nil {
+			return err
+		}
 		matching, err := declaredValues(ctx, queries, c)
 		if err != nil {
 			return err
@@ -378,11 +381,7 @@ func (s *ContentStore) update(
 		if err := writeRelations(ctx, queries, c, resolved); err != nil {
 			return err
 		}
-		if err := queries.MoveDescendants(ctx, db.MoveDescendantsParams{
-			ID:        c.ID,
-			Path:      path,
-			UpdatedAt: c.UpdatedAt,
-		}); err != nil {
+		if err := moveDescendants(ctx, queries, c.ID, path, c.UpdatedAt); err != nil {
 			return err
 		}
 		if snapshot == nil {
@@ -398,6 +397,9 @@ func (s *ContentStore) update(
 
 // writeContent applies the edited fields, telling a stale write apart from a missing item.
 func writeContent(ctx context.Context, queries *db.Queries, p db.UpdateContentParams) (db.CoreContent, error) {
+	if err := checkPaginationPaths([]string{p.Path}); err != nil {
+		return db.CoreContent{}, err
+	}
 	row, err := queries.UpdateContent(ctx, p)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return row, err
@@ -541,7 +543,7 @@ func valuesDeclared(ctx context.Context, queries *db.Queries, c content.Content)
 var domainWriteErrors = []error{
 	content.ErrNotFound, content.ErrConflict, content.ErrUnknownField, content.ErrNotHierarchical,
 	content.ErrTargetNotFound, content.ErrTargetType, content.ErrParentType, content.ErrParentTrashed,
-	content.ErrCycle,
+	content.ErrCycle, content.ErrReservedAddress,
 }
 
 // writeFailure returns the error the write carries, and wraps anything else.

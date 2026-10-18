@@ -194,6 +194,14 @@ var typeArms = map[string]arm{
 		log:  []step{begun, sent("LockContentType", keyed{"book"}), lockedRoot, rolledBack},
 		ends: content.ErrRouteWordReserved,
 	},
+	"Update taking the root cannot move the previous root under page": {
+		stocked: libraryWith(func(stocked *shelf) { stocked.types[0].PluralLabel = "Page" }),
+		run: func(ctx context.Context, s *Store) (any, error) {
+			return valued(s.Update(ctx, rootBook(true)))
+		},
+		log:  []step{begun, sent("LockContentType", keyed{"book"}), lockedRoot, rolledBack},
+		ends: content.ErrRouteWordReserved,
+	},
 	"Update taking the root from a type with no plural label wraps the label failure": {
 		stocked: libraryWith(func(stocked *shelf) { stocked.types[0].PluralLabel = "" }),
 		run: func(ctx context.Context, s *Store) (any, error) {

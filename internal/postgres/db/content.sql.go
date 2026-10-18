@@ -1015,31 +1015,50 @@ func (q *Queries) LockTypeNesting(ctx context.Context, key string) (bool, error)
 	return hierarchical, err
 }
 
-const moveDescendants = `-- name: MoveDescendants :exec
+const moveDescendants = `-- name: MoveDescendants :many
 WITH RECURSIVE moved AS (
-    SELECT c.id, $3::text AS path
+    SELECT c.id, $1::text AS path, c.path AS previous_path
     FROM core.content c
     WHERE c.id = $2
   UNION ALL
-    SELECT child.id, moved.path || '/' || child.slug
+    SELECT child.id, moved.path || '/' || child.slug, child.path
     FROM core.content child
     JOIN moved ON child.parent_id = moved.id
-) CYCLE id SET looped USING trail
-UPDATE core.content AS p
-SET path = moved.path, updated_at = $1
-FROM moved
-WHERE p.id = moved.id AND p.id <> $2
+) CYCLE id SET looped USING trail,
+rewritten AS (
+    UPDATE core.content AS p
+    SET path = moved.path, updated_at = $3
+    FROM moved
+    WHERE p.id = moved.id AND p.id <> $2
+    RETURNING p.path, moved.previous_path
+)
+SELECT path FROM rewritten WHERE path <> previous_path AND path LIKE 'page/%'
 `
 
 type MoveDescendantsParams struct {
-	UpdatedAt time.Time
-	ID        uuid.UUID
 	Path      string
+	ID        uuid.UUID
+	UpdatedAt time.Time
 }
 
-func (q *Queries) MoveDescendants(ctx context.Context, arg MoveDescendantsParams) error {
-	_, err := q.db.Exec(ctx, moveDescendants, arg.UpdatedAt, arg.ID, arg.Path)
-	return err
+func (q *Queries) MoveDescendants(ctx context.Context, arg MoveDescendantsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, moveDescendants, arg.Path, arg.ID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		items = append(items, path)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const pointingAt = `-- name: PointingAt :many

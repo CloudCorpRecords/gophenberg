@@ -60,6 +60,9 @@ func (r *Resolver) Resolve(ctx context.Context, raw string) (Address, error) {
 		return Address{}, ErrNotFound
 	}
 	address := tidy(raw)
+	if RootPagination(address) {
+		return r.archiveAt(ctx, address)
+	}
 	item, err := r.content.PublishedByPath(ctx, address)
 	if err == nil {
 		return r.itemAt(ctx, item, 1)
@@ -150,6 +153,12 @@ func listingAt(address string) (string, int, error) {
 		return "", 0, ErrNotFound
 	}
 	return root, page, nil
+}
+
+// RootPagination reports whether the address names a positive page of the root listing.
+func RootPagination(address string) bool {
+	word, _, err := listingAt(address)
+	return address != "" && err == nil && word == ""
 }
 
 // cutPageNumber returns the address without its trailing page number, the number, and whether it carried one.

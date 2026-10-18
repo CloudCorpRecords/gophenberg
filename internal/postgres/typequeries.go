@@ -101,12 +101,16 @@ func (q typeQueries) DeferAddressCheck(ctx context.Context) error {
 
 // RetypeContentPaths moves every address of the type off the route word it answered under.
 func (q typeQueries) RetypeContentPaths(ctx context.Context, t typestore.TypeRow, was string) error {
-	return q.queries.RetypeContentPaths(ctx, db.RetypeContentPathsParams{
+	paths, err := q.queries.RetypeContentPaths(ctx, db.RetypeContentPathsParams{
 		RouteWord: t.RouteWord,
 		Was:       was,
 		UpdatedAt: t.UpdatedAt,
 		Key:       t.Key,
 	})
+	if err != nil {
+		return err
+	}
+	return checkPaginationPaths(paths)
 }
 
 // CountNestedContent returns how many items of the type sit inside another.

@@ -128,7 +128,7 @@ type TypeStore interface {
 	AdoptGroup(ctx context.Context, key string) error
 }
 
-// NewType returns a content type ready to store, or the reason it is not one.
+// NewType returns a content type with valid properties, or the reason it is not one.
 func NewType(key, singular, plural, routeWord string) (Type, error) {
 	now := time.Now().UTC()
 	t := Type{
@@ -152,7 +152,7 @@ func NewType(key, singular, plural, routeWord string) (Type, error) {
 // defaultRevisionCap bounds the revisions a new content type keeps.
 const defaultRevisionCap = 100
 
-// Validate reports whether the type may be stored.
+// Validate reports whether the type's properties are valid.
 func (t Type) Validate() error {
 	if !typeWord.MatchString(t.Key) {
 		return ErrInvalidKey
@@ -167,6 +167,17 @@ func (t Type) Validate() error {
 		return err
 	}
 	return t.validateRouteWord()
+}
+
+// ValidateChange reports whether the type may replace stored, or join the registry when stored is zero.
+func (t Type) ValidateChange(stored Type) error {
+	if err := t.Validate(); err != nil {
+		return err
+	}
+	if t.RouteWord == PageWord && (stored.Key != t.Key || stored.RouteWord != PageWord) {
+		return ErrRouteWordReserved
+	}
+	return nil
 }
 
 // validatePageKind reports whether the CMS renders the type's item page.
