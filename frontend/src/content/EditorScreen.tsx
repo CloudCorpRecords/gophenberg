@@ -31,7 +31,7 @@ import { fetchPost } from './api'
 import type { PostDetail } from './api'
 import { PostReadView } from './PostReadView'
 import { writesSettled } from './postWrites'
-import { canvasClass, editorClass, editorSettings, sidebarClass } from './editorSetup'
+import { CANVAS_ROOT, canvasClass, editorClass, editorSettings, sidebarClass } from './editorSetup'
 import { EditorHeader } from './EditorHeader'
 import { EditorSidebar } from './EditorSidebar'
 import { RestoreBanner } from './RestoreBanner'
@@ -134,7 +134,7 @@ function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 								</div>
 								<div className={canvasClass(views.preview)}>
 									<BlockCanvas height="100%" styles={CANVAS_STYLES}>
-										<BlockList />
+										<BlockList {...CANVAS_ROOT} />
 									</BlockCanvas>
 								</div>
 							</div>

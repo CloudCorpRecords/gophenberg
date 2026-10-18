@@ -164,12 +164,13 @@ test('pads the title by the gutter the canvas keeps, measured on the writing are
 	expect(styles).toMatch(/\.gophenberg-editor__title \{[^}]*padding: 32px var\(--gophenberg-canvas-gutter\) 0/)
 })
 
-test('pads the title by the same gutter the canvas body keeps, so title and blocks line up', () => {
-	const gutter = /--gophenberg-canvas-gutter:\s*clamp\(([^)]*)\)/
-	const canvas = CANVAS_STYLES.map((entry) => entry.css).join('\n').match(gutter)
+test('pads the title by the same gutter as the canvas root padding, so title and blocks line up', () => {
+	const canvas = CANVAS_STYLES.map((entry) => entry.css).join('\n')
+	const title = EDITOR_SHEET.match(/--gophenberg-canvas-gutter:\s*clamp\(([^)]*)\)/)?.[1].replace('cqi', 'vw')
 
-	expect(canvas?.[1]).toMatch(/vw/)
-	expect(EDITOR_SHEET.match(gutter)?.[1].replace('cqi', 'vw')).toBe(canvas?.[1])
+	expect(title).toMatch(/vw/)
+	expect(canvas).toContain(`--wp--style--root--padding-left: clamp(${title});`)
+	expect(canvas).toContain(`--wp--style--root--padding-right: clamp(${title});`)
 })
 
 test('leaves the block toolbar to float by its block', async () => {
