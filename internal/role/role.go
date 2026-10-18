@@ -46,6 +46,9 @@ const ManageSettings Capability = "manage_settings"
 // ChangeOthersWork is the capability changing content and media another account wrote.
 const ChangeOthersWork Capability = "change_others_work"
 
+// UpdateCore is the capability reading and running the checks for a newer Gophenberg.
+const UpdateCore Capability = "update_core"
+
 // grant is one role and the capabilities it holds.
 type grant struct {
 	role         string
@@ -54,7 +57,9 @@ type grant struct {
 
 // carried lists every role in declaration order with the capabilities it holds.
 var carried = []grant{
-	{Admin, []Capability{AccessAdmin, ManageUsers, ManageThemes, ManageTypes, ManageSettings, ChangeOthersWork}},
+	{Admin, []Capability{
+		AccessAdmin, ManageUsers, ManageThemes, ManageTypes, ManageSettings, ChangeOthersWork, UpdateCore,
+	}},
 	{Editor, []Capability{AccessAdmin, ChangeOthersWork}},
 	{Author, []Capability{AccessAdmin}},
 	{Member, nil},
