@@ -43,8 +43,9 @@ WordPress editor on a phone:
 - The list view opens over the writing area.
 
 On a screen narrower than 600 pixels, **Save draft** shows as a
-cloud icon and the document name leaves out the post type. At 403
-pixels and narrower the document name leaves the header.
+cloud icon. At 600 pixels and narrower the document name leaves out
+the post type. At 403 pixels and narrower the document name leaves
+the header.
 
 If the window narrows past 782 pixels while the sidebar is open,
 the sidebar closes, and it opens again when the window widens. A
