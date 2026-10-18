@@ -38,16 +38,28 @@ func StoredMinimumVersion(ctx context.Context, db *sql.DB) (string, error) {
 	return minimum, nil
 }
 
-// RaiseMinimumVersion stores minimum on db when the stored one comes before it, never over one stored since.
+// RaiseMinimumVersion stores minimum on db when the stored one comes before it, reading again after a lost race.
 func RaiseMinimumVersion(ctx context.Context, db *sql.DB, minimum string) error {
-	stored, err := StoredMinimumVersion(ctx, db)
-	if err != nil || !version.Before(stored, minimum) {
-		return err
+	for {
+		stored, err := StoredMinimumVersion(ctx, db)
+		if err != nil || !version.Before(stored, minimum) {
+			return err
+		}
+		raised, err := raiseFrom(ctx, db, stored, minimum)
+		if err != nil || raised {
+			return err
+		}
 	}
-	if _, err := db.ExecContext(ctx, minimumVersionRaise, minimumVersionKey, minimum, stored); err != nil {
-		return fmt.Errorf("postgres: raise the stored minimum version to %s: %w", minimum, err)
+}
+
+// raiseFrom stores minimum in place of stored, reporting whether stored was still the stored minimum version.
+func raiseFrom(ctx context.Context, db *sql.DB, stored, minimum string) (bool, error) {
+	result, err := db.ExecContext(ctx, minimumVersionRaise, minimumVersionKey, minimum, stored)
+	if err != nil {
+		return false, fmt.Errorf("postgres: raise the stored minimum version to %s: %w", minimum, err)
 	}
-	return nil
+	rows, err := result.RowsAffected()
+	return rows > 0, err
 }
 
 // missingTable reports whether err is PostgreSQL's answer to a query on a table that does not exist.
