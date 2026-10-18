@@ -25,11 +25,10 @@ function placement(toast: Locator) {
 	return toast.evaluate((element) => {
 		const box = (element.closest('.godmin-toast') as HTMLElement).getBoundingClientRect()
 		const rect = (selector: string) => (document.querySelector(selector) as HTMLElement).getBoundingClientRect()
-		const outline = document.querySelector('.gophenberg-editor__outline')
-		const start = outline === null ? rect('.gophenberg-editor__main').left : outline.getBoundingClientRect().right
+		const writing = rect('.gophenberg-editor__content')
 		return {
 			aboveFoot: Math.round(rect('.gophenberg-editor__foot').top - box.bottom),
-			offCentre: Math.round(Math.abs((box.left + box.right) / 2 - (start + rect('.gophenberg-editor__sidebar').left) / 2)),
+			offCentre: Math.round(Math.abs((box.left + box.right) / 2 - (writing.left + writing.right) / 2)),
 		}
 	})
 }
@@ -53,6 +52,15 @@ test.afterEach(async ({ page }) => {
 })
 
 test('floats a message raised in the editor clear of its footer, over the writing area', async ({ page }) => {
+	const toast = await saveDraft(page)
+
+	await expect.poll(() => placement(toast)).toEqual({ aboveFoot: 16, offCentre: 0 })
+})
+
+test('centres a message over the whole writing area once the settings are closed', async ({ page }) => {
+	await page.getByRole('button', { name: 'Close Settings' }).click()
+	await expect(page.locator('.gophenberg-editor__sidebar')).toBeHidden()
+
 	const toast = await saveDraft(page)
 
 	await expect.poll(() => placement(toast)).toEqual({ aboveFoot: 16, offCentre: 0 })
