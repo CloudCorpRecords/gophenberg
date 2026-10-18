@@ -74,6 +74,13 @@ so it takes the default.
 | `GOPHENBERG_SESSION_SWEEP_INTERVAL` | No | `1h` | How often expired sessions and expired account links are swept |
 | `GOPHENBERG_COMMAND_RECORD_TIMEOUT` | No | `5s` | How long an account command has to store the record of a change it applied, see [the commands](/self-hosting/commands/) |
 | `GOPHENBERG_COMMAND_RECORDS_LIMIT` | No | `50` | How many records `account:records` lists when its `-limit` flag names no other |
+| `GOPHENBERG_UPDATE_CHECKS` | No | `true` | Whether the site checks for a newer Gophenberg on its own. `update:check` and the admin still check when asked |
+| `GOPHENBERG_UPDATE_CHECK_INTERVAL` | No | `12h` | How long after one check the site checks again on its own |
+| `GOPHENBERG_UPDATE_URL` | No | `https://updates.gophenberg.org` | The update site. It must be `https`, or `http` on a loopback host such as `localhost` |
+| `GOPHENBERG_UPDATE_CHANNEL` | No | `stable` | The channel the site follows, in lowercase letters, digits and hyphens |
+| `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary |
+| `GOPHENBERG_UPDATE_TIMEOUT` | No | `30s` | How long a check has to fetch each file |
+| `GOPHENBERG_UPDATES_SCREEN_CHECK_AGE` | No | `1m` | How long after one check the admin waits before it runs another when asked |
 | `GOPHENBERG_FEED_TITLE` | No | `Gophenberg` | The RSS channel title |
 | `GOPHENBERG_FEED_ITEMS` | No | `20` | How many posts the RSS feed carries |
 
@@ -518,8 +525,15 @@ The server refuses to start, and says why, when:
   Write them as durations, `1h`, `90s`, `5m`. Part of a second is
   refused, because the header counts in whole seconds.
 - Any of the theme timings, HTTP timeouts, shutdown graces, cron job
-  timings or the upload timeout is not a positive duration. Write them
-  the way Go does, `30s`, `500ms`, `1m`.
+  timings, update timings or the upload timeout is not a positive
+  duration. Write them the way Go does, `30s`, `500ms`, `1m`.
+- `GOPHENBERG_UPDATE_URL` is not an `https` address, or an `http` one
+  on a loopback host, or it names a user, a query or a fragment.
+- `GOPHENBERG_UPDATE_CHANNEL` holds anything but lowercase letters,
+  digits and hyphens, or does not start with a letter.
+- `GOPHENBERG_TRUSTED_KEYS` names a key that is not a P-256 Multikey,
+  or is set while `GOPHENBERG_UPDATE_URL` is the official update site.
+- `GOPHENBERG_UPDATE_CHECKS` is not `true` or `false`.
 - `GOPHENBERG_THEME_MAX_BACKOFF` stands below
   `GOPHENBERG_THEME_BACKOFF`, which would leave no room to grow.
 - `GOPHENBERG_CRON_LEASE` does not stand above

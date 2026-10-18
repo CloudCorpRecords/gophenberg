@@ -455,6 +455,30 @@ your theme against one of them before updating.
 [Theme compatibility](/themes/compatibility/) explains how long a
 built theme keeps working.
 
+## How a site hears of a new version
+
+Twice a day, on the next visit or when the host's cron calls the cron
+address, a site asks `https://updates.gophenberg.org` for two files:
+the list of the Gophenberg release keys, which the two root keys
+built into the binary sign, and the index of the stable channel,
+which a release key signs. It checks both signatures, refuses a file
+that expired or that is older than the last one it took, and keeps
+what it found for the admin. It installs nothing.
+
+A check sends nothing about the site but the request itself, with
+`Gophenberg/` and its version as its User-Agent. The site's address
+never leaves it.
+
+Run [`gophenberg update:check`](/self-hosting/commands/#updatecheck)
+to check now. A site with no internet access sets
+`GOPHENBERG_UPDATE_CHECKS` to `false`, which stops the checks it
+makes on its own.
+
+To try a release before it reaches every site, point
+`GOPHENBERG_UPDATE_URL` at your own copy of the update site, and list
+the root keys that sign its key list in `GOPHENBERG_TRUSTED_KEYS`.
+See [configuration](/self-hosting/configuration/).
+
 ## Going back to an older version
 
 Every release carries a minimum version, the oldest version allowed to
