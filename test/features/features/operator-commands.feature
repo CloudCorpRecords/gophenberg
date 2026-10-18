@@ -33,7 +33,32 @@ Feature: Operators run Gophenberg from one command line
     Given the settings name no database
     When the operator runs "about -json"
     Then the command succeeds
-    And the answer names the version, the build stamp and the theme kits of this binary
+    And the answer names the version, the build stamp, the minimum version and the theme kits of this binary
+
+  Scenario: Migrating stores the minimum version of this binary
+    When the operator runs "migrate"
+    Then the command succeeds
+    And the database holds the minimum version of this binary
+
+  Scenario: Migrating raises an older minimum version to the one of this binary
+    Given a Gophenberg migrated the database and left the minimum version "0.0.1"
+    When the operator runs "migrate"
+    Then the command succeeds
+    And the database holds the minimum version of this binary
+
+  Scenario: A database a newer Gophenberg migrated stops the migration
+    Given a Gophenberg migrated the database and left the minimum version "99.0.0"
+    When the operator runs "migrate"
+    Then the command exits with code 1
+    And the error says "this database needs Gophenberg 99.0.0 or newer"
+    And the database still holds the minimum version "99.0.0"
+
+  Scenario: A database a newer Gophenberg migrated stops an account command
+    Given a Gophenberg migrated the database and left the minimum version "99.0.0"
+    When the operator creates the administrator "admin@example.com" with a password on standard input
+    Then the command exits with code 1
+    And the error says "restore the backup taken before the update to run an older version"
+    And the database still holds the minimum version "99.0.0"
 
   Scenario: Seeding only previews until it is confirmed
     When the operator runs "seed"
