@@ -19,7 +19,22 @@ func checkPaginationPaths(paths []string) error {
 	return nil
 }
 
-// moveDescendants carries the children to the requested address, refusing a reserved address in the same transaction.
+// checkPaginationEdit refuses a reserved address unless the stored item already occupies it.
+func checkPaginationEdit(ctx context.Context, queries *db.Queries, params db.UpdateContentParams) error {
+	if !content.RootPagination(params.Path) {
+		return nil
+	}
+	stored, err := byID(ctx, queries, params.ID)
+	if err != nil {
+		return err
+	}
+	if stored.Path != params.Path {
+		return content.ErrReservedAddress
+	}
+	return nil
+}
+
+// moveDescendants carries the children to the requested address, refusing a reserved address.
 func moveDescendants(ctx context.Context, queries *db.Queries, params db.MoveDescendantsParams) error {
 	paths, err := queries.MoveDescendants(ctx, params)
 	if err != nil {

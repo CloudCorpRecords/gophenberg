@@ -135,6 +135,13 @@ var typeArms = map[string]arm{
 			Active: true, Origin: "library", CreatedAt: shelvedAt, UpdatedAt: editedAt,
 		},
 	},
+	"Update cannot replace a stored route word with page": {
+		run: func(ctx context.Context, s *Store) (any, error) {
+			return valued(s.Update(ctx, novelUnder("page")))
+		},
+		log:  []step{begun, sent("LockContentType", keyed{"book"}), rolledBack},
+		ends: content.ErrRouteWordReserved,
+	},
 	"Update stopping nesting while items nest answers how many and rolls back": {
 		stocked: libraryWith(func(stocked *shelf) { stocked.nested["book"] = 3 }),
 		run: func(ctx context.Context, s *Store) (any, error) {
