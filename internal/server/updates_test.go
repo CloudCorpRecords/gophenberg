@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -162,9 +163,12 @@ func TestUpdatesCheckAnswersAFailedCheckWithItsStoredResult(t *testing.T) {
 func TestUpdatesCheckMasksAStoreItCannotUse(t *testing.T) {
 	t.Parallel()
 
+	failed := update.Result{FailedAt: at(0), Error: "update: fetch failed"}
+	notStored := fmt.Errorf("%w: %w", update.ErrNotStored, errUpdates)
 	for name, held := range map[string]*storedUpdates{
-		"a result it cannot read": {resultErr: errUpdates},
-		"a check it cannot store": {checkErr: errUpdates},
+		"a result it cannot read":   {resultErr: errUpdates},
+		"a check it cannot store":   {checkErr: errUpdates},
+		"a failure it cannot store": {checked: failed, checkErr: notStored},
 	} {
 		handler, cookie := updatesServer(t, held)
 

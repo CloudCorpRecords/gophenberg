@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net/http"
 	"strconv"
@@ -50,12 +51,20 @@ func (s *server) handleUpdatesCheck(updates UpdateChecks, age time.Duration) htt
 			return
 		}
 		result, err := updates.Check(r.Context())
-		if err != nil && result.FailedAt == nil {
+		if unanswerable(result, err) {
 			respondDomainError(w, err)
 			return
 		}
 		authkit.Respond(w, http.StatusOK, result)
 	}
+}
+
+// unanswerable reports whether a check's failure leaves no stored result to answer with.
+func unanswerable(result update.Result, err error) bool {
+	if errors.Is(err, update.ErrNotStored) {
+		return true
+	}
+	return err != nil && result.FailedAt == nil
 }
 
 // lastCheck returns when the last check ended, a success or a failure, the zero time before any.
