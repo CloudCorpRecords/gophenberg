@@ -52,6 +52,40 @@ func (s *SettingStore) Save(ctx context.Context, values map[string]string) error
 	}))
 }
 
+// Update stores what change makes of the values stored under keys, as one write no other write overlaps.
+func (s *SettingStore) Update(
+	ctx context.Context, keys []string, change func(held map[string]string) (map[string]string, error),
+) error {
+	return failed("updating settings", inTx(ctx, s.handle, func(tx *sql.Tx) error {
+		queries := s.queries.WithTx(tx)
+		held, err := heldSettings(ctx, queries, keys)
+		if err != nil {
+			return err
+		}
+		values, err := change(held)
+		if err != nil {
+			return err
+		}
+		return writeSettings(ctx, queries, values)
+	}))
+}
+
+// heldSettings returns the values stored under keys through queries, leaving out the keys that hold none.
+func heldSettings(ctx context.Context, queries *db.Queries, keys []string) (map[string]string, error) {
+	held := map[string]string{}
+	for _, key := range keys {
+		value, err := queries.GetSetting(ctx, key)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", key, dbsqlite.Classify(err))
+		}
+		held[key] = value
+	}
+	return held, nil
+}
+
 // writeSettings upserts each value through queries in key order and names the key of the first write that fails.
 func writeSettings(ctx context.Context, queries *db.Queries, values map[string]string) error {
 	for _, key := range slices.Sorted(maps.Keys(values)) {

@@ -529,6 +529,10 @@ msgid "Full Size"
 msgstr "Taille originale"
 
 #, fuzzy
+msgid "Gophenberg checked for updates moments ago. Try again later."
+msgstr "Gophenberg a cherché des mises à jour il y a un instant. Réessayez plus tard."
+
+#, fuzzy
 msgid "Gophenberg could not read what your browser sent. Reload the page and try again, and tell whoever looks after your site if it keeps happening."
 msgstr "Gophenberg n'a pas pu lire ce que votre navigateur a envoyé. Rechargez la page et réessayez, et prévenez la personne qui s'occupe de votre site si cela continue."
 

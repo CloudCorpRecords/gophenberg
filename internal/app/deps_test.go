@@ -197,6 +197,7 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 		"GOPHENBERG_UPLOAD_TIMEOUT":            "9m",
 		"GOPHENBERG_CACHE_ASSET_MAX_AGE":       "2h",
 		"GOPHENBERG_AVATARS":                   "off",
+		"GOPHENBERG_UPDATES_SCREEN_CHECK_AGE":  "90s",
 	})
 	settings, err := loadRunConfig(getenv)
 	if err != nil {
@@ -222,6 +223,10 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	}
 	if cfg.Cache != cachePolicyFrom(settings) || cfg.Cache.AssetMaxAge != 2*time.Hour {
 		t.Errorf("Cache = %+v, want the windows the settings name", cfg.Cache)
+	}
+	if cfg.Updates == nil || cfg.UpdatesCheckAge != 90*time.Second {
+		t.Errorf("Updates = %v and UpdatesCheckAge = %v, want the site's checks and 1m30s", cfg.Updates,
+			cfg.UpdatesCheckAge)
 	}
 	if cfg.ThemeTimeout != 7*time.Second || cfg.DefinitionsImportCap != 64<<10 ||
 		cfg.UploadTimeout != 9*time.Minute || cfg.SiteTitle != "Field Notes" {

@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -241,6 +243,94 @@ func TestSettingReportsAHandleItCannotReach(t *testing.T) {
 	}
 	if !strings.HasPrefix(fmt.Sprint(saveErr), "sqlite: writing settings: ") {
 		t.Errorf("Save() on a closed handle error = %v, want the write named", saveErr)
+	}
+}
+
+// counted adds one to the count held, starting from none.
+func counted(held map[string]string) (map[string]string, error) {
+	count, _ := strconv.Atoi(held["count"])
+	return map[string]string{"count": strconv.Itoa(count + 1)}, nil
+}
+
+func TestSettingUpdatesRunOneAfterAnother(t *testing.T) {
+	t.Parallel()
+
+	store := sqlite.NewSettingStore(migrated(t))
+	var group sync.WaitGroup
+	for range 20 {
+		group.Go(func() {
+			if err := store.Update(t.Context(), []string{"count"}, counted); err != nil {
+				t.Errorf("Update() error = %v, want nil", err)
+			}
+		})
+	}
+	group.Wait()
+
+	if got, _, err := store.Lookup(t.Context(), "count"); err != nil || got != "20" {
+		t.Errorf("count after 20 updates at once = %q, %v, want 20", got, err)
+	}
+}
+
+func TestSettingUpdateChangesTheStoredValuesOfItsKeys(t *testing.T) {
+	t.Parallel()
+
+	store := sqlite.NewSettingStore(migrated(t))
+	mustSaveSettings(t, store, map[string]string{"a": "1", "b": "2", "c": "3"})
+	var seen map[string]string
+	change := func(held map[string]string) (map[string]string, error) {
+		seen = held
+		return map[string]string{"a": "10"}, nil
+	}
+
+	err := store.Update(t.Context(), []string{"b", "a", "absent"}, change)
+
+	if want := map[string]string{"a": "1", "b": "2"}; err != nil || !maps.Equal(seen, want) {
+		t.Errorf("Update() = %v with %v held, want nil with %v", err, seen, want)
+	}
+	for key, want := range map[string]string{"a": "10", "b": "2", "c": "3"} {
+		if got, _, _ := store.Lookup(t.Context(), key); got != want {
+			t.Errorf("%s = %q after the update, want %q", key, got, want)
+		}
+	}
+}
+
+func TestSettingUpdateStoresNothingWhenTheChangeFails(t *testing.T) {
+	t.Parallel()
+
+	store := sqlite.NewSettingStore(migrated(t))
+
+	err := store.Update(t.Context(), []string{"count"}, func(map[string]string) (map[string]string, error) {
+		return map[string]string{"count": "1"}, errPlanted
+	})
+
+	wantPlanted(t, err, "sqlite: updating settings: ")
+	if _, found, _ := store.Lookup(t.Context(), "count"); found {
+		t.Error("count is stored after a failed change, want nothing stored")
+	}
+}
+
+func TestSettingUpdateReportsWhatItCannotDo(t *testing.T) {
+	t.Parallel()
+
+	handle, faults := faultyHandle(t)
+	faults.FailStatement(db.GetSetting, errPlanted)
+	closed := migrated(t)
+	if err := closed.Close(); err != nil {
+		t.Fatalf("Close() error = %v, want nil", err)
+	}
+	busy := impatientHandle(t)
+	holdWrites(t, busy)
+
+	readErr := sqlite.NewSettingStore(handle).Update(t.Context(), []string{"count"}, counted)
+	closedErr := sqlite.NewSettingStore(closed).Update(t.Context(), []string{"count"}, counted)
+	busyErr := sqlite.NewSettingStore(busy).Update(t.Context(), []string{"count"}, counted)
+
+	wantPlanted(t, readErr, `sqlite: updating settings: "count": `)
+	if !strings.HasPrefix(fmt.Sprint(closedErr), "sqlite: updating settings: ") {
+		t.Errorf("Update() on a closed handle error = %v, want the update named", closedErr)
+	}
+	if !errors.Is(busyErr, dbkit.ErrBusy) {
+		t.Errorf("Update() behind another writer error = %v, want dbkit.ErrBusy", busyErr)
 	}
 }
 

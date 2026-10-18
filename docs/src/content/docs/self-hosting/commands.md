@@ -45,6 +45,8 @@ Available commands:
   account:list          list every account with its role
   account:records       list who applied which change, the newest first
   account:role          set one account's role
+ update
+  update:check          check the update site for a newer Gophenberg and keep what it found
 
 Every command is described at https://docs.gophenberg.org/self-hosting/commands/
 ```
@@ -273,13 +275,18 @@ gophenberg about [flags]
 Prints what this binary is in one line, such as
 `Gophenberg %VERSION%, official build, commit 4c3ba60, theme kits 0.9.0 to %KIT_VERSION%`.
 With `-json` it answers one JSON document holding `schema`, `name`,
-`version`, `commit`, `stamp` and `kits`. It needs no database.
+`version`, `commit`, `stamp`, `minimum_version`, `postgresql` and
+`kits`. It needs no database.
 
 - A binary from a release archive or the release image says
   `official build`, and names the commit it was built from.
 - A binary you build yourself says `custom build` and names no commit.
 - `kits` lists the [theme kit](/themes/how-theming-works/) versions
   this binary serves.
+- `minimum_version` is the oldest version allowed to run on a
+  database this binary migrated, see
+  [going back to an older version](/self-hosting/updates-and-backups/#going-back-to-an-older-version).
+- `postgresql` is the oldest PostgreSQL major this binary runs on.
 
 ### check
 
@@ -485,3 +492,21 @@ Sets the role of one account to `admin`, `editor`, `author`,
 of the account named in `-as`, to hand out a role beyond the reach
 of that account, and to take `manage_users` from the last enabled
 account holding it.
+
+### update:check
+
+```text
+gophenberg update:check [flags]
+```
+
+Checks the update site for a newer Gophenberg now, and keeps what it
+found for the admin, as the site's own checks do. It prints one line
+naming the newer version and this one, or saying this is the newest
+version the update site offers. With `-json` it answers one document
+holding `checked_at`, `offer`, `failed_at` and `error`. It runs the
+migrations first and installs nothing.
+
+It refuses an update site whose files the Gophenberg keys did not
+sign, a file that expired, and a file older than the last one the
+site took, and exits with code 1 naming why. See
+[how a site hears of a new version](/self-hosting/updates-and-backups/#how-a-site-hears-of-a-new-version).

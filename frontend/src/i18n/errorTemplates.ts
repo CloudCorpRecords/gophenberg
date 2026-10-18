@@ -551,3 +551,13 @@ export function authTemplates(): Record<string, string> {
 		self_role_refused: __('You cannot change your own role.', DOMAIN),
 	}
 }
+
+/**
+ * Returns the message each code the update checks answer with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function updateTemplates(): Record<string, string> {
+	return {
+		check_too_soon: __('Gophenberg checked for updates moments ago. Try again later.', DOMAIN),
+	}
+}

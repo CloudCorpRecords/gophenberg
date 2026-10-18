@@ -33,11 +33,13 @@ type archiveEntry struct {
 
 // archiveFacts is the release.json an archive carries, as the tests read it.
 type archiveFacts struct {
-	Version  string `json:"version"`
-	Commit   string `json:"commit"`
-	Stamp    string `json:"stamp"`
-	Platform string `json:"platform"`
-	Notes    string `json:"notes"`
+	Version        string `json:"version"`
+	Commit         string `json:"commit"`
+	Stamp          string `json:"stamp"`
+	MinimumVersion string `json:"minimum_version"`
+	PostgreSQL     int    `json:"postgresql"`
+	Platform       string `json:"platform"`
+	Notes          string `json:"notes"`
 }
 
 func TestMakeReleaseArchivesPacksEachTargetFlatTheSameWayEveryTime(t *testing.T) {
@@ -67,8 +69,8 @@ func TestMakeReleaseArchivesPacksEachTargetFlatTheSameWayEveryTime(t *testing.T)
 	if mode := entryNamed(t, entries, "gophenberg").header.Mode; mode != 0o755 {
 		t.Errorf("the binary's entry has mode %o, want 755", mode)
 	}
-	want := archiveFacts{Version: "0.20.0", Commit: fullCommit, Stamp: "official", Platform: host,
-		Notes: "https://github.com/gopherium/gophenberg/releases/tag/v0.20.0"}
+	want := archiveFacts{Version: "0.20.0", Commit: fullCommit, Stamp: "official", MinimumVersion: "0.19.0",
+		PostgreSQL: 15, Platform: host, Notes: "https://github.com/gopherium/gophenberg/releases/tag/v0.20.0"}
 	if facts := factsOf(t, entries); facts != want {
 		t.Errorf("release.json = %+v, want %+v", facts, want)
 	}

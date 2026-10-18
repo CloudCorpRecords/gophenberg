@@ -50,6 +50,8 @@ func TestProgramListsEveryCommandWhenNoneIsNamed(t *testing.T) {
 		"  account:list          list every account with its role",
 		"  account:records       list who applied which change, the newest first",
 		"  account:role          set one account's role",
+		" update",
+		"  update:check          check the update site for a newer Gophenberg and keep what it found",
 		"",
 		"Every command is described at https://docs.gophenberg.org/self-hosting/commands/",
 		"",

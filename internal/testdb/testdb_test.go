@@ -37,14 +37,56 @@ func (f *fatal) Fatalf(format string, args ...any) {
 // fatalOfNew returns the fatal message New stopped with, or nothing when it returned.
 func fatalOfNew(t *testing.T) string {
 	t.Helper()
+	return fatalOf(t, func(tb testing.TB) { testdb.New(tb, testdb.Migrator()) })
+}
+
+// fatalOf returns the fatal message run stopped with, or nothing when it returned.
+func fatalOf(t *testing.T, run func(testing.TB)) string {
+	t.Helper()
 	recorder := &fatal{TB: t}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		testdb.New(recorder, testdb.Migrator())
+		run(recorder)
 	}()
 	<-done
 	return recorder.message
+}
+
+func TestServerReturnsTheAddressTheSettingsName(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "postgres://postgres@db.example.com/postgres")
+
+	if got := testdb.Server(t); got != "postgres://postgres@db.example.com/postgres" {
+		t.Errorf("Server() = %q, want the address GOPHENBERG_TEST_DATABASE_URL names", got)
+	}
+}
+
+func TestAsServerKeepsTheDatabaseAndTakesTheServersRole(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "postgres://postgres:secret@db.example.com:5435/postgres?sslmode=disable")
+
+	got := testdb.AsServer(t, "postgres://pgtdbuser:pgtdbpass@db.example.com:5435/testdb_one?sslmode=disable")
+
+	if want := "postgres://postgres:secret@db.example.com:5435/testdb_one?sslmode=disable"; got != want {
+		t.Errorf("AsServer() = %q, want %q", got, want)
+	}
+}
+
+func TestAsServerNamesAnAddressItCannotRead(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "postgres://postgres:secret@db.example.com:5435/postgres")
+
+	message := fatalOf(t, func(tb testing.TB) { testdb.AsServer(tb, "postgres://db.example.com/%zz") })
+	if !strings.HasPrefix(message, "testdb: read the test database address") {
+		t.Errorf("AsServer() stopped with %q, want the unreadable address named", message)
+	}
+}
+
+func TestServerNamesAMissingAddressAndWhereToSetIt(t *testing.T) {
+	t.Setenv("GOPHENBERG_TEST_DATABASE_URL", "")
+
+	message := fatalOf(t, func(tb testing.TB) { testdb.Server(tb) })
+	if !strings.Contains(message, "GOPHENBERG_TEST_DATABASE_URL") || !strings.Contains(message, where) {
+		t.Errorf("Server() stopped with %q, want a message naming GOPHENBERG_TEST_DATABASE_URL and %q", message, where)
+	}
 }
 
 func TestNewNamesAMissingAddressAndWhereToSetIt(t *testing.T) {

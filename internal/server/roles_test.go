@@ -39,6 +39,7 @@ func signedInAs(t *testing.T, roles *goncierge.Registry, held string) (http.Hand
 		Media:      mediahost.New(mediahost.Config{Dir: t.TempDir()}),
 		MediaStore: newFakeMediaStore(),
 		Roles:      roles,
+		Updates:    &storedUpdates{},
 	})
 	recorder := doLogin(t, handler, `{"email":"holder@example.com","password":"correct horse battery"}`)
 	if recorder.Code != http.StatusOK {
@@ -71,6 +72,8 @@ func capabilityOf(gated route) string {
 		return string(role.ManageSettings)
 	case strings.HasPrefix(gated.pattern, "/api/themes"):
 		return string(role.ManageThemes)
+	case strings.HasPrefix(gated.pattern, "/api/updates"):
+		return string(role.UpdateCore)
 	default:
 		return string(role.ManageTypes)
 	}
@@ -143,7 +146,7 @@ func TestTheSessionCarriesWhatAnAdministratorMayDoAndGive(t *testing.T) {
 	}
 	every := []string{
 		string(role.AccessAdmin), string(role.ChangeOthersWork), string(role.ManageSettings),
-		string(role.ManageThemes), string(role.ManageTypes), string(role.ManageUsers),
+		string(role.ManageThemes), string(role.ManageTypes), string(role.ManageUsers), string(role.UpdateCore),
 	}
 	widestFirst := []string{role.Admin, role.Editor, role.Author, role.Member}
 	if !slices.Equal(held.Capabilities, every) || !slices.Equal(held.Grantable, widestFirst) {
