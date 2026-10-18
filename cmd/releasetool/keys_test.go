@@ -176,6 +176,38 @@ func TestSignKeysRefusesARootThatSignedAlready(t *testing.T) {
 	}
 }
 
+func TestSignKeysRefusesASignatureFileOfAnotherKeyList(t *testing.T) {
+	t.Parallel()
+
+	for name, stale := range map[string]func(t *testing.T, dir, list string){
+		"a signature of the last key list": func(t *testing.T, dir, list string) {
+			root := writeFile(t, dir, "root1.pem", plainPEM(t, newTestP256(t)))
+			if got := runTool("sign-keys", "-key", root, list); got.code != 0 {
+				t.Fatalf("sign-keys = %d, %q, want 0", got.code, got.stderr)
+			}
+			writtenKeyList(t, dir)
+		},
+		"a line that is no signature": func(t *testing.T, dir, _ string) {
+			writeFile(t, dir, "keys.json.sig", "not a signature\n")
+		},
+	} {
+		dir := t.TempDir()
+		list := writtenKeyList(t, dir)
+		stale(t, dir, list)
+		held := readText(t, list+".sig")
+		root := writeFile(t, dir, "root2.pem", plainPEM(t, newTestP256(t)))
+
+		got := runTool("sign-keys", "-key", root, list)
+
+		if got.code != 1 || !strings.Contains(got.stderr, "remove "+list+".sig") {
+			t.Errorf("sign-keys beside %s = %d, %q, want 1 and the stale file named", name, got.code, got.stderr)
+		}
+		if readText(t, list+".sig") != held {
+			t.Errorf("sign-keys beside %s changed keys.json.sig, want it kept as it was", name)
+		}
+	}
+}
+
 func TestSignKeysRefusesWhatItCannotSignWith(t *testing.T) {
 	t.Parallel()
 

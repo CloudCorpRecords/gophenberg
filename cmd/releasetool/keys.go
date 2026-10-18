@@ -104,7 +104,7 @@ func (o signOptions) rootKey() (*ecdsa.PrivateKey, error) {
 	return root, nil
 }
 
-// rootLine returns the line the root signs the key list with, refusing a root whose line is there already.
+// rootLine returns the line the root signs the key list with, refusing a .sig the line does not belong beside.
 func (f releaseFile) rootLine(root *ecdsa.PrivateKey) (string, error) {
 	body, err := os.ReadFile(string(f))
 	if err != nil {
@@ -115,13 +115,41 @@ func (f releaseFile) rootLine(root *ecdsa.PrivateKey) (string, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("reading the signatures of the key list: %w", err)
 	}
-	name := strings.Fields(line)[0] + " "
-	for signed := range strings.SplitSeq(string(held), "\n") {
-		if strings.HasPrefix(signed, name) {
-			return "", fmt.Errorf("refused to sign %s again: the root %s already signed it", f, strings.TrimSpace(name))
+	ours := signatureLine(strings.Fields(line))
+	for text := range strings.SplitSeq(strings.TrimSpace(string(held)), "\n") {
+		if err := f.checkSignatureLine(body, signatureLine(strings.Fields(text)), ours); err != nil {
+			return "", err
 		}
 	}
 	return line, nil
+}
+
+// signatureLine holds the words of one line of a .sig: the Multikey of a root, then its signature.
+type signatureLine []string
+
+// checkSignatureLine refuses a line of the .sig that does not sign body, or that the root of ours already wrote.
+func (f releaseFile) checkSignatureLine(body []byte, held, ours signatureLine) error {
+	if len(held) == 0 {
+		return nil
+	}
+	if !held.signs(body) {
+		return fmt.Errorf("refused to sign %s: a line of its signatures does not sign it, so remove %s and sign "+
+			"again with each root", f, f.signaturePath())
+	}
+	if held[0] == ours[0] {
+		return fmt.Errorf("refused to sign %s again: the root %s already signed it", f, ours[0])
+	}
+	return nil
+}
+
+// signs reports whether the line is a P-256 key and its signature of body.
+func (l signatureLine) signs(body []byte) bool {
+	if len(l) != 2 {
+		return false
+	}
+	key, _ := signature.ParseMultikey(l[0])
+	public, isECDSA := key.(*ecdsa.PublicKey)
+	return isECDSA && signature.VerifyCompact(public, body, l[1]) == nil
 }
 
 // addSignatureLine adds line to the end of the file's .sig, making the .sig when there is none.
