@@ -79,6 +79,7 @@ type operatorScenario struct {
 	plugins []sdk.Plugin
 	offered *commanding
 	notes   *noting
+	site    *updateSite
 }
 
 // initializeOperatorCommands returns the binding of the operator command steps on engine, t holding their databases.
@@ -122,7 +123,21 @@ func initializeOperatorCommands(t *testing.T, engine operatorEngine) func(*godog
 		sc.Given(`^a Gophenberg migrated the database and left the minimum version "([^"]*)"$`, s.leaveMinimumVersion)
 		sc.Then(`^the database holds the minimum version of this binary$`, s.holdsOwnMinimumVersion)
 		sc.Then(`^the database still holds the minimum version "([^"]*)"$`, s.holdsMinimumVersion)
+		initializeUpdateChecks(sc, s)
 	}
+}
+
+// initializeUpdateChecks binds the steps of the update check scenarios to s.
+func initializeUpdateChecks(sc *godog.ScenarioContext, s *operatorScenario) {
+	sc.Given(`^an update site whose stable index offers version "([^"]*)"$`, s.offerUpdate)
+	sc.Given(`^only (the first root|the second root|a stranger) signed the key list$`, s.signKeyListAlone)
+	sc.Given(`^only a stranger signed the index$`, s.signIndexAsStranger)
+	sc.Given(`^the index expired yesterday$`, s.expireIndex)
+	sc.Given(`^the index names the channel "([^"]*)"$`, s.renameChannel)
+	sc.Given(`^the operator ran "([^"]*)"$`, s.ranLine)
+	sc.Given(`^the update site went back to an older index$`, s.goBackAnIndex)
+	sc.Then(`^the answer offers version "([^"]*)"$`, s.offersVersion)
+	sc.Then(`^the answer offers no version$`, s.offersNoVersion)
 }
 
 // namesTheBuildFacts fails unless the answer is the one document that holds this binary's build facts.

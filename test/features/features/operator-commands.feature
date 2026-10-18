@@ -53,6 +53,52 @@ Feature: Operators run Gophenberg from one command line
     And the error says "this database needs Gophenberg 99.0.0 or newer"
     And the database still holds the minimum version "99.0.0"
 
+  Scenario: A check finds a newer version in the signed index
+    Given an update site whose stable index offers version "99.0.0"
+    When the operator runs "update:check -json"
+    Then the command succeeds
+    And the answer offers version "99.0.0"
+
+  Scenario: A check finds nothing newer than this binary
+    Given an update site whose stable index offers version "0.0.1"
+    When the operator runs "update:check -json"
+    Then the command succeeds
+    And the answer offers no version
+
+  Scenario Outline: A key list signed by <root> alone is taken
+    Given an update site whose stable index offers version "99.0.0"
+    And only <root> signed the key list
+    When the operator runs "update:check -json"
+    Then the command succeeds
+    And the answer offers version "99.0.0"
+
+    Examples:
+      | root            |
+      | the first root  |
+      | the second root |
+
+  Scenario Outline: A check refuses <case>
+    Given an update site whose stable index offers version "99.0.0"
+    And <change>
+    When the operator runs "update:check"
+    Then the command exits with code 1
+    And the error says "<error>"
+
+    Examples:
+      | case                                | change                                  | error                                     |
+      | a key list no trusted root signed   | only a stranger signed the key list     | no trusted root signed it                 |
+      | an index no listed key signed       | only a stranger signed the index        | no release or standby key the list names  |
+      | an index that expired               | the index expired yesterday             | which expired                             |
+      | an index for another channel        | the index names the channel "beta"      | the site asks for                         |
+
+  Scenario: A check refuses an index older than the one it took before
+    Given an update site whose stable index offers version "99.0.0"
+    And the operator ran "update:check"
+    And the update site went back to an older index
+    When the operator runs "update:check"
+    Then the command exits with code 1
+    And the error says "older than serial"
+
   Scenario: A database a newer Gophenberg migrated stops an account command
     Given a Gophenberg migrated the database and left the minimum version "99.0.0"
     When the operator creates the administrator "admin@example.com" with a password on standard input
