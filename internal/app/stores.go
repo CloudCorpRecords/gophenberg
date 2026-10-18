@@ -166,9 +166,9 @@ func postgresMigrations(core gonsole.Step) []gonsole.Step {
 // sqliteMigrations returns the steps a SQLite database takes on the run's one handle, in the order they apply.
 func sqliteMigrations(env gonsole.Env) []gonsole.Step {
 	return []gonsole.Step{
-		sqliteStep("accounts", env, accountStep(accountsqlite.Migration)),
+		sqliteStep("accounts", env, guardedSQLite(accountStep(accountsqlite.Migration))),
 		sqliteStep("records", env, accountStep(accountsqlite.RecordMigration)),
-		sqliteStep("core", env, sqlite.Migrate),
+		sqliteStep("core", env, migrateSQLiteCore),
 	}
 }
 
@@ -194,9 +194,12 @@ func accountStep(
 	}
 }
 
-// migrate applies every PostgreSQL schema step, the account ones at databaseURL and the core one on the site's db.
+// migrate applies every PostgreSQL schema step once db lets this binary on, the core one on db, the rest at the URL.
 func migrate(ctx context.Context, databaseURL string, db *sql.DB) error {
-	for _, step := range postgresMigrations(gonsole.Step{Name: "core", RunOn: postgres.Migrate}) {
+	if err := guardPostgres(ctx, db); err != nil {
+		return err
+	}
+	for _, step := range postgresMigrations(gonsole.Step{Name: "core", RunOn: migratePostgresCore}) {
 		if err := step.Apply(ctx, databaseURL, db); err != nil {
 			return err
 		}
