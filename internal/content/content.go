@@ -98,6 +98,11 @@ func New(t Type, parent *Content, title string, authorID uuid.UUID) (Content, er
 // Slugify returns title as a URL slug, or [untitledSlug] when it holds no
 // slug characters.
 func Slugify(title string) string {
+	return cmp.Or(slugOf(title), untitledSlug)
+}
+
+// slugOf returns title as a URL slug, empty when it holds no slug characters.
+func slugOf(title string) string {
 	var b strings.Builder
 	separated, afterKept := false, false
 	for _, r := range FoldAccents(strings.ReplaceAll(title, "×", "x")) {
@@ -116,21 +121,7 @@ func Slugify(title string) string {
 			afterKept = false
 		}
 	}
-	return cmp.Or(truncateSlug(norm.NFC.String(b.String())), untitledSlug)
-}
-
-// RouteWord returns label as a route word, with its underscores read as spaces.
-func RouteWord(label string) string {
-	return Slugify(strings.ReplaceAll(label, "_", " "))
-}
-
-// RouteWordForType returns the plural label's slug when it matches the route-word format, and key otherwise.
-func RouteWordForType(key, pluralLabel string) string {
-	routeWord := RouteWord(pluralLabel)
-	if !typeWord.MatchString(routeWord) {
-		return key
-	}
-	return routeWord
+	return truncateSlug(norm.NFC.String(b.String()))
 }
 
 // slugRuneKind is the role of one title character in a slug: skipped, a word, a kept mark, a separator or dropped.
