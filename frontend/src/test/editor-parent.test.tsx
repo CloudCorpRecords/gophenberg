@@ -143,14 +143,14 @@ test('offers only the root while the items of the type are still arriving', asyn
 	expect(await screen.findByRole('option', { name: 'No parent' })).toBeInTheDocument()
 })
 
-test('names the empty parent choice as WordPress es_ES does for a Spanish reader', async () => {
+test('names the empty parent choice for a Spanish reader', async () => {
 	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
 	renderAt(`/content/page/${EDITED.id}/edit`)
 
-	await userEvent.click(await screen.findByLabelText('Superior'))
+	await userEvent.click(await screen.findByLabelText('Elemento superior'))
 
-	expect(await screen.findByRole('option', { name: 'Sin superior' })).toBeInTheDocument()
+	expect(await screen.findByRole('option', { name: 'Sin elemento superior' })).toBeInTheDocument()
 })
 
 test('reads the parent a select change asks for', () => {

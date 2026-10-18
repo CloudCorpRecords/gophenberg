@@ -387,15 +387,15 @@ test('names the parent of an item by its title, or None at the top', () => {
 	expect(parent?.getValue?.({ item: listedPost() })).toBe('None')
 })
 
-test('names the parent column and an item at the top as WordPress es_ES does for a Spanish reader', async () => {
+test('names the parent column and an item at the top for a Spanish reader', async () => {
 	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
 	const pages = { ...placeholderType('page'), hierarchical: true }
 
 	const parent = postFields(pages).find((column) => column.id === 'parent')
 
-	expect(parent?.label).toBe('Superior')
-	expect(parent?.getValue?.({ item: listedPost() })).toBe('Ninguna')
+	expect(parent?.label).toBe('Elemento superior')
+	expect(parent?.getValue?.({ item: listedPost() })).toBe('Ninguno')
 })
 
 test('names a scheduled item by the badge WordPress es_ES draws for a Spanish reader', async () => {

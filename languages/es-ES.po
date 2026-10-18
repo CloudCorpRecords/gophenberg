@@ -370,9 +370,8 @@ msgstr "Todavía no se ha subido ningún medio."
 msgid "No page lives at this address."
 msgstr "No existe ninguna página en esta dirección."
 
-#, fuzzy
 msgid "No parent"
-msgstr "Sin superior"
+msgstr "Sin elemento superior"
 
 msgid "No theme arrived with this upload. Choose a zip file and try again."
 msgstr "No ha llegado ningún tema con esta subida. Elige un archivo zip e inténtalo de nuevo."
@@ -383,9 +382,8 @@ msgstr "No hay ningún tema instalado."
 msgid "No title"
 msgstr "Sin título"
 
-#, fuzzy
 msgid "None"
-msgstr "Ninguna"
+msgstr "Ninguno"
 
 msgid "Not found"
 msgstr "No encontrado"
@@ -447,9 +445,8 @@ msgstr "Abrir la navegación"
 msgid "Open %(field)s in a new tab"
 msgstr "Abrir %(field)s en una pestaña nueva"
 
-#, fuzzy
 msgid "Parent"
-msgstr "Superior"
+msgstr "Elemento superior"
 
 msgid "Password"
 msgstr "Contraseña"
