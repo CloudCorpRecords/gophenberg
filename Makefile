@@ -303,6 +303,7 @@ e2e-serve: db-up e2e-theme e2e-media
 	GOPHENBERG_DATABASE_URL="$(E2E_DATABASE_URL)" \
 		GOPHENBERG_THEMES_DIR="$(E2E_THEMES_DIR)" \
 		GOPHENBERG_MEDIA_DIR="$(E2E_MEDIA_DIR)" \
+		GOPHENBERG_UPDATE_CHECKS=false \
 		./gophenberg serve
 
 e2e-db-reset: db-up
