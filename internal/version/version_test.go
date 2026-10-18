@@ -19,6 +19,65 @@ func TestVersionIsCleanSemver(t *testing.T) {
 	}
 }
 
+func TestMinimumIsAFullVersionNoNewerThanTheBinary(t *testing.T) {
+	t.Parallel()
+
+	minimum := version.Minimum()
+
+	if !version.Valid(minimum) {
+		t.Errorf("Minimum() = %q, want a trimmed full version like 0.19.0", minimum)
+	}
+	if version.Before(version.Version(), minimum) {
+		t.Errorf("Minimum() = %q comes after Version() = %q, want a minimum no newer than the binary",
+			minimum, version.Version())
+	}
+}
+
+func TestBeforeOrdersVersionsByTheirNumbers(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{a: "0.19.0", b: "0.20.0", want: true},
+		{a: "0.20.0", b: "0.19.0", want: false},
+		{a: "0.20.0", b: "0.20.0", want: false},
+		{a: "0.9.0", b: "0.10.0", want: true},
+		{a: "0.20.0-rc.1", b: "0.20.0", want: true},
+		{a: "0.20.0-rc.2", b: "0.20.0-rc.1", want: false},
+		{a: "0.20.1", b: "1.0.0", want: true},
+	}
+	for _, tc := range cases {
+		if got := version.Before(tc.a, tc.b); got != tc.want {
+			t.Errorf("Before(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestValidTakesOnlyAFullVersionWithoutAPrefix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{in: "0.19.0", want: true},
+		{in: "0.20.0-rc.1", want: true},
+		{in: "10.20.30", want: true},
+		{in: "1.2", want: false},
+		{in: "v1.2.3", want: false},
+		{in: "1.2.3+build.4", want: false},
+		{in: " 0.19.0", want: false},
+		{in: "", want: false},
+	}
+	for _, tc := range cases {
+		if got := version.Valid(tc.in); got != tc.want {
+			t.Errorf("Valid(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestGeneratorNamesTheProductAndItsFeatureVersion(t *testing.T) {
 	t.Parallel()
 
