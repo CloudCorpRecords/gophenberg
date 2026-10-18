@@ -323,6 +323,10 @@ msgid "Choose the language the admin reads in."
 msgstr "Choisissez la langue dans laquelle se lit l'administration."
 
 #, fuzzy
+msgid "Close Settings"
+msgstr "Fermer les réglages"
+
+#, fuzzy
 msgid "Closed"
 msgstr "Fermé"
 
@@ -1815,6 +1819,11 @@ msgstr "Lien"
 msgctxt "media family"
 msgid "Kind"
 msgstr "Type"
+
+#, fuzzy
+msgctxt "panel button label"
+msgid "Settings"
+msgstr "Réglages"
 
 #, fuzzy
 msgctxt "person"

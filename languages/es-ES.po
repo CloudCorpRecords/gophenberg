@@ -123,6 +123,10 @@ msgstr "Cambiar la dirección"
 msgid "Choose the language the admin reads in."
 msgstr "Elige el idioma en el que se lee el panel de administración."
 
+#, fuzzy
+msgid "Close Settings"
+msgstr "Cerrar ajustes"
+
 msgid "Closed"
 msgstr "Cerrado"
 
@@ -2264,6 +2268,11 @@ msgstr "Enlace"
 msgctxt "media family"
 msgid "Kind"
 msgstr "Clase"
+
+#, fuzzy
+msgctxt "panel button label"
+msgid "Settings"
+msgstr "Ajustes"
 
 msgctxt "person"
 msgid "Name"

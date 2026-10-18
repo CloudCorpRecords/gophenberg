@@ -491,6 +491,9 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
+msgid "Close Settings"
+msgstr ""
+
 msgid "Closed"
 msgstr ""
 
@@ -1952,6 +1955,10 @@ msgstr ""
 
 msgctxt "media family"
 msgid "Kind"
+msgstr ""
+
+msgctxt "panel button label"
+msgid "Settings"
 msgstr ""
 
 msgctxt "person"
