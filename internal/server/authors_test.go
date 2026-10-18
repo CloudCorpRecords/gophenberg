@@ -154,6 +154,16 @@ func TestAuthorsSortNamesBesideTheirBaseLetter(t *testing.T) {
 			names: []string{"élise", "Elise", "elise"},
 			want:  []string{"Ada Lovelace", "Elise", "elise", "élise"},
 		},
+		{
+			name:  "names differing only by an accent",
+			names: []string{"Emma", "elise", "Elisé"},
+			want:  []string{"Ada Lovelace", "Elisé", "elise", "Emma"},
+		},
+		{
+			name:  "names with a straight or curly apostrophe",
+			names: []string{"Ohara", "O’Hara", "O'Hara"},
+			want:  []string{"Ada Lovelace", "O'Hara", "O’Hara", "Ohara"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
