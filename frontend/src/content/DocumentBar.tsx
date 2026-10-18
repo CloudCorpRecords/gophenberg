@@ -17,16 +17,21 @@ function documentName(title: string): string {
 
 /**
  * Renders the name and type of the post being edited.
- * @param props - The title the post holds and its type.
+ * @param props - The title the post holds, its type and whether the type is left out to save room.
  * @returns The document bar.
  */
-export function DocumentBar({ title, type }: { title: string, type: string }) {
+export function DocumentBar({ title, type, short }: { title: string, type: string, short: boolean }) {
 	const listed = useContentType()
 	return (
 		<div className="gophenberg-editor__document">
 			<Text data-testid="document-bar" className="gophenberg-editor__document-name">
-				{documentName(title)} <span aria-hidden="true">{'\u00b7'}</span>{' '}
-				{listed.key === type ? singularOf(listed) : type}
+				{documentName(title)}
+				{short ? null : (
+					<>
+						{' '}
+						<span aria-hidden="true">{'·'}</span> {listed.key === type ? singularOf(listed) : type}
+					</>
+				)}
 			</Text>
 		</div>
 	)

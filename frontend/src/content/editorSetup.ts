@@ -19,6 +19,15 @@ export const EDITOR_SETTINGS = {
 	maxUploadFileSize: MAX_UPLOAD_BYTES,
 }
 
+/**
+ * Returns the block editor settings for a window, the block toolbar fixed above the canvas when it is narrow.
+ * @param narrow - Whether the window is below the editor breakpoint.
+ * @returns The settings the block editor provider takes.
+ */
+export function editorSettings(narrow: boolean) {
+	return { ...EDITOR_SETTINGS, hasFixedToolbar: narrow }
+}
+
 const PREVIEW_ITEMS = {
 	desktop: {
 		get label() {
@@ -51,6 +60,25 @@ export const PREVIEW_WIDTHS = Object.values(PREVIEW_ITEMS)
  */
 export function previewItem(width: PreviewWidth) {
 	return PREVIEW_ITEMS[width]
+}
+
+/**
+ * Returns the classes the editor root carries for a window.
+ * @param narrow - Whether the window is below the editor breakpoint.
+ * @returns The class attribute of the editor root.
+ */
+export function editorClass(narrow: boolean): string {
+	return narrow ? 'gophenberg-editor gophenberg-editor--narrow godmin-arrival' : 'gophenberg-editor godmin-arrival'
+}
+
+/**
+ * Returns the classes the settings sidebar carries, the sliding one only once it has moved since load.
+ * @param moved - Whether the sidebar was toggled, closed or carried over the breakpoint since the editor loaded.
+ * @returns The class attribute of the sidebar.
+ */
+export function sidebarClass(moved: boolean): string {
+	const base = 'gophenberg-editor__sidebar'
+	return moved ? `${base} ${base}--moved` : base
 }
 
 /**
