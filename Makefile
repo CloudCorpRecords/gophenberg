@@ -10,6 +10,9 @@ SQLITE_COVERPKGS = $(shell go list ./internal/sqlite/... | grep -v -e /internal/
 # Where a linked package's restore point is kept while it is linked.
 BRICK_HELD = .brick-held
 
+# The migration folders of both engines, whose new files raise the minimum version at a bump.
+MIGRATION_DIRS = internal/postgres/migrations internal/sqlite/migrations
+
 brick-link:
 	@test -n "$(BRICK)" || { echo "usage: make brick-link BRICK=../some-package"; exit 1; }
 	@test -f "$(BRICK)/package.json" || { echo "$(BRICK) holds no package.json"; exit 1; }
@@ -52,6 +55,11 @@ bump:
 		{ git diff --quiet "refs/tags/sdk/$$sdk" -- 'sdk/*.go' sdk/go.mod && \
 		test -z "$$(git ls-files --others --exclude-standard -- 'sdk/*.go')" || \
 		{ echo "the sdk changed since sdk/$$sdk, in a commit or in the working files. Tag a new sdk version and require it in go.mod before bumping."; exit 1; }; }
+	@current="$$(cat internal/version/VERSION)" && \
+		{ git rev-parse -q --verify "refs/tags/v$$current" >/dev/null || \
+		{ echo "internal/version/VERSION is $$current, but v$$current carries no tag. Tag that release, or fetch the tags, before bumping."; exit 1; }; } && \
+		{ test -z "$$(git diff --name-only --diff-filter=A "refs/tags/v$$current" -- $(MIGRATION_DIRS))$$(git ls-files --others --exclude-standard -- $(MIGRATION_DIRS))" || \
+		{ printf '%s\n' "$(V)" > internal/version/MINIMUM_VERSION && echo "a migration joined since v$$current, so the minimum version is now $(V)"; }; }
 	printf '%s\n' "$(V)" > internal/version/VERSION
 
 bump-kit:
@@ -295,6 +303,7 @@ e2e-serve: db-up e2e-theme e2e-media
 	GOPHENBERG_DATABASE_URL="$(E2E_DATABASE_URL)" \
 		GOPHENBERG_THEMES_DIR="$(E2E_THEMES_DIR)" \
 		GOPHENBERG_MEDIA_DIR="$(E2E_MEDIA_DIR)" \
+		GOPHENBERG_UPDATE_CHECKS=false \
 		./gophenberg serve
 
 e2e-db-reset: db-up

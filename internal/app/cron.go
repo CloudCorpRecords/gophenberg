@@ -99,10 +99,10 @@ type siteCron struct {
 	stopGrace time.Duration
 }
 
-// cronOf returns the site's cron jobs over the cron store the site holds, the session sweep the only core job.
-func cronOf(settings cronSettings, built site, logger *slog.Logger) siteCron {
+// cronOf returns the site's cron jobs over the cron store the site holds: the session sweep, then the more jobs given.
+func cronOf(settings cronSettings, built site, logger *slog.Logger, more ...cron.Job) siteCron {
 	runner := cron.New(cron.Config{
-		Jobs:      []cron.Job{sessionSweep(built.users, settings.sweepEvery, logger)},
+		Jobs:      append([]cron.Job{sessionSweep(built.users, settings.sweepEvery, logger)}, more...),
 		Store:     built.cronStore,
 		TimeLimit: settings.timeLimit,
 		Lease:     settings.lease,

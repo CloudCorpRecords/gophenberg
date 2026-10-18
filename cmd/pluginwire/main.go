@@ -22,6 +22,7 @@ var config = wire.Config{
 	License:      "Apache-2.0",
 	Reserved: []string{
 		"help", "list", "version", "check", "serve", "migrate", "seed", "account", "about", role.Source,
+		"update", "server", "plugin", "theme", "setup", "build", "health",
 	},
 }
 

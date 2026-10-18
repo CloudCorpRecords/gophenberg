@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,31 @@ func New(t testing.TB, migrator pgtestdb.Migrator) string {
 		t.Fatal(err)
 	}
 	return pgtest.NewSwept(t, address, maxAge, migrator)
+}
+
+// Server returns the address of the test server itself, as GOPHENBERG_TEST_DATABASE_URL names it.
+func Server(t testing.TB) string {
+	t.Helper()
+	address, err := serverAddress(os.LookupEnv, rootDotenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return address
+}
+
+// AsServer returns address connecting as the role the test server itself is reached as.
+func AsServer(t testing.TB, address string) string {
+	t.Helper()
+	server, err := url.Parse(Server(t))
+	if err != nil {
+		t.Fatalf("testdb: read the test server address: %v", err)
+	}
+	instance, err := url.Parse(address)
+	if err != nil {
+		t.Fatalf("testdb: read the test database address: %v", err)
+	}
+	instance.User = server.User
+	return instance.String()
 }
 
 // Open returns the database/sql view of a capped handle on the database at address, closed when t ends.

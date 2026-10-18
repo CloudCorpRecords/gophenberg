@@ -20,7 +20,8 @@ the admin at all.
 
 An **admin** runs the site. It manages accounts, installs and
 switches themes, reshapes the content model, writes the
-[site settings](/guides/settings/), and changes anyone's work.
+[site settings](/guides/settings/), checks for a newer Gophenberg
+with `update_core`, and changes anyone's work.
 
 An **editor** works everyone's content and media, including work
 another account wrote, but does not manage accounts, themes, types

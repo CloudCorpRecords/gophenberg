@@ -247,6 +247,10 @@ msgstr "Sigue al navegador"
 msgid "Full Size"
 msgstr "Tamaño completo"
 
+#, fuzzy
+msgid "Gophenberg checked for updates moments ago. Try again later."
+msgstr "Gophenberg ha buscado actualizaciones hace un momento. Inténtalo de nuevo más tarde."
+
 msgid "Gophenberg could not read what your browser sent. Reload the page and try again, and tell whoever looks after your site if it keeps happening."
 msgstr "Gophenberg no ha podido leer lo que ha enviado tu navegador. Recarga la página e inténtalo de nuevo, y avisa a quien gestiona tu sitio si sigue pasando."
 

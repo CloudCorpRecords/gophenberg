@@ -98,6 +98,10 @@ type Config struct {
 	CronOnVisits bool
 	// Avatars is how the site draws the author avatars the admin shows. A zero value draws initials.
 	Avatars avatar.Options
+	// Updates answers the update routes. Nil leaves them unhandled.
+	Updates UpdateChecks
+	// UpdatesCheckAge is how long after one check the update routes refuse to run another.
+	UpdatesCheckAge time.Duration
 }
 
 // rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
@@ -250,6 +254,12 @@ func (s *server) mountAdmin(r chi.Router, auth *authkit.Handlers, cfg Config) {
 	}
 	if cfg.Themes != nil {
 		r.With(auth.RequireCapability(string(role.ManageThemes))).Group(s.mountThemes)
+	}
+	if cfg.Updates != nil {
+		r.With(auth.RequireCapability(string(role.UpdateCore))).Group(func(r chi.Router) {
+			r.Get("/api/updates", s.handleUpdatesGet(cfg.Updates))
+			r.Post("/api/updates/check", s.handleUpdatesCheck(cfg.Updates, cfg.UpdatesCheckAge))
+		})
 	}
 }
 

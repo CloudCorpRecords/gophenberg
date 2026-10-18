@@ -58,18 +58,49 @@ func sdkRepo(t *testing.T, tag []string) string {
 		"Makefile": string(makefile),
 		"go.mod": "module example.com/site\n\ngo 1.27.1\n\nrequire github.com/gopherium/gophenberg/sdk v0.1.0\n\n" +
 			"replace github.com/gopherium/gophenberg/sdk => ./sdk\n",
-		"sdk/go.mod":               "module github.com/gopherium/gophenberg/sdk\n\ngo 1.27.1\n",
-		"sdk/sdk.go":               "package sdk\n",
-		"internal/version/VERSION": "0.18.0\n",
+		"sdk/go.mod":                       "module github.com/gopherium/gophenberg/sdk\n\ngo 1.27.1\n",
+		"sdk/sdk.go":                       "package sdk\n",
+		"internal/version/VERSION":         "0.18.0\n",
+		"internal/version/MINIMUM_VERSION": "0.17.0\n",
+		"internal/postgres/migrations/00001_create_settings.sql": migrationBody,
+		"internal/sqlite/migrations/00001_create_settings.sql":   migrationBody,
 	}
 	for path, body := range files {
 		writeFile(t, filepath.Join(root, path), body)
 	}
-	runGit(t, root, []string{"init", "-q"}, []string{"add", "-A"}, commitStep())
+	runGit(t, root, []string{"init", "-q"}, []string{"add", "-A"}, commitStep(), []string{"tag", "v0.18.0"})
 	if tag != nil {
 		runGit(t, root, tag)
 	}
 	return root
+}
+
+// migrationBody is the text of every migration file a fixture repository holds.
+const migrationBody = "-- +goose Up\nCREATE TABLE settings (key text);\n"
+
+// migrationAdds are the ways a migration joins the repository after the last release tag, each applied to a root.
+var migrationAdds = map[string]func(t *testing.T, root string){
+	"a PostgreSQL migration in a commit": func(t *testing.T, root string) {
+		writeFile(t, filepath.Join(root, "internal", "postgres", "migrations", "00002_create_notes.sql"), migrationBody)
+		runGit(t, root, []string{"add", "-A"}, commitStep())
+	},
+	"a staged SQLite migration": func(t *testing.T, root string) {
+		writeFile(t, filepath.Join(root, "internal", "sqlite", "migrations", "00002_create_notes.sql"), migrationBody)
+		runGit(t, root, []string{"add", "-A"})
+	},
+	"an untracked PostgreSQL migration": func(t *testing.T, root string) {
+		writeFile(t, filepath.Join(root, "internal", "postgres", "migrations", "00002_create_notes.sql"), migrationBody)
+	},
+}
+
+// coreMinimumVersion returns the minimum version the core's MINIMUM_VERSION file in the repository names.
+func coreMinimumVersion(t *testing.T, root string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, "internal", "version", "MINIMUM_VERSION"))
+	if err != nil {
+		t.Fatalf("reading the core minimum version: %v", err)
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 // writeFile writes body to path, making its folder first.
@@ -159,5 +190,61 @@ func TestBumpWritesTheVersionWhenTheSDKMatchesItsTag(t *testing.T) {
 				t.Errorf("core version = %q, want 0.19.0", got)
 			}
 		})
+	}
+}
+
+func TestBumpRaisesTheMinimumVersionWhenAMigrationJoinedSinceTheLastRelease(t *testing.T) {
+	t.Parallel()
+
+	for name, add := range migrationAdds {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := sdkRepo(t, tagStyles["lightweight"])
+			add(t, root)
+
+			out, err := makeIn(t, root, false, "bump", "V=0.19.0")
+
+			if err != nil {
+				t.Fatalf("make bump = %v with output %q, want the version and the minimum version written", err, out)
+			}
+			if got := coreMinimumVersion(t, root); got != "0.19.0" {
+				t.Errorf("core minimum version = %q after %s, want 0.19.0", got, name)
+			}
+		})
+	}
+}
+
+func TestBumpKeepsTheMinimumVersionWhenNoMigrationJoined(t *testing.T) {
+	t.Parallel()
+
+	root := sdkRepo(t, tagStyles["lightweight"])
+	writeFile(t, filepath.Join(root, "internal", "postgres", "migrations", "00001_create_settings.sql"),
+		migrationBody+"CREATE INDEX settings_key ON settings (key);\n")
+	writeFile(t, filepath.Join(root, "internal", "app", "app.go"), "package app\n")
+	runGit(t, root, []string{"add", "-A"}, commitStep())
+
+	out, err := makeIn(t, root, false, "bump", "V=0.18.1")
+
+	if err != nil {
+		t.Fatalf("make bump = %v with output %q, want the version written", err, out)
+	}
+	if got := coreMinimumVersion(t, root); got != "0.17.0" {
+		t.Errorf("core minimum version = %q with no migration added, want 0.17.0 kept", got)
+	}
+}
+
+func TestBumpRefusesWhileTheCurrentVersionCarriesNoTag(t *testing.T) {
+	t.Parallel()
+
+	root := sdkRepo(t, tagStyles["lightweight"])
+	runGit(t, root, []string{"tag", "-d", "v0.18.0"})
+
+	out, err := makeIn(t, root, false, "bump", "V=0.19.0")
+
+	if err == nil || !strings.Contains(out, "v0.18.0 carries no tag") {
+		t.Errorf("make bump = %v with output %q, want it refused, naming the untagged v0.18.0", err, out)
+	}
+	if got, minimum := coreVersion(t, root), coreMinimumVersion(t, root); got != "0.18.0" || minimum != "0.17.0" {
+		t.Errorf("core version and minimum version = %q and %q, want 0.18.0 and 0.17.0 left as they were", got, minimum)
 	}
 }

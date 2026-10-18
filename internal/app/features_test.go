@@ -17,6 +17,7 @@ import (
 	"github.com/gopherium/framework/gonsole/testkit"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/sqlite"
 	"github.com/gopherium/gophenberg/internal/themehost"
 	"github.com/gopherium/gophenberg/internal/version"
@@ -31,35 +32,41 @@ const typedPassword = "correct horse battery"
 
 // operatorEngine is what the operator steps ask of the database engine one run of the feature keeps its data on.
 type operatorEngine struct {
-	empty     func(t *testing.T) string
-	answers   func(ctx context.Context, address, query string, args ...any) (bool, error)
-	noSchema  func(ctx context.Context, address string) error
-	noContent func(ctx context.Context, address string) error
-	roleHeld  string
-	enabled   string
+	empty              func(t *testing.T) string
+	answers            func(ctx context.Context, address, query string, args ...any) (bool, error)
+	noSchema           func(ctx context.Context, address string) error
+	noContent          func(ctx context.Context, address string) error
+	roleHeld           string
+	enabled            string
+	minimumVersionLeft string
+	minimumVersionHeld string
 }
 
 // postgresOperators returns the engine of the feature's run on a PostgreSQL database.
 func postgresOperators() operatorEngine {
 	return operatorEngine{
-		empty:     emptyDatabaseURL,
-		answers:   postgresAnswers,
-		noSchema:  postgresHoldsNoSchema,
-		noContent: postgresHoldsNoContent,
-		roleHeld:  "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND role = $2)",
-		enabled:   "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND NOT disabled)",
+		empty:              emptyDatabaseURL,
+		answers:            postgresAnswers,
+		noSchema:           postgresHoldsNoSchema,
+		noContent:          postgresHoldsNoContent,
+		roleHeld:           "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND role = $2)",
+		enabled:            "SELECT EXISTS (SELECT FROM auth.users WHERE email = $1 AND NOT disabled)",
+		minimumVersionLeft: "UPDATE core.settings SET value = $1 WHERE key = 'minimum_version' RETURNING true",
+		minimumVersionHeld: "SELECT EXISTS (SELECT FROM core.settings WHERE key = 'minimum_version' AND value = $1)",
 	}
 }
 
 // sqliteOperators returns the engine of the feature's run on a SQLite file.
 func sqliteOperators() operatorEngine {
 	return operatorEngine{
-		empty:     emptySQLiteAddress,
-		answers:   sqliteAnswers,
-		noSchema:  untouchedSQLiteFile,
-		noContent: untouchedSQLiteFile,
-		roleHeld:  "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND role = ?)",
-		enabled:   "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND NOT disabled)",
+		empty:              emptySQLiteAddress,
+		answers:            sqliteAnswers,
+		noSchema:           untouchedSQLiteFile,
+		noContent:          untouchedSQLiteFile,
+		roleHeld:           "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND role = ?)",
+		enabled:            "SELECT EXISTS (SELECT 1 FROM auth_users WHERE email = ? AND NOT disabled)",
+		minimumVersionLeft: "UPDATE core_settings SET value = ? WHERE key = 'minimum_version' RETURNING true",
+		minimumVersionHeld: "SELECT EXISTS (SELECT 1 FROM core_settings WHERE key = 'minimum_version' AND value = ?)",
 	}
 }
 
@@ -72,6 +79,7 @@ type operatorScenario struct {
 	plugins []sdk.Plugin
 	offered *commanding
 	notes   *noting
+	site    *updateSite
 }
 
 // initializeOperatorCommands returns the binding of the operator command steps on engine, t holding their databases.
@@ -110,8 +118,26 @@ func initializeOperatorCommands(t *testing.T, engine operatorEngine) func(*godog
 		sc.Given(`^a plugin declaring the role "([^"]*)" with the capability "([^"]*)"$`, s.declareRole)
 		sc.Given(`^a plugin offering "([^"]*)", which asks for "([^"]*)"$`, s.offerAsking)
 		sc.Given(`^the administrator "([^"]*)" gave "([^"]*)" the role "([^"]*)"$`, s.gaveRole)
-		sc.Then(`^the answer names the version, the build stamp and the theme kits of this binary$`, s.namesTheBuildFacts)
+		sc.Then(`^the answer names the version, the build stamp, the minimum version and the theme kits of this binary$`,
+			s.namesTheBuildFacts)
+		sc.Given(`^a Gophenberg migrated the database and left the minimum version "([^"]*)"$`, s.leaveMinimumVersion)
+		sc.Then(`^the database holds the minimum version of this binary$`, s.holdsOwnMinimumVersion)
+		sc.Then(`^the database still holds the minimum version "([^"]*)"$`, s.holdsMinimumVersion)
+		initializeUpdateChecks(sc, s)
 	}
+}
+
+// initializeUpdateChecks binds the steps of the update check scenarios to s.
+func initializeUpdateChecks(sc *godog.ScenarioContext, s *operatorScenario) {
+	sc.Given(`^an update site whose stable index offers version "([^"]*)"$`, s.offerUpdate)
+	sc.Given(`^only (the first root|the second root|a stranger) signed the key list$`, s.signKeyListAlone)
+	sc.Given(`^only a stranger signed the index$`, s.signIndexAsStranger)
+	sc.Given(`^the index expired yesterday$`, s.expireIndex)
+	sc.Given(`^the index names the channel "([^"]*)"$`, s.renameChannel)
+	sc.Given(`^the operator ran "([^"]*)"$`, s.ranLine)
+	sc.Given(`^the update site went back to an older index$`, s.goBackAnIndex)
+	sc.Then(`^the answer offers version "([^"]*)"$`, s.offersVersion)
+	sc.Then(`^the answer offers no version$`, s.offersNoVersion)
 }
 
 // namesTheBuildFacts fails unless the answer is the one document that holds this binary's build facts.
@@ -121,11 +147,37 @@ func (s *operatorScenario) namesTheBuildFacts() error {
 		return fmt.Errorf("the answer %q is no JSON document: %w", s.result.Stdout, err)
 	}
 	want := buildFacts{
-		Schema: 1, Name: "gophenberg", Version: version.Version(),
-		Commit: version.Commit(), Stamp: version.Stamp(), Kits: themehost.ServedKits(),
+		Schema: 1, Name: "gophenberg", Version: version.Version(), Commit: version.Commit(), Stamp: version.Stamp(),
+		MinimumVersion: version.Minimum(), PostgreSQL: postgres.OldestMajor, Kits: themehost.ServedKits(),
 	}
 	if !facts.equal(want) {
 		return fmt.Errorf("the answer %q holds %+v, want %+v", s.result.Stdout, facts, want)
+	}
+	return nil
+}
+
+// leaveMinimumVersion migrates the scenario's database, then stores minimum as the minimum version left there.
+func (s *operatorScenario) leaveMinimumVersion(ctx context.Context, minimum string) error {
+	s.runLine("migrate")
+	if err := s.succeeds(); err != nil {
+		return err
+	}
+	if _, err := s.answers(ctx, s.engine.minimumVersionLeft, minimum); err != nil {
+		return fmt.Errorf("storing the minimum version %s: %w", minimum, err)
+	}
+	return nil
+}
+
+// holdsOwnMinimumVersion fails unless the database holds the minimum version of this binary.
+func (s *operatorScenario) holdsOwnMinimumVersion(ctx context.Context) error {
+	return s.holdsMinimumVersion(ctx, version.Minimum())
+}
+
+// holdsMinimumVersion fails unless the database holds minimum as its minimum version.
+func (s *operatorScenario) holdsMinimumVersion(ctx context.Context, minimum string) error {
+	held, err := s.answers(ctx, s.engine.minimumVersionHeld, minimum)
+	if err != nil || !held {
+		return fmt.Errorf("the database holds the minimum version %s %v (%v), want it to", minimum, held, err)
 	}
 	return nil
 }

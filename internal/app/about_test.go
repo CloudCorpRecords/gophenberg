@@ -4,11 +4,12 @@ package app
 
 import (
 	"encoding/json"
-	"slices"
+	"reflect"
 	"testing"
 
 	"github.com/gopherium/framework/gonsole/testkit"
 
+	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/themehost"
 	"github.com/gopherium/gophenberg/internal/version"
 )
@@ -29,9 +30,13 @@ func TestAboutPrintsTheBuildFactsAsOneDocument(t *testing.T) {
 	if err := json.Unmarshal([]byte(got.Stdout), &facts); err != nil {
 		t.Fatalf("reading the build facts: %v", err)
 	}
-	want := buildFacts{Schema: 1, Name: "gophenberg", Version: version.Version(), Kits: themehost.ServedKits()}
-	if len(fields) != 6 || !facts.equal(want) {
-		t.Errorf("about -json = %s, want exactly schema, name, version, commit, stamp and kits as %+v", got.Stdout, want)
+	want := buildFacts{
+		Schema: 1, Name: "gophenberg", Version: version.Version(), MinimumVersion: version.Minimum(),
+		PostgreSQL: postgres.OldestMajor, Kits: themehost.ServedKits(),
+	}
+	if len(fields) != 8 || !facts.equal(want) {
+		t.Errorf("about -json = %s, want exactly schema, name, version, commit, stamp, minimum_version, postgresql "+
+			"and kits as %+v", got.Stdout, want)
 	}
 }
 
@@ -84,6 +89,5 @@ func TestAboutNeedsNoDatabase(t *testing.T) {
 
 // equal reports whether two sets of build facts hold the same values.
 func (f buildFacts) equal(other buildFacts) bool {
-	return f.Schema == other.Schema && f.Name == other.Name && f.Version == other.Version &&
-		f.Commit == other.Commit && f.Stamp == other.Stamp && slices.Equal(f.Kits, other.Kits)
+	return reflect.DeepEqual(f, other)
 }
