@@ -9,6 +9,7 @@ import (
 
 	"github.com/gopherium/framework/gonsole"
 
+	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/themehost"
 	"github.com/gopherium/gophenberg/internal/version"
 )
@@ -18,12 +19,14 @@ const shortCommit = 7
 
 // buildFacts is what about tells of this binary, the fields every release.json repeats.
 type buildFacts struct {
-	Schema  int      `json:"schema"`
-	Name    string   `json:"name"`
-	Version string   `json:"version"`
-	Commit  string   `json:"commit"`
-	Stamp   string   `json:"stamp"`
-	Kits    []string `json:"kits"`
+	Schema         int      `json:"schema"`
+	Name           string   `json:"name"`
+	Version        string   `json:"version"`
+	Commit         string   `json:"commit"`
+	Stamp          string   `json:"stamp"`
+	MinimumVersion string   `json:"minimum_version"`
+	PostgreSQL     int      `json:"postgresql"`
+	Kits           []string `json:"kits"`
 }
 
 // aboutCommand returns the command that prints what this binary is, as one document with -json.
@@ -39,8 +42,8 @@ func aboutCommand() gonsole.Command {
 // printAbout prints the build facts of this binary, one line for people or one document with -json.
 func printAbout(_ context.Context, call gonsole.Call) error {
 	facts := buildFacts{
-		Schema: 1, Name: "gophenberg", Version: version.Version(),
-		Commit: version.Commit(), Stamp: version.Stamp(), Kits: themehost.ServedKits(),
+		Schema: 1, Name: "gophenberg", Version: version.Version(), Commit: version.Commit(), Stamp: version.Stamp(),
+		MinimumVersion: version.Minimum(), PostgreSQL: postgres.OldestMajor, Kits: themehost.ServedKits(),
 	}
 	if call.JSON {
 		return call.Encode(facts)
