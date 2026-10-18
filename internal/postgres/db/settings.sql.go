@@ -22,6 +22,15 @@ func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
 	return value, err
 }
 
+const lockSettings = `-- name: LockSettings :exec
+SELECT pg_advisory_xact_lock(hashtext('core.settings'))
+`
+
+func (q *Queries) LockSettings(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockSettings)
+	return err
+}
+
 const setSetting = `-- name: SetSetting :exec
 INSERT INTO core.settings (key, value)
 VALUES ($1, $2)

@@ -52,20 +52,69 @@ func (s *SettingStore) Lookup(ctx context.Context, key string) (string, bool, er
 
 // Save stores every given value, or stores none of them.
 func (s *SettingStore) Save(ctx context.Context, values map[string]string) error {
+	return s.inTx(ctx, func(queries *db.Queries) error {
+		return writeSettings(ctx, queries, values)
+	})
+}
+
+// Update stores what change makes of the values stored under keys, as one write no other Update overlaps.
+func (s *SettingStore) Update(
+	ctx context.Context, keys []string, change func(held map[string]string) (map[string]string, error),
+) error {
+	return s.inTx(ctx, func(queries *db.Queries) error {
+		if err := queries.LockSettings(ctx); err != nil {
+			return fmt.Errorf("postgres: locking the settings: %w", err)
+		}
+		held, err := heldSettings(ctx, queries, keys)
+		if err != nil {
+			return err
+		}
+		values, err := change(held)
+		if err != nil {
+			return err
+		}
+		return writeSettings(ctx, queries, values)
+	})
+}
+
+// inTx runs body over queries in one transaction, committing it when body succeeds and rolling it back otherwise.
+func (s *SettingStore) inTx(ctx context.Context, body func(queries *db.Queries) error) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("postgres: writing settings: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-
-	queries := s.queries.WithTx(tx)
-	for _, key := range lockedKeys(values) {
-		if err := queries.SetSetting(ctx, db.SetSettingParams{Key: key, Value: values[key]}); err != nil {
-			return fmt.Errorf("postgres: writing setting %q: %w", key, err)
-		}
+	if err := body(s.queries.WithTx(tx)); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("postgres: writing settings: %w", err)
 	}
 	return nil
+}
+
+// writeSettings upserts each value through queries in key order.
+func writeSettings(ctx context.Context, queries *db.Queries, values map[string]string) error {
+	for _, key := range lockedKeys(values) {
+		if err := queries.SetSetting(ctx, db.SetSettingParams{Key: key, Value: values[key]}); err != nil {
+			return fmt.Errorf("postgres: writing setting %q: %w", key, err)
+		}
+	}
+	return nil
+}
+
+// heldSettings returns the values stored under keys, leaving out the keys that hold none.
+func heldSettings(ctx context.Context, queries *db.Queries, keys []string) (map[string]string, error) {
+	held := map[string]string{}
+	for _, key := range keys {
+		value, err := queries.GetSetting(ctx, key)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("postgres: reading setting %q: %w", key, err)
+		}
+		held[key] = value
+	}
+	return held, nil
 }

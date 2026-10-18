@@ -102,6 +102,8 @@ var adminRoutes = []route{
 	{http.MethodPost, "/api/themes/active"},
 	{http.MethodDelete, "/api/themes/active"},
 	{http.MethodPost, "/api/themes/rollback"},
+	{http.MethodGet, "/api/updates"},
+	{http.MethodPost, "/api/updates/check"},
 }
 
 // memorySiteSettings answers the site wide settings from memory.
@@ -149,6 +151,7 @@ func gateServerAs(t *testing.T, held string) (http.Handler, *http.Cookie) {
 		MediaStore: newFakeMediaStore(),
 		Cron:       server.NewCronRuns(&recordedJobs{}, time.Minute, time.Now),
 		CronSecret: cronSecret,
+		Updates:    &storedUpdates{},
 	})
 	recorder := doLogin(t, handler, `{"email":"author@example.com","password":"correct horse battery"}`)
 	if recorder.Code != http.StatusOK {

@@ -19,6 +19,7 @@ so it takes the default.
 | --- | --- | --- | --- |
 | `GOPHENBERG_DATABASE_URL` | Yes | | The PostgreSQL connection string, or `sqlite:` and the absolute path of a SQLite file. [The PostgreSQL address](#the-postgresql-address) lists what a connection string may not hold. [A SQLite database](#a-sqlite-database) says what runs on one and lists its settings |
 | `GOPHENBERG_DATABASE_MAX_CONNS` | No | The larger of 4 and the number of CPUs | How many connections to the database stay open at most, from 2 to 2147483647, see [the database connections](#the-database-connections) |
+| `GOPHENBERG_SUPERUSER_POLICY` | No | `warn` | What the server does when it connects to PostgreSQL as a superuser: `warn` logs a warning and serves, `refuse` stops it, see [the PostgreSQL server](#the-postgresql-server) |
 | `GOPHENBERG_ADDR` | No | `localhost:8081` | Address the server listens on. The container image sets `0.0.0.0:8081` |
 | `GOPHENBERG_WEB_DIR` | No | | A built admin folder to serve in place of the admin built into the binary. It must hold `index.html` |
 | `GOPHENBERG_SITE_TITLE` | No | `Gophenberg` | The site name shown by the built-in renderer |
@@ -73,6 +74,13 @@ so it takes the default.
 | `GOPHENBERG_SESSION_SWEEP_INTERVAL` | No | `1h` | How often expired sessions and expired account links are swept |
 | `GOPHENBERG_COMMAND_RECORD_TIMEOUT` | No | `5s` | How long an account command has to store the record of a change it applied, see [the commands](/self-hosting/commands/) |
 | `GOPHENBERG_COMMAND_RECORDS_LIMIT` | No | `50` | How many records `account:records` lists when its `-limit` flag names no other |
+| `GOPHENBERG_UPDATE_CHECKS` | No | `true` | Whether the site checks for a newer Gophenberg on its own. `update:check` and the admin still check when asked |
+| `GOPHENBERG_UPDATE_CHECK_INTERVAL` | No | `12h` | How long after one check the site checks again on its own |
+| `GOPHENBERG_UPDATE_URL` | No | `https://updates.gophenberg.org` | The update site. It must be `https`, or `http` on a loopback host such as `localhost` |
+| `GOPHENBERG_UPDATE_CHANNEL` | No | `stable` | The channel the site follows, in lowercase letters, digits and hyphens |
+| `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary |
+| `GOPHENBERG_UPDATE_TIMEOUT` | No | `30s` | How long a check has to fetch each file |
+| `GOPHENBERG_UPDATES_SCREEN_CHECK_AGE` | No | `1m` | How long after one check the admin waits before it runs another when asked |
 | `GOPHENBERG_FEED_TITLE` | No | `Gophenberg` | The RSS channel title |
 | `GOPHENBERG_FEED_ITEMS` | No | `20` | How many posts the RSS feed carries |
 
@@ -95,6 +103,22 @@ address nothing holds, a file that is missing or a request the server
 refused is never kept by any cache, however the windows are set. An
 answer to a signed in account is never kept by any cache either, not
 even that person's own browser.
+
+## The PostgreSQL server
+
+Gophenberg needs PostgreSQL 15 or newer. On an older server, `serve`,
+`migrate` and every command that migrates stop before they change
+anything, and name the version they found.
+
+Connect as the database's own owner role, not as a superuser such as
+`postgres`. A superuser can make the database server run programs, so
+a fault in Gophenberg or in a plugin that let someone send it SQL would
+reach the shell of that server. When `serve` connects as a superuser,
+it logs a warning and serves. Set `GOPHENBERG_SUPERUSER_POLICY` to
+`refuse` to stop it instead. The compose file from
+[Install](/self-hosting/install/) connects as `postgres`, so a site set
+up from it shows the warning. A SQLite file has no roles, so the
+setting does nothing there.
 
 ## The database connections
 
@@ -501,8 +525,15 @@ The server refuses to start, and says why, when:
   Write them as durations, `1h`, `90s`, `5m`. Part of a second is
   refused, because the header counts in whole seconds.
 - Any of the theme timings, HTTP timeouts, shutdown graces, cron job
-  timings or the upload timeout is not a positive duration. Write them
-  the way Go does, `30s`, `500ms`, `1m`.
+  timings, update timings or the upload timeout is not a positive
+  duration. Write them the way Go does, `30s`, `500ms`, `1m`.
+- `GOPHENBERG_UPDATE_URL` is not an `https` address, or an `http` one
+  on a loopback host, or it names a user, a query or a fragment.
+- `GOPHENBERG_UPDATE_CHANNEL` holds anything but lowercase letters,
+  digits and hyphens, or does not start with a letter.
+- `GOPHENBERG_TRUSTED_KEYS` names a key that is not a P-256 Multikey,
+  or is set while `GOPHENBERG_UPDATE_URL` is the official update site.
+- `GOPHENBERG_UPDATE_CHECKS` is not `true` or `false`.
 - `GOPHENBERG_THEME_MAX_BACKOFF` stands below
   `GOPHENBERG_THEME_BACKOFF`, which would leave no room to grow.
 - `GOPHENBERG_CRON_LEASE` does not stand above
@@ -530,6 +561,17 @@ The server refuses to start, and says why, when:
 - `GOPHENBERG_THEME` pins a theme that fails to load, see
   [installing a theme](/themes/installing-a-theme/). A theme chosen
   in the admin does not stop startup.
+- `GOPHENBERG_SUPERUSER_POLICY` is not `warn` or `refuse`.
+- The database runs PostgreSQL 14 or older, see
+  [the PostgreSQL server](#the-postgresql-server).
+- `GOPHENBERG_SUPERUSER_POLICY` is `refuse` and the server connects
+  to PostgreSQL as a superuser.
+- A newer Gophenberg migrated the database past what this version
+  serves. The message names the version the database needs, see
+  [going back to an older version](/self-hosting/updates-and-backups/#going-back-to-an-older-version).
+
+`check` never connects to the database, so the last three wait for
+`serve`, `migrate` and the commands that migrate.
 
 `GOPHENBERG_COMMAND_RECORD_TIMEOUT` has to be a positive duration and
 `GOPHENBERG_COMMAND_RECORDS_LIMIT` a positive whole number. A bad one

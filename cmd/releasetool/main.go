@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command releasetool makes release keys, signs release files, checks their signatures, and lists them in
-// SHA256SUMS and the release record.
+// Command releasetool makes release keys, signs release files, checks their signatures, lists them in
+// SHA256SUMS and the release record, and writes the key list and the channel index of the update site.
 package main
 
 import (
@@ -22,6 +22,11 @@ const usage = `usage:
   releasetool verify -public <file|multikey> <file>...
   releasetool sums   <file>...
   releasetool record -version <version> -download-url <https address> <archive>...
+  releasetool keys   -release <multikey> -standby <multikey> [-serial <n>] [-valid <duration>]
+  releasetool sign-keys -key <root file> [-passphrase-file <file>] <keys.json>
+  releasetool index  [-channel <name>] [-previous <file>] -record <file> -release-json <file> [-valid <duration>]
+                     [-keep <n>]
+  releasetool index  [-channel <name>] -previous <file> -withdraw <version> [-valid <duration>] [-keep <n>]
 `
 
 // command runs one releasetool command over its arguments.
@@ -29,11 +34,14 @@ type command func(args []string, stdout, stderr io.Writer) error
 
 // commands maps each command name to what runs it.
 var commands = map[string]command{
-	"keygen": keygen,
-	"sign":   sign,
-	"verify": verify,
-	"sums":   sums,
-	"record": record,
+	"keygen":    keygen,
+	"sign":      sign,
+	"verify":    verify,
+	"sums":      sums,
+	"record":    record,
+	"keys":      keys,
+	"sign-keys": signKeys,
+	"index":     index,
 }
 
 // errFlags reports flags the flag package refused and has already described.

@@ -44,7 +44,7 @@ func Verify(key ed25519.PublicKey, digest [DigestSize]byte, signature string) er
 	if len(key) != ed25519.PublicKeySize {
 		return fmt.Errorf("signature: refused an Ed25519 key of %d bytes, which holds %d", len(key), ed25519.PublicKeySize)
 	}
-	raw, err := decodeSignature(signature)
+	raw, err := decodeSignature(signature, ed25519.SignatureSize)
 	if err != nil {
 		return err
 	}
@@ -54,8 +54,8 @@ func Verify(key ed25519.PublicKey, digest [DigestSize]byte, signature string) er
 	return nil
 }
 
-// decodeSignature returns the bytes of a signature in base64url without padding, refusing every other form.
-func decodeSignature(signature string) ([]byte, error) {
+// decodeSignature returns the size bytes of a signature in base64url without padding, refusing every other form.
+func decodeSignature(signature string, size int) ([]byte, error) {
 	if strings.ContainsAny(signature, "+/=") {
 		return nil, errStandardBase64
 	}
@@ -66,8 +66,8 @@ func decodeSignature(signature string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("signature: refused a signature that is not base64url without padding: %w", err)
 	}
-	if len(raw) != ed25519.SignatureSize {
-		return nil, fmt.Errorf("signature: refused a signature of %d bytes, which holds %d", len(raw), ed25519.SignatureSize)
+	if len(raw) != size {
+		return nil, fmt.Errorf("signature: refused a signature of %d bytes, which holds %d", len(raw), size)
 	}
 	return raw, nil
 }

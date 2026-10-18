@@ -716,6 +716,9 @@ msgstr ""
 msgid "Full Size"
 msgstr ""
 
+msgid "Gophenberg checked for updates moments ago. Try again later."
+msgstr ""
+
 msgid "Gophenberg could not read what your browser sent. Reload the page and try again, and tell whoever looks after your site if it keeps happening."
 msgstr ""
 

@@ -112,6 +112,19 @@ func releaseFiles(paths []string) []releaseFile {
 
 // releaseKey reads the release key file, opening a sealed one with the passphrase file's first line.
 func (o signOptions) releaseKey() (ed25519.PrivateKey, error) {
+	key, err := o.signer("release key")
+	if err != nil {
+		return nil, err
+	}
+	release, isEd25519 := key.(ed25519.PrivateKey)
+	if !isEd25519 {
+		return nil, fmt.Errorf("refused %s, which holds a %T: release files are signed with an Ed25519 key", o.key, key)
+	}
+	return release, nil
+}
+
+// signer reads the key file of the role named, opening a sealed one with the passphrase file's first line.
+func (o signOptions) signer(role string) (crypto.Signer, error) {
 	var passphrase phrase
 	if o.passphraseFile != "" {
 		read, err := readPassphrase(o.passphraseFile)
@@ -122,17 +135,9 @@ func (o signOptions) releaseKey() (ed25519.PrivateKey, error) {
 	}
 	raw, err := os.ReadFile(o.key)
 	if err != nil {
-		return nil, fmt.Errorf("reading the release key: %w", err)
+		return nil, fmt.Errorf("reading the %s: %w", role, err)
 	}
-	key, err := readKey(bytes.NewReader(raw), passphrase)
-	if err != nil {
-		return nil, err
-	}
-	release, isEd25519 := key.(ed25519.PrivateKey)
-	if !isEd25519 {
-		return nil, fmt.Errorf("refused %s, which holds a %T: release files are signed with an Ed25519 key", o.key, key)
-	}
-	return release, nil
+	return readKey(bytes.NewReader(raw), passphrase)
 }
 
 // loadPublicKey reads the release public key from the text as a Multikey, or else from the PEM file of that name.

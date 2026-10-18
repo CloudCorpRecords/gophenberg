@@ -31,7 +31,10 @@ func TestConfigRefusesThePluginIDTheCoreDeclaresItsRolesUnder(t *testing.T) {
 func TestConfigRefusesAPluginIDTheCommandLineKeeps(t *testing.T) {
 	t.Parallel()
 
-	for _, id := range []string{"help", "list", "version", "check", "serve", "migrate", "seed", "account", "about"} {
+	for _, id := range []string{
+		"help", "list", "version", "check", "serve", "migrate", "seed", "account", "about",
+		"update", "server", "plugin", "theme", "setup", "build", "health",
+	} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 
