@@ -8,13 +8,20 @@ on your site.
 
 ## Saving
 
-The header always shows one of three words: **Saved**, **Unsaved
-changes**, or **Saving**.
+On a screen 782 pixels wide or wider, the header shows one of three
+words: **Saved**, **Unsaved changes**, or **Saving**. On a narrower
+screen that word leaves the header, and the save button names the
+state itself, as in WordPress: **Save draft** when there is
+something to store, **Saving** while it saves, and **Saved** once
+everything is stored.
 
 **Save draft** appears on any post that is not published, and
 lights up only when there is something to store. Edits in the
 Document tab, the status, slug, and excerpt, travel with the next
 save.
+
+On a screen narrower than 600 pixels, the save button is a cloud
+icon. Screen readers hear it by the same three names.
 
 If someone else changed the post while you were editing, saving
 shows *This post changed elsewhere. Reload before saving again.*

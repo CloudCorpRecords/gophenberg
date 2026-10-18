@@ -481,12 +481,17 @@ const manages = can(session, 'hello.manage')
 
 The frontend SDK, `@gophenberg/frontend-sdk`, passes on a few icons
 from `@wordpress/icons`, each named after the job it does in the
-admin: `authorIcon`, `backIcon`, `backupIcon`, `downIcon`,
-`listViewIcon`, `mediaIcon`, `postIcon`, `redoIcon`, `trashIcon`,
+admin: `authorIcon`, `backIcon`, `backupIcon`, `closeIcon`,
+`downIcon`, `listViewIcon`, `mediaIcon`, `postIcon`, `redoIcon`,
+`saveIcon`, `sidebarIcon`, `sidebarRtlIcon`, `trashIcon`,
 `undoIcon`, `upIcon` and `uploadIcon`. `authorIcon` is the one an
 author cell shows when the site shows no avatars, `postIcon` the one
 an empty content list shows, `mediaIcon` the one an empty media
 library shows, and `uploadIcon` the one an upload button carries.
+`sidebarIcon` is the one the editor's Settings button carries, and
+`sidebarRtlIcon` its mirror for a language written right to left.
+`saveIcon` is the one Save draft shows on a phone, and `closeIcon`
+the one a panel's close button carries.
 Import them from the SDK, so the admin keeps one copy of the icon set:
 
 ```ts
