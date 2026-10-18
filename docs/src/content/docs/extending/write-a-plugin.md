@@ -34,7 +34,8 @@ generated wiring, such as a Go keyword, `err` or `plugins`. The
 [pluginkit docs](https://docs.gopherium.org/plugins/wiring-and-manifests/#ids-the-generator-refuses)
 list them all. The id also names the plugin's commands, so
 `help`, `list`, `version`, `check`, `serve`, `migrate`, `seed`,
-`account` and `about` are refused too. Those names belong to the
+`account`, `about`, `update`, `server`, `plugin`, `theme`, `setup`,
+`build` and `health` are refused too. Those names belong to the
 command line.
 
 ## 2. The package
