@@ -15,7 +15,7 @@ import (
 const (
 	// siteIDKey is the site setting that holds the site's identity, which only the rollout bucket reads.
 	siteIDKey = "site_id"
-	// serialsKey is the site setting that holds the serials taken from each update site and channel.
+	// serialsKey is the site setting that holds the serials taken of each key list and index.
 	serialsKey = "update_serials"
 	// resultKey is the site setting that holds what the checks found.
 	resultKey = "update_result"
@@ -48,22 +48,34 @@ type outcome struct {
 	at      time.Time
 }
 
+// taken holds the serials a site took: of each update site's key list, and of each channel's index there.
+type taken struct {
+	Keys  map[string]int64 `json:"keys"`
+	Index map[string]int64 `json:"index"`
+}
+
+// source names what a check reads: the key list of an update site, and the index of one of its channels.
+type source struct {
+	site  string
+	index string
+}
+
 // Run checks the update site for the site, keeping its identity, the serials taken and the result in store.
 func Run(ctx context.Context, cfg Config, store Settings) (Result, error) {
 	id, err := siteID(ctx, store)
 	if err != nil {
 		return Result{}, err
 	}
-	taken, _, err := stateOf(ctx, store)
+	held, _, err := stateOf(ctx, store)
 	if err != nil {
 		return Result{}, err
 	}
 	cfg.Site.ID = id
-	source := cfg.Address.String() + " " + cfg.Channel
-	found, serials, checked := Check(ctx, cfg, taken[source])
+	src := sourceOf(cfg)
+	found, serials, checked := Check(ctx, cfg, held.of(src))
 	saving, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Client.Timeout)
 	defer cancel()
-	return record(saving, store, source, outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
+	return record(saving, store, src, outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
 }
 
 // ResultOf returns what the checks stored in store, an empty result before the first check.
@@ -79,20 +91,19 @@ func ResultOf(ctx context.Context, store Settings) (Result, error) {
 	return result, nil
 }
 
-// record stores the outcome of a check of source over the state stored now, keeping a newer check's.
-func record(ctx context.Context, store Settings, source string, done outcome) (Result, error) {
-	taken, stored, err := stateOf(ctx, store)
+// record stores the outcome of a check of src over the state stored now, keeping a newer check's.
+func record(ctx context.Context, store Settings, src source, done outcome) (Result, error) {
+	held, stored, err := stateOf(ctx, store)
 	if err != nil {
 		return Result{}, errors.Join(fmt.Errorf("%w: %w", ErrNotStored, err), done.err)
 	}
-	if done.err == nil && taken[source].newerThan(done.serials) {
+	if done.err == nil && held.of(src).newerThan(done.serials) {
 		return stored, nil
 	}
 	result := stored.after(done)
 	values := map[string]string{resultKey: written(result)}
 	if done.err == nil {
-		taken[source] = done.serials
-		values[serialsKey] = written(taken)
+		values[serialsKey] = written(held.with(src, done.serials))
 	}
 	if err := store.Save(ctx, values); err != nil {
 		return result, errors.Join(fmt.Errorf("%w: %w", ErrNotStored, err), done.err)
@@ -103,6 +114,32 @@ func record(ctx context.Context, store Settings, source string, done outcome) (R
 // newerThan reports whether either serial comes after the matching one of other.
 func (s Serials) newerThan(other Serials) bool {
 	return s.Keys > other.Keys || s.Index > other.Index
+}
+
+// sourceOf returns what a check under cfg reads.
+func sourceOf(cfg Config) source {
+	site := cfg.Address.String()
+	return source{site: site, index: site + " " + cfg.Channel}
+}
+
+// of returns the serials taken from src.
+func (t taken) of(src source) Serials {
+	return Serials{Keys: t.Keys[src.site], Index: t.Index[src.index]}
+}
+
+// with returns t holding serials as the ones taken from src.
+func (t taken) with(src source, serials Serials) taken {
+	keys, index := orEmpty(t.Keys), orEmpty(t.Index)
+	keys[src.site], index[src.index] = serials.Keys, serials.Index
+	return taken{Keys: keys, Index: index}
+}
+
+// orEmpty returns m, or an empty map when m is nil.
+func orEmpty(m map[string]int64) map[string]int64 {
+	if m == nil {
+		return map[string]int64{}
+	}
+	return m
 }
 
 // after returns the result once a check ended as done says.
@@ -126,10 +163,9 @@ func siteID(ctx context.Context, store Settings) (string, error) {
 	return id, store.Save(ctx, map[string]string{siteIDKey: id})
 }
 
-// stateOf returns the serials taken from each update site and channel and the result stored, starting again from
-// any it cannot read.
-func stateOf(ctx context.Context, store Settings) (map[string]Serials, Result, error) {
-	serials := map[string]Serials{}
+// stateOf returns the serials taken and the result stored, starting again from any it cannot read.
+func stateOf(ctx context.Context, store Settings) (taken, Result, error) {
+	var serials taken
 	var result Result
 	for _, read := range []struct {
 		key  string
@@ -137,7 +173,7 @@ func stateOf(ctx context.Context, store Settings) (map[string]Serials, Result, e
 	}{{serialsKey, &serials}, {resultKey, &result}} {
 		held, found, err := store.Lookup(ctx, read.key)
 		if err != nil {
-			return nil, Result{}, err
+			return taken{}, Result{}, err
 		}
 		if found {
 			_ = json.Unmarshal([]byte(held), read.into)

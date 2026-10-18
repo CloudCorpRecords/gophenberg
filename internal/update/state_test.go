@@ -62,19 +62,30 @@ func newStore() *memoryStore {
 	return &memoryStore{values: map[string]string{}}
 }
 
-// storedSerials returns the serials the store holds for each site and channel.
-func storedSerials(t *testing.T, store *memoryStore) map[string]update.Serials {
+// takenSerials is how the store holds the serials taken: of each update site's key list, of each channel's index.
+type takenSerials struct {
+	Keys  map[string]int64 `json:"keys"`
+	Index map[string]int64 `json:"index"`
+}
+
+// storedSerials returns the serials the store holds for the server's key list and the index of channel.
+func storedSerials(t *testing.T, store *memoryStore, s *updateServer, channel string) update.Serials {
 	t.Helper()
-	held := map[string]update.Serials{}
+	var held takenSerials
 	if err := json.Unmarshal([]byte(store.values["update_serials"]), &held); err != nil {
 		t.Fatalf("reading update_serials %q: %v", store.values["update_serials"], err)
 	}
-	return held
+	return update.Serials{Keys: held.Keys[s.site()], Index: held.Index[s.source(channel)]}
 }
 
-// source returns the key the serials of the server's channel are stored under.
+// site returns the key the serial of the server's key list is stored under.
+func (s *updateServer) site() string {
+	return s.server.URL + s.base
+}
+
+// source returns the key the serial of the index of the server's channel is stored under.
 func (s *updateServer) source(channel string) string {
-	return s.server.URL + s.base + " " + channel
+	return s.site() + " " + channel
 }
 
 func TestRunStoresTheOfferTheSerialsAndASiteIdentity(t *testing.T) {
@@ -92,9 +103,8 @@ func TestRunStoresTheOfferTheSerialsAndASiteIdentity(t *testing.T) {
 	if !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(store.values["site_id"]) {
 		t.Errorf("site_id = %q, want 16 random bytes in hexadecimal", store.values["site_id"])
 	}
-	want := map[string]update.Serials{server.source("stable"): {Keys: 5, Index: 9}}
-	if got := storedSerials(t, store); !maps.Equal(got, want) {
-		t.Errorf("update_serials = %v, want %v", got, want)
+	if got := storedSerials(t, store, server, "stable"); got != (update.Serials{Keys: 5, Index: 9}) {
+		t.Errorf("update_serials = %+v, want key list 5 and index 9", got)
 	}
 	stored, err := update.ResultOf(t.Context(), store)
 	if err != nil || stored.Offer == nil || stored.Offer.Version != "0.21.0" || stored.FailedAt != nil {
@@ -122,12 +132,36 @@ func TestRunKeepsTheSerialsOfEachSiteAndChannelApart(t *testing.T) {
 	if err != nil || result.Offer == nil || result.Offer.Version != "0.22.0-rc.1" {
 		t.Errorf("Run() on beta after stable = %+v, %v, want the older beta index taken", result, err)
 	}
-	want := map[string]update.Serials{
-		server.source("stable"): {Keys: 5, Index: 9}, server.source("beta"): {Keys: 5, Index: 3},
+	for channel, want := range map[string]update.Serials{"stable": {Keys: 5, Index: 9}, "beta": {Keys: 5, Index: 3}} {
+		if got := storedSerials(t, store, server, channel); got != want {
+			t.Errorf("update_serials of %s = %+v, want %+v", channel, got, want)
+		}
 	}
-	if got := storedSerials(t, store); !maps.Equal(got, want) {
-		t.Errorf("update_serials = %v, want %v", got, want)
+}
+
+func TestRunKeepsTheKeyListSerialOfAnUpdateSiteAcrossItsChannels(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	beta := index(offer("0.22.0-rc.1", "0.22.0-rc.1"))
+	beta.Channel, beta.Serial = "beta", 3
+	server.putIndex(k, beta)
+	store := newStore()
+	if _, err := update.Run(t.Context(), server.config(k), store); err != nil {
+		t.Fatalf("Run() on stable = %v, want nil", err)
 	}
+	older := k.keyList(t)
+	older.Serial = 4
+	list := marshal(t, older)
+	server.put(update.KeyListPath, list)
+	server.put(update.KeyListPath+update.SignatureSuffix, signLines(t, list, k.root1))
+	moved := server.config(k)
+	moved.Channel = "beta"
+
+	_, err := update.Run(t.Context(), moved, store)
+
+	wantRefused(t, err, "key list of serial 4, older than serial 5 taken before")
 }
 
 func TestRunKeepsANewerCheckThatFinishedFirst(t *testing.T) {
@@ -137,7 +171,9 @@ func TestRunKeepsANewerCheckThatFinishedFirst(t *testing.T) {
 	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
 	newer := update.Result{CheckedAt: &now, Offer: &update.Found{Version: "0.22.0"}}
 	store := newStore()
-	newerSerials := map[string]update.Serials{server.source("stable"): {Keys: 5, Index: 10}}
+	newerSerials := takenSerials{
+		Keys: map[string]int64{server.site(): 5}, Index: map[string]int64{server.source("stable"): 10},
+	}
 	store.meanwhile = func(m *memoryStore) {
 		m.values["update_serials"] = string(marshal(t, newerSerials))
 		m.values["update_result"] = string(marshal(t, newer))
@@ -148,7 +184,7 @@ func TestRunKeepsANewerCheckThatFinishedFirst(t *testing.T) {
 	if err != nil || result.Offer == nil || result.Offer.Version != "0.22.0" {
 		t.Errorf("Run() = %+v, %v, want the newer check kept", result, err)
 	}
-	if got := storedSerials(t, store)[server.source("stable")]; got != (update.Serials{Keys: 5, Index: 10}) {
+	if got := storedSerials(t, store, server, "stable"); got != (update.Serials{Keys: 5, Index: 10}) {
 		t.Errorf("update_serials = %+v, want the newer serials kept", got)
 	}
 }
@@ -190,7 +226,7 @@ func TestRunKeepsTheLastGoodResultBesideAFailure(t *testing.T) {
 	if result.FailedAt == nil || !result.FailedAt.Equal(now.Add(time.Hour)) || result.Error != err.Error() {
 		t.Errorf("Run() = %+v, want the failure and its time stored", result)
 	}
-	if got := storedSerials(t, store)[server.source("stable")]; got != (update.Serials{Keys: 5, Index: 9}) {
+	if got := storedSerials(t, store, server, "stable"); got != (update.Serials{Keys: 5, Index: 9}) {
 		t.Errorf("update_serials = %+v after a failure, want the last good serials kept", got)
 	}
 }
