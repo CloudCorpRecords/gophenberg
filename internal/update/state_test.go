@@ -17,25 +17,39 @@ import (
 // errPlanted is the failure a test store answers with.
 var errPlanted = errors.New("planted failure")
 
-// memoryStore is a site setting store in memory that fails a lookup, of one key or of all, or a save when told to.
+// memoryStore is a site setting store in memory that honours its context and fails a lookup or a save when told to.
 type memoryStore struct {
-	values     map[string]string
-	lookupFail error
-	failKey    string
-	saveFail   error
+	values      map[string]string
+	lookupFail  error
+	failKey     string
+	saveFail    error
+	serialsRead int
+	meanwhile   func(m *memoryStore)
 }
 
-// Lookup returns the value stored under key and whether the key is set at all.
-func (m *memoryStore) Lookup(_ context.Context, key string) (string, bool, error) {
+// Lookup returns the value stored under key, running meanwhile before the second read of the serials.
+func (m *memoryStore) Lookup(ctx context.Context, key string) (string, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
 	if m.lookupFail != nil && (m.failKey == "" || m.failKey == key) {
 		return "", false, m.lookupFail
+	}
+	if key == "update_serials" {
+		m.serialsRead++
+		if m.serialsRead == 2 && m.meanwhile != nil {
+			m.meanwhile(m)
+		}
 	}
 	value, found := m.values[key]
 	return value, found, nil
 }
 
-// Save stores every given value, or none when told to fail.
-func (m *memoryStore) Save(_ context.Context, values map[string]string) error {
+// Save stores every given value, or none when told to fail or when the context ended.
+func (m *memoryStore) Save(ctx context.Context, values map[string]string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if m.saveFail != nil {
 		return m.saveFail
 	}
@@ -46,6 +60,21 @@ func (m *memoryStore) Save(_ context.Context, values map[string]string) error {
 // newStore returns an empty memory store.
 func newStore() *memoryStore {
 	return &memoryStore{values: map[string]string{}}
+}
+
+// storedSerials returns the serials the store holds for each site and channel.
+func storedSerials(t *testing.T, store *memoryStore) map[string]update.Serials {
+	t.Helper()
+	held := map[string]update.Serials{}
+	if err := json.Unmarshal([]byte(store.values["update_serials"]), &held); err != nil {
+		t.Fatalf("reading update_serials %q: %v", store.values["update_serials"], err)
+	}
+	return held
+}
+
+// source returns the key the serials of the server's channel are stored under.
+func (s *updateServer) source(channel string) string {
+	return s.server.URL + s.base + " " + channel
 }
 
 func TestRunStoresTheOfferTheSerialsAndASiteIdentity(t *testing.T) {
@@ -63,12 +92,64 @@ func TestRunStoresTheOfferTheSerialsAndASiteIdentity(t *testing.T) {
 	if !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(store.values["site_id"]) {
 		t.Errorf("site_id = %q, want 16 random bytes in hexadecimal", store.values["site_id"])
 	}
-	if store.values["update_serials"] != `{"keys":5,"index":9}` {
-		t.Errorf("update_serials = %s, want the serials taken", store.values["update_serials"])
+	want := map[string]update.Serials{server.source("stable"): {Keys: 5, Index: 9}}
+	if got := storedSerials(t, store); !maps.Equal(got, want) {
+		t.Errorf("update_serials = %v, want %v", got, want)
 	}
 	stored, err := update.ResultOf(t.Context(), store)
 	if err != nil || stored.Offer == nil || stored.Offer.Version != "0.21.0" || stored.FailedAt != nil {
 		t.Errorf("ResultOf() = %+v, %v, want the result Run stored", stored, err)
+	}
+}
+
+func TestRunKeepsTheSerialsOfEachSiteAndChannelApart(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	beta := index(offer("0.22.0-rc.1", "0.22.0-rc.1"))
+	beta.Channel, beta.Serial = "beta", 3
+	server.putIndex(k, beta)
+	store := newStore()
+	if _, err := update.Run(t.Context(), server.config(k), store); err != nil {
+		t.Fatalf("Run() on stable = %v, want nil", err)
+	}
+	moved := server.config(k)
+	moved.Channel = "beta"
+
+	result, err := update.Run(t.Context(), moved, store)
+
+	if err != nil || result.Offer == nil || result.Offer.Version != "0.22.0-rc.1" {
+		t.Errorf("Run() on beta after stable = %+v, %v, want the older beta index taken", result, err)
+	}
+	want := map[string]update.Serials{
+		server.source("stable"): {Keys: 5, Index: 9}, server.source("beta"): {Keys: 5, Index: 3},
+	}
+	if got := storedSerials(t, store); !maps.Equal(got, want) {
+		t.Errorf("update_serials = %v, want %v", got, want)
+	}
+}
+
+func TestRunKeepsANewerCheckThatFinishedFirst(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	newer := update.Result{CheckedAt: &now, Offer: &update.Found{Version: "0.22.0"}}
+	store := newStore()
+	newerSerials := map[string]update.Serials{server.source("stable"): {Keys: 5, Index: 10}}
+	store.meanwhile = func(m *memoryStore) {
+		m.values["update_serials"] = string(marshal(t, newerSerials))
+		m.values["update_result"] = string(marshal(t, newer))
+	}
+
+	result, err := update.Run(t.Context(), server.config(k), store)
+
+	if err != nil || result.Offer == nil || result.Offer.Version != "0.22.0" {
+		t.Errorf("Run() = %+v, %v, want the newer check kept", result, err)
+	}
+	if got := storedSerials(t, store)[server.source("stable")]; got != (update.Serials{Keys: 5, Index: 10}) {
+		t.Errorf("update_serials = %+v, want the newer serials kept", got)
 	}
 }
 
@@ -109,8 +190,26 @@ func TestRunKeepsTheLastGoodResultBesideAFailure(t *testing.T) {
 	if result.FailedAt == nil || !result.FailedAt.Equal(now.Add(time.Hour)) || result.Error != err.Error() {
 		t.Errorf("Run() = %+v, want the failure and its time stored", result)
 	}
-	if store.values["update_serials"] != `{"keys":5,"index":9}` {
-		t.Errorf("update_serials = %s after a failure, want the last good serials kept", store.values["update_serials"])
+	if got := storedSerials(t, store)[server.source("stable")]; got != (update.Serials{Keys: 5, Index: 9}) {
+		t.Errorf("update_serials = %+v after a failure, want the last good serials kept", got)
+	}
+}
+
+func TestRunStoresAFailureAfterItsContextEnded(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "")
+	server.delay = time.Second
+	store := newStore()
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err := update.Run(ctx, server.config(k), store)
+
+	stored, readErr := update.ResultOf(t.Context(), store)
+	if err == nil || readErr != nil || stored.FailedAt == nil || stored.Error == "" {
+		t.Errorf("Run() = %v, stored %+v, %v, want the failure stored after the context ended", err, stored, readErr)
 	}
 }
 
@@ -160,9 +259,37 @@ func TestRunReportsAStoreItCannotUse(t *testing.T) {
 			t.Errorf("Run() with %s failing = %v, want the store's failure", name, err)
 		}
 	}
-	withIdentity := &memoryStore{values: map[string]string{"site_id": siteID}, saveFail: errPlanted}
-	if _, err := update.Run(t.Context(), server.config(k), withIdentity); !errors.Is(err, errPlanted) {
-		t.Errorf("Run() with the result's save failing = %v, want the store's failure", err)
+}
+
+func TestRunMarksAResultWhoseStateItCouldNotReadAgain(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "")
+	store := newStore()
+	store.meanwhile = func(m *memoryStore) {
+		m.lookupFail, m.failKey = errPlanted, "update_result"
+	}
+
+	_, err := update.Run(t.Context(), server.config(k), store)
+
+	if !errors.Is(err, update.ErrNotStored) || !errors.Is(err, errPlanted) {
+		t.Errorf("Run() = %v, want the read before the save marked as not stored", err)
+	}
+}
+
+func TestRunMarksAResultItCouldNotStore(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "")
+	server.drop(update.KeyListPath)
+	store := &memoryStore{values: map[string]string{"site_id": siteID}, saveFail: errPlanted}
+
+	result, err := update.Run(t.Context(), server.config(k), store)
+
+	if !errors.Is(err, update.ErrNotStored) || !errors.Is(err, errPlanted) || result.FailedAt == nil {
+		t.Errorf("Run() = %+v, %v, want the failed check marked as not stored", result, err)
 	}
 }
 
