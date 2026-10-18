@@ -39,6 +39,15 @@ declare module '@wordpress/block-editor' {
 		toggleProps?: { label?: string }
 	}>
 	export const BlockToolbar: ComponentType<{ hideDragHandle?: boolean }>
+	export const BlockIcon: ComponentType<{ icon?: unknown }>
+	export const NavigableToolbar: ComponentType<{
+		'aria-label'?: string
+		className?: string
+		variant?: string
+		focusEditorOnEscape?: boolean
+		shouldUseKeyboardFocusShortcut?: boolean
+		children?: ReactNode
+	}>
 	export const BlockInspector: ComponentType<Record<string, never>>
 	export const WritingFlow: ComponentType<{ children?: ReactNode }>
 	export const ObserveTyping: ComponentType<{ children?: ReactNode }>
