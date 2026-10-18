@@ -4,16 +4,11 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { kitVersion } from '@gophenberg/astro'
+import ts from 'typescript'
 import { describe, expect, test } from 'vitest'
 
 /** Where the build leaves the artifact a theme directory ships. */
 const artifact = new URL('../dist/', import.meta.url).pathname
-
-/** How an import names a module in the built bundle. */
-const staticImport = /(?:^|[\s;}])(?:import(?:\s[^'";]*?\bfrom)?|export\s[^'";]*?\bfrom)\s*['"]([^'"]+)['"]/gm
-
-/** How a bundled module names one it loads on demand. */
-const dynamicImport = /\bimport\s*\(\s*['"]([^'"]+)['"]/gm
 
 /**
  * Returns every JavaScript file under a directory.
@@ -36,19 +31,8 @@ function bundledFiles(directory: string): string[] {
  * @returns The specifiers found.
  */
 function namedModules(files: string[]): string[] {
-	const found = new Set<string>()
-	for (const file of files) {
-		const source = readFileSync(file, 'utf8')
-		for (const pattern of [staticImport, dynamicImport]) {
-			pattern.lastIndex = 0
-			let match = pattern.exec(source)
-			while (match) {
-				found.add(match[1] as string)
-				match = pattern.exec(source)
-			}
-		}
-	}
-	return [...found]
+	const named = files.flatMap((file) => ts.preProcessFile(readFileSync(file, 'utf8'), true, true).importedFiles)
+	return [...new Set(named.map((reference) => reference.fileName))]
 }
 
 const built = existsSync(join(artifact, 'server', 'entry.mjs'))

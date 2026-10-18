@@ -148,6 +148,7 @@ func TestSlugify(t *testing.T) {
 		"collapses runs of separators": {in: "multiple   spaces", want: "multiple-spaces"},
 		"trims leading and trailing":   {in: "---edged---", want: "edged"},
 		"drops apostrophes":            {in: "How's it going", want: "hows-it-going"},
+		"splits en and em dashes":      {in: "News–Events—Index", want: "news-events-index"},
 		"keeps digits":                 {in: "Top 10 Reasons", want: "top-10-reasons"},
 		"keeps unicode letters":        {in: "Cafe Munchen", want: "cafe-munchen"},
 		"lowercases unicode":           {in: "MARIA PEREZ", want: "maria-perez"},
@@ -162,6 +163,48 @@ func TestSlugify(t *testing.T) {
 
 			if got := content.Slugify(tc.in); got != tc.want {
 				t.Errorf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// russianPages is the Russian word for pages, a label whose slug is no route word.
+const russianPages = "\U00000421\U00000442\U00000440\U00000430\U0000043D\U00000438\U00000446\U0000044B"
+
+// keycapPages is a label whose slug keeps the marks of its keycap digit.
+const keycapPages = "Pages 2\U0000FE0F\U000020E3"
+
+// keycapSlug is the slug of [keycapPages], marks kept.
+const keycapSlug = "pages-2\U0000FE0F\U000020E3"
+
+func TestRouteWordFallsBackToTheTypeKey(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		key         string
+		pluralLabel string
+		want        string
+	}{
+		"uses a valid slug":                     {key: "post", pluralLabel: "Posts", want: "posts"},
+		"keeps an accent-folded slug":           {key: "resume", pluralLabel: "R\U000000E9sum\U000000E9s", want: "resumes"},
+		"falls back for a non-Latin label":      {key: "page-list", pluralLabel: russianPages, want: "page-list"},
+		"falls back for a slug with marks":      {key: "page-list", pluralLabel: keycapPages, want: "page-list"},
+		"falls back for a symbol-only label":    {key: "model", pluralLabel: "???", want: "model"},
+		"falls back for an emoji-only label":    {key: "model", pluralLabel: "\U0001F389", want: "model"},
+		"falls back for an underscore label":    {key: "model", pluralLabel: "___", want: "model"},
+		"breaks underscores before falling":     {key: "faq", pluralLabel: "FAQ_Items", want: "faq-items"},
+		"leaves a reserved slug for validation": {key: "admin-type", pluralLabel: "Admin", want: "admin"},
+		"page key keeps an unusable slug":       {key: content.PageWord, pluralLabel: keycapPages, want: keycapSlug},
+		"page key keeps the untitled word":      {key: content.PageWord, pluralLabel: "???", want: "untitled"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			typ := content.Type{Key: tc.key, PluralLabel: tc.pluralLabel}
+			if got := typ.DerivedRouteWord(); got != tc.want {
+				t.Errorf("Type{Key: %q, PluralLabel: %q}.DerivedRouteWord() = %q, want %q", tc.key, tc.pluralLabel, got, tc.want)
 			}
 		})
 	}
@@ -228,6 +271,65 @@ func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
 	}
 }
 
+func TestSlugifyKeepsUnderscoresAndDropsWordPressStrippedSymbols(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"keeps underscores":               {in: "my_post", want: "my_post"},
+		"keeps underscores beside words":  {in: "My_Post title", want: "my_post-title"},
+		"drops ampersand without a break": {in: "Q&A", want: "qa"},
+		"drops the degree sign":           {in: "Bake at 180°C", want: "bake-at-180c"},
+		"multiplication sign becomes x":   {in: "2×4", want: "2x4"},
+		"drops the soft hyphen in a word": {in: "so\u00adft", want: "soft"},
+		"mark after a dropped symbol":     {in: "Noe&\U00000308l", want: "noe-l"},
+		"emoji leaves no selector":        {in: "Favorites\U00002764\U0000FE0F", want: "favorites"},
+		"ideographic comma splits":        {in: "\U00004E00\U00003001\U00004E8C", want: "\U00004E00-\U00004E8C"},
+		"fraction slash splits":           {in: "1\U00002044" + "2", want: "1-2"},
+		"non-breaking hyphen splits":      {in: "non\U00002011breaking", want: "non-breaking"},
+		"dots and slashes split":          {in: "v1.2/notes", want: "v1-2-notes"},
+		"ascii punctuation drops":         {in: "C++ & C#", want: "c-c"},
+		"listed trademark sign drops":     {in: "Brand\U00002122 Name", want: "brand-name"},
+		"listed modifier acute drops":     {in: "Q\U000002CAA", want: "qa"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			if got := content.Slugify(tc.in); got != tc.want {
+				t.Errorf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRouteWordBreaksAtUnderscoresTheWaySlugsNoLongerDo(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"breaks a label's underscores":  {in: "FAQ_Items", want: "faq-items"},
+		"breaks a leading underscore":   {in: "_posts", want: "posts"},
+		"folds accents as Slugify does": {in: "Café_Ærø", want: "cafe-aero"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			typ := content.Type{Key: "type", PluralLabel: tc.in}
+			if got := typ.DerivedRouteWord(); got != tc.want {
+				t.Errorf("DerivedRouteWord() of the label %q = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlugifyTruncatesLongTitlesWithoutTrailingSeparator(t *testing.T) {
 	t.Parallel()
 
@@ -255,6 +357,9 @@ func FuzzSlugifyGivesTheSameSlugBack(f *testing.F) {
 		"\U00000928\U0000034F\U0000093C",
 		"\U00001100'\U00001161",
 		"admin'\U0000FE0F",
+		"admin&\U0000FE0F",
+		"Noe&\U00000308l",
+		"Favorites\U00002764\U0000FE0F",
 		"\U00000915" + strings.Repeat("\U00000951", 40),
 		strings.Repeat("a", 198) + " \U00000915\U0000093F",
 	} {

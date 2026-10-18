@@ -19,5 +19,5 @@ export default getViteConfig(
 			},
 		},
 	},
-	{ devToolbar: { enabled: false } },
+	{ root: import.meta.dirname },
 )

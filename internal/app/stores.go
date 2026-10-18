@@ -106,17 +106,18 @@ func postgresStores(cfg composeConfig) (site, error) {
 	return built, nil
 }
 
-// sqliteStores builds the user, media and setting stores over the SQLite handle, leaving content, types and cron nil.
+// sqliteStores builds the user, media, setting and cron stores over the SQLite handle, leaving content and types nil.
 func sqliteStores(cfg composeConfig) site {
 	store := sqlite.NewMediaStore(cfg.handle)
 	return site{
-		users:    authkitsqlite.NewUserStore(cfg.handle),
-		registry: registryFrom(cfg.fieldDepth, nil),
-		saved:    store.Saved,
-		library:  libraryOf(store, cfg.mediaDir),
-		settings: sqlite.NewSettingStore(cfg.handle),
-		readers:  sqlite.NewUserSettingStore(cfg.handle),
-		release:  func() {},
+		users:     authkitsqlite.NewUserStore(cfg.handle),
+		registry:  registryFrom(cfg.fieldDepth, nil),
+		saved:     store.Saved,
+		library:   libraryOf(store, cfg.mediaDir),
+		settings:  sqlite.NewSettingStore(cfg.handle),
+		readers:   sqlite.NewUserSettingStore(cfg.handle),
+		release:   func() {},
+		cronStore: sqlite.NewCronStore(cfg.handle),
 	}
 }
 

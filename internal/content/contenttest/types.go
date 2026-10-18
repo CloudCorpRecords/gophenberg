@@ -29,7 +29,6 @@ var typeCases = []Case{
 	{"UpdateLeavesContentAloneWhenTheRouteWordStays", updateLeavesContentAloneWhenTheRouteWordStays},
 	{"UpdateHandsTheRootToAnotherType", updateHandsTheRootToAnotherType},
 	{"UpdateRefusesToHandTheRootToAReservedAddress", updateRefusesToHandTheRootToAReservedAddress},
-	{"UpdateRefusesToHandTheRootToAnUnusableAddress", updateRefusesToHandTheRootToAnUnusableAddress},
 	{"UpdateRefusesToHandTheRootOntoATakenRouteWord", updateRefusesToHandTheRootOntoATakenRouteWord},
 	{"UpdateRefusesACarryOntoATakenAddress", updateRefusesACarryOntoATakenAddress},
 	{"UpdatePromotesWhenNoDefaultRemains", updatePromotesWhenNoDefaultRemains},
@@ -364,26 +363,6 @@ func updateRefusesToHandTheRootToAReservedAddress(t *testing.T, s Stores) {
 	}
 	if got := AddressOf(t, s.Content, about.ID); got != "pages/about" {
 		t.Errorf("page address = %q, want the refused hand over to have moved nothing", got)
-	}
-}
-
-// updateRefusesToHandTheRootToAnUnusableAddress refuses a hand over that leaves the default no usable word.
-func updateRefusesToHandTheRootToAnUnusableAddress(t *testing.T, s Stores) {
-	RegisterPageType(t, s.Types)
-	relabelled := PostType()
-	relabelled.SingularLabel, relabelled.PluralLabel = "3D Model", "3D Models"
-	relabelled.UpdatedAt = time.Now().UTC()
-	if _, err := s.Types.Update(t.Context(), relabelled); err != nil {
-		t.Fatalf("relabelling the default type: %v", err)
-	}
-
-	promoted := PageType()
-	promoted.Default, promoted.UpdatedAt = true, time.Now().UTC()
-
-	_, err := s.Types.Update(t.Context(), promoted)
-
-	if !errors.Is(err, content.ErrInvalidRouteWord) {
-		t.Fatalf("Update() error = %v, want %v", err, content.ErrInvalidRouteWord)
 	}
 }
 

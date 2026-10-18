@@ -60,6 +60,15 @@ marked **Default** in the table, and its items answer at `/{slug}`
 directly. Press **Make default** on another type to hand the root
 over.
 
+The type that gives up the root takes a route word made from its
+plural label, so **Posts** moves to `/posts`. When the label makes no
+usable word, such as `3D Models` or a label in another alphabet, the
+type uses its key instead. A type keyed `page` cannot fall back this
+way, because `/page/2` is the second page of a listing, so give it a
+label that makes a word first. When an import brings a new default
+type and your site keeps its own root, the new type gets its route
+word the same way.
+
 **Change address** moves a type to a new route word. Every address of
 that type moves with it, at once, including nested items. Links kept
 outside your site to the old addresses stop working, which is why the

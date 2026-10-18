@@ -206,7 +206,7 @@ func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 		return err
 	}
 	demoted := toType(row)
-	demoted.RouteWord = content.Slugify(demoted.PluralLabel)
+	demoted.RouteWord = demoted.DerivedRouteWord()
 	demoted.Default, demoted.UpdatedAt = false, at
 	if err := demoted.Validate(); err != nil {
 		return err
