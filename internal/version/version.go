@@ -6,8 +6,6 @@ package version
 import (
 	_ "embed"
 	"strings"
-
-	"golang.org/x/mod/semver"
 )
 
 //go:embed VERSION
@@ -30,16 +28,6 @@ func Version() string {
 // Minimum returns the minimum version, the oldest version allowed to run on a database this version migrated.
 func Minimum() string {
 	return strings.TrimSpace(rawMinimumVersion)
-}
-
-// Valid reports whether v is a full semantic version written without a leading v or build metadata.
-func Valid(v string) bool {
-	return semver.Canonical("v"+v) == "v"+v
-}
-
-// Before reports whether version a comes before version b, both written without a leading v.
-func Before(a, b string) bool {
-	return semver.Compare("v"+a, "v"+b) < 0
 }
 
 // Stamp returns official for a binary the release workflow built, and an empty string for a custom build.
