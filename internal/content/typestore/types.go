@@ -187,12 +187,13 @@ func flattenable(ctx context.Context, queries Queries, key string) error {
 
 // updateTypeFailure returns the error the type update carries, and wraps anything else.
 func (s *Store) updateTypeFailure(err error) error {
-	if errors.Is(err, content.ErrTypeNotFound) ||
-		errors.Is(err, content.ErrRouteWordReserved) ||
-		errors.Is(err, content.ErrReservedAddress) ||
-		errors.Is(err, content.ErrInvalidRouteWord) ||
-		errors.Is(err, content.ErrNestingInUse) {
-		return err
+	for _, carried := range []error{
+		content.ErrTypeNotFound, content.ErrRouteWordReserved, content.ErrReservedAddress,
+		content.ErrInvalidRouteWord, content.ErrNestingInUse,
+	} {
+		if errors.Is(err, carried) {
+			return err
+		}
 	}
 	if taken := s.errorFor(typeUpdateErrors, err); taken != nil {
 		return taken

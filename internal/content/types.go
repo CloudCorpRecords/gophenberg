@@ -174,7 +174,13 @@ func (t Type) ValidateChange(stored Type) error {
 	if err := t.Validate(); err != nil {
 		return err
 	}
-	if t.RouteWord == PageWord && (stored.Key != t.Key || stored.RouteWord != PageWord) {
+	if t.RouteWord != PageWord {
+		return nil
+	}
+	if stored.Key != t.Key {
+		return ErrRouteWordReserved
+	}
+	if stored.RouteWord != PageWord {
 		return ErrRouteWordReserved
 	}
 	return nil

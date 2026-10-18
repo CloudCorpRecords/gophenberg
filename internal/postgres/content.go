@@ -381,7 +381,11 @@ func (s *ContentStore) update(
 		if err := writeRelations(ctx, queries, c, resolved); err != nil {
 			return err
 		}
-		if err := moveDescendants(ctx, queries, c.ID, path, c.UpdatedAt); err != nil {
+		if err := moveDescendants(ctx, queries, db.MoveDescendantsParams{
+			ID:        c.ID,
+			Path:      path,
+			UpdatedAt: c.UpdatedAt,
+		}); err != nil {
 			return err
 		}
 		if snapshot == nil {

@@ -4,9 +4,6 @@ package postgres
 
 import (
 	"context"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/postgres/db"
@@ -22,9 +19,9 @@ func checkPaginationPaths(paths []string) error {
 	return nil
 }
 
-// moveDescendants carries the children to path, refusing a reserved address inside the same transaction.
-func moveDescendants(ctx context.Context, queries *db.Queries, id uuid.UUID, path string, at time.Time) error {
-	paths, err := queries.MoveDescendants(ctx, db.MoveDescendantsParams{ID: id, Path: path, UpdatedAt: at})
+// moveDescendants carries the children to the requested address, refusing a reserved address in the same transaction.
+func moveDescendants(ctx context.Context, queries *db.Queries, params db.MoveDescendantsParams) error {
+	paths, err := queries.MoveDescendants(ctx, params)
 	if err != nil {
 		return err
 	}
