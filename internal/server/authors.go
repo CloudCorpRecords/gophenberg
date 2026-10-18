@@ -28,8 +28,7 @@ type authorsResponse struct {
 	Items []authorView `json:"items"`
 }
 
-// handleAuthorList returns an http.HandlerFunc naming every account that may write, sorted by name
-// as WordPress sorts it: case and accents do not move a name away from its base letter.
+// handleAuthorList returns an http.HandlerFunc naming every account that may write, sorted by name.
 func (s *server) handleAuthorList() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		users, err := s.users.ListUsers(r.Context())
