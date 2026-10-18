@@ -17,6 +17,16 @@ func TestCheckMajorTakesTheServerTheTestsRunOn(t *testing.T) {
 	}
 }
 
+func TestServerMajorReadsTheMajorOfTheTestServer(t *testing.T) {
+	t.Parallel()
+
+	major, err := postgres.ServerMajor(t.Context(), emptyDB(t))
+
+	if err != nil || major < postgres.OldestMajor {
+		t.Errorf("ServerMajor() = %d, %v on the test server, want a major of %d or newer", major, err, postgres.OldestMajor)
+	}
+}
+
 func TestSuperuserIsFalseForTheRoleTestDatabasesBelongTo(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +58,9 @@ func TestServerChecksReportDatabaseFailures(t *testing.T) {
 
 	if err := postgres.CheckMajor(t.Context(), db); err == nil {
 		t.Error("CheckMajor() on a closed handle error = nil, want a failure")
+	}
+	if _, err := postgres.ServerMajor(t.Context(), db); err == nil {
+		t.Error("ServerMajor() on a closed handle error = nil, want a failure")
 	}
 	if _, err := postgres.Superuser(t.Context(), db); err == nil {
 		t.Error("Superuser() on a closed handle error = nil, want a failure")

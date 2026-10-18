@@ -22,12 +22,27 @@ const (
 
 // CheckMajor returns an error naming the server's version when it runs a PostgreSQL major older than OldestMajor.
 func CheckMajor(ctx context.Context, db *sql.DB) error {
+	number, shown, err := serverVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	return majorRefusal(number, shown)
+}
+
+// ServerMajor returns the PostgreSQL major the server db connects to runs.
+func ServerMajor(ctx context.Context, db *sql.DB) (int, error) {
+	number, _, err := serverVersion(ctx, db)
+	return number / majorStep, err
+}
+
+// serverVersion returns the version number of the server db connects to and the version it shows.
+func serverVersion(ctx context.Context, db *sql.DB) (int, string, error) {
 	var number int
 	var shown string
 	if err := db.QueryRowContext(ctx, serverLookup).Scan(&number, &shown); err != nil {
-		return fmt.Errorf("postgres: read the server version: %w", err)
+		return 0, "", fmt.Errorf("postgres: read the server version: %w", err)
 	}
-	return majorRefusal(number, shown)
+	return number, shown, nil
 }
 
 // majorRefusal returns an error naming shown when the version number belongs to a major older than OldestMajor.
