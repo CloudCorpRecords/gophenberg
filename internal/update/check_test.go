@@ -3,6 +3,7 @@
 package update_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,11 +69,11 @@ func (s *updateServer) drop(path string) {
 	delete(s.files, path)
 }
 
-// putIndex serves the index the release key signed.
+// putIndex serves the index the release key signed, at the path of its channel.
 func (s *updateServer) putIndex(k keys, held update.Index) {
 	body := marshal(s.t, held)
-	s.put(update.IndexPath("stable"), body)
-	s.put(update.IndexPath("stable")+update.SignatureSuffix, signIndex(body, k.release))
+	s.put(update.IndexPath(held.Channel), body)
+	s.put(update.IndexPath(held.Channel)+update.SignatureSuffix, signIndex(body, k.release))
 }
 
 // config returns the check of the stable channel on the server, for a site running 0.20.0 on PostgreSQL 18.
@@ -170,7 +171,7 @@ func TestCheckRefusesAFileLargerThanTheCap(t *testing.T) {
 
 	_, _, err := update.Check(t.Context(), server.config(k), update.Serials{})
 
-	wantRefused(t, err, "larger than 65536 bytes")
+	wantRefused(t, err, fmt.Sprintf("larger than %d bytes", update.MaxFileSize))
 }
 
 func TestCheckRefusesASiteThatAnswersTooLate(t *testing.T) {
@@ -196,6 +197,55 @@ func TestCheckRefusesASiteNothingAnswersAt(t *testing.T) {
 	_, _, err := update.Check(t.Context(), config, update.Serials{})
 
 	wantRefused(t, err, "fetch")
+}
+
+func TestCheckRefusesARedirect(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	target := newUpdateServer(t, k, "")
+	moved := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.server.URL+r.URL.Path, http.StatusMovedPermanently)
+	}))
+	t.Cleanup(moved.Close)
+	config := target.config(k)
+	config.Address, _ = url.Parse(moved.URL)
+
+	_, _, err := update.Check(t.Context(), config, update.Serials{})
+
+	wantRefused(t, err, "301")
+	if len(target.headers) != 0 {
+		t.Errorf("the redirect target got %d requests, want the redirect refused before it", len(target.headers))
+	}
+}
+
+// closingTransport is a transport that counts the times its client lets go of the idle connections.
+type closingTransport struct {
+	*http.Transport
+	closed int
+}
+
+// CloseIdleConnections counts the call and closes the idle connections.
+func (c *closingTransport) CloseIdleConnections() {
+	c.closed++
+	c.Transport.CloseIdleConnections()
+}
+
+func TestCheckLetsGoOfItsIdleConnections(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "")
+	transport := &closingTransport{Transport: &http.Transport{}}
+	config := server.config(k)
+	config.Client = &http.Client{Transport: transport}
+
+	if _, _, err := update.Check(t.Context(), config, update.Serials{}); err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if transport.closed != 1 {
+		t.Errorf("idle connections closed %d times, want once when the check ended", transport.closed)
+	}
 }
 
 func TestCheckRefusesAFileCutShort(t *testing.T) {

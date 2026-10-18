@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// maxFileSize is the most bytes a check reads of one file of the update site.
-const maxFileSize = 64 << 10
+// MaxFileSize is the most bytes a check reads of one file of the update site.
+const MaxFileSize = 64 << 10
 
 // Config is what a check needs: the update site, the channel, the trusted roots, the client and the site it is for.
 type Config struct {
@@ -31,15 +31,20 @@ type Serials struct {
 	Index int64 `json:"index"`
 }
 
-// NewClient returns the HTTP client a check fetches with, which gives up after timeout and asks for no compression.
+// NewClient returns the client a check fetches with, giving up after timeout and following no redirect.
 func NewClient(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, DisableCompression: true,
-	}}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, DisableCompression: true,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 }
 
 // Check fetches and verifies the key list and the index, refuses serials older than the ones taken, finds the update.
 func Check(ctx context.Context, cfg Config, taken Serials) (*Found, Serials, error) {
+	defer cfg.Client.CloseIdleConnections()
 	list, err := cfg.keyList(ctx)
 	if err != nil {
 		return nil, taken, err
@@ -106,12 +111,12 @@ func (c Config) fetch(ctx context.Context, path string) ([]byte, error) {
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("update: fetch %s: the site answered %s", address, response.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxFileSize+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, MaxFileSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("update: fetch %s: %w", address, err)
 	}
-	if len(body) > maxFileSize {
-		return nil, fmt.Errorf("update: refused %s, larger than %d bytes", address, maxFileSize)
+	if len(body) > MaxFileSize {
+		return nil, fmt.Errorf("update: refused %s, larger than %d bytes", address, MaxFileSize)
 	}
 	return body, nil
 }
