@@ -27,7 +27,7 @@ import (
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "about" {
 		fmt.Printf("{\"schema\":1,\"name\":\"gophenberg\",\"version\":\"0.20.0\",\"commit\":%q,\"stamp\":%q,"+
-			"\"kits\":[\"0.9.0\"]}\n", version.Commit(), version.Stamp())
+			"\"minimum_version\":\"0.19.0\",\"postgresql\":15,\"kits\":[\"0.9.0\"]}\n", version.Commit(), version.Stamp())
 		return
 	}
 	fmt.Print(webui.Page())
