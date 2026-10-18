@@ -48,6 +48,20 @@ test('shows the hint an empty block carries', () => {
 	)
 })
 
+test('pads the canvas from its edges as the WordPress theme pads its root, 30px on a phone and 50px wide', () => {
+	const css = CANVAS_STYLES.map((entry) => entry.css).join('\n')
+
+	expect(css).toMatch(/--gophenberg-canvas-gutter:\s*clamp\(30px, 5vw, 50px\)/)
+	expect(css).toMatch(/body\s*\{[^}]*padding:\s*32px var\(--gophenberg-canvas-gutter\)/)
+})
+
+test('runs a full block over the canvas padding to both edges', () => {
+	const css = CANVAS_STYLES.map((entry) => entry.css).join('\n')
+
+	expect(css).toMatch(/alignfull\s*\{[^}]*margin-left:\s*calc\(-1 \* var\(--gophenberg-canvas-gutter\)\)/)
+	expect(css).toMatch(/alignfull\s*\{[^}]*margin-right:\s*calc\(-1 \* var\(--gophenberg-canvas-gutter\)\)/)
+})
+
 test('lets a wide block run wider and a full block run edge to edge', () => {
 	const css = CANVAS_STYLES.map((entry) => entry.css).join('\n')
 

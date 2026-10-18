@@ -5,10 +5,11 @@ import blockLibraryTheme from '@wordpress/block-library/build-style/theme.css?in
 
 const CANVAS_TYPOGRAPHY = `
 	body {
+		--gophenberg-canvas-gutter: clamp(30px, 5vw, 50px);
 		font-family: system-ui, sans-serif;
 		font-size: 16px;
 		margin: 0;
-		padding: 32px 0;
+		padding: 32px var(--gophenberg-canvas-gutter);
 	}
 	p {
 		font-size: inherit;
@@ -47,6 +48,8 @@ const CANVAS_COLUMN = `
 	.wp-block[data-align="full"],
 	.wp-block.alignfull {
 		max-width: none;
+		margin-left: calc(-1 * var(--gophenberg-canvas-gutter));
+		margin-right: calc(-1 * var(--gophenberg-canvas-gutter));
 	}
 `
 
