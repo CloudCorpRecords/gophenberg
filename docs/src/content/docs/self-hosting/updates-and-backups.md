@@ -455,6 +455,34 @@ your theme against one of them before updating.
 [Theme compatibility](/themes/compatibility/) explains how long a
 built theme keeps working.
 
+## Going back to an older version
+
+Every release carries a minimum version, the oldest version allowed to
+run on the database it leaves. A release that adds a migration sets
+the minimum version to itself. A patch that adds none keeps the
+minimum version of the release before it. `gophenberg about -json`
+shows the minimum version of the binary you hold, under
+`minimum_version`.
+
+After it migrates, Gophenberg stores its minimum version in the
+database, and it never lowers one stored there. Before it migrates, it
+compares the stored minimum version with its own version. When the
+stored one is newer, `serve`, `migrate` and every command that
+migrates stop before they change anything. The message names the
+version the database needs and the version you started, and tells you
+to restore the backup taken before the update.
+
+So you can set a patch back to the patch before it whenever neither
+added a migration. To go back past a release that added one, restore
+the backup you took before you updated past it, with the media volume
+from the same day, see [restoring](#restoring). Everything written
+since that backup is lost.
+
+An image whose `about -json` shows no `minimum_version` comes from a
+release older than the minimum version itself. It never reads the
+stored one, so nothing stops it on a database a newer release
+migrated. Restore the backup before you start such an image.
+
 ## What to back up
 
 **The database**, which holds everything you wrote, and the record of
