@@ -165,7 +165,7 @@ func (r *run) oneType(ctx context.Context, declared TypeDefinition, planned Chan
 	wanted.CreatedAt, wanted.UpdatedAt = now, now
 	if r.warned(WarningRootMoved, declared.Key) {
 		r.left(r.kept(planned, declared, ReasonRootKept))
-		wanted = beside(wanted, declared, stored, planned.Action)
+		wanted = beside(wanted, stored, planned.Action)
 	}
 	if r.warned(WarningNestingKept, declared.Key) {
 		r.left(r.kept(planned, declared, ReasonNestingKept))
@@ -235,9 +235,9 @@ func (r *run) kept(planned Change, declared TypeDefinition, reason string) Chang
 }
 
 // beside returns the type standing next to the site's own root rather than in its place.
-func beside(wanted content.Type, declared TypeDefinition, stored content.Type, action string) content.Type {
+func beside(wanted, stored content.Type, action string) content.Type {
 	if action == ActionCreate {
-		wanted.Default, wanted.RouteWord = false, content.RouteWord(declared.PluralLabel)
+		wanted.Default, wanted.RouteWord = false, wanted.DerivedRouteWord()
 		return wanted
 	}
 	wanted.Default, wanted.RouteWord = stored.Default, stored.RouteWord

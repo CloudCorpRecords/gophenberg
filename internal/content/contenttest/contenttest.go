@@ -41,7 +41,7 @@ func Cases() []Case {
 // TypeCases returns every type store case in a fixed order.
 func TypeCases() []Case {
 	return slices.Concat(
-		typeCases, typeNestingCases, groupCases, groupValueCases, groupRecheckCases, groupRepointCases,
+		typeCases, typeRootWordCases, typeNestingCases, groupCases, groupValueCases, groupRecheckCases, groupRepointCases,
 		originCases, settingCases, kindCases, adoptCases, typeFieldCases, fieldParentCases,
 		fieldDepthCases, subFieldWriteCases, fieldMoveCases, fieldMoveValueCases, fieldSweepCases,
 		layoutSweepCases, definitionSweepCases, contractKeyCases, contractStampCases, contractOrderCases,

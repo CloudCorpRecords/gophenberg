@@ -3,6 +3,7 @@
 package content
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -195,4 +196,13 @@ func (t Type) validateRouteWord() error {
 		return ErrInvalidRouteWord
 	}
 	return nil
+}
+
+// DerivedRouteWord returns the type's plural label as a route word, else its key unless the key is [PageWord].
+func (t Type) DerivedRouteWord() string {
+	word := slugOf(strings.ReplaceAll(t.PluralLabel, "_", " "))
+	if typeWord.MatchString(word) || t.Key == PageWord {
+		return cmp.Or(word, untitledSlug)
+	}
+	return t.Key
 }

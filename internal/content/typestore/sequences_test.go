@@ -116,6 +116,13 @@ func accentedRoot() shelf {
 	return stocked
 }
 
+// markedRoot returns the library shelf with the root type's plural label slugging to a marked word.
+func markedRoot() shelf {
+	stocked := library()
+	stocked.types[0].PluralLabel = "Pages 2\U0000FE0F\U000020E3"
+	return stocked
+}
+
 // underscoredRoot returns the library shelf with the root type labelled with an underscore.
 func underscoredRoot() shelf {
 	stocked := library()
@@ -400,6 +407,14 @@ var typeSequences = map[string]sequence{
 			sent("RetypeContentPaths", retyped{Key: "book", Was: "books", UpdatedAt: editedAt}),
 			committed,
 		},
+	},
+	"Update taking the root a page type with a marked label holds is refused": {
+		stocked: markedRoot,
+		run: func(ctx context.Context, s *Store, _ content.Recheck) (any, error) {
+			return valued(s.Update(ctx, rootBook(true)))
+		},
+		golden: []step{begun, sent("LockContentType", keyed{"book"}), lockedRoot, rolledBack},
+		ends:   content.ErrInvalidRouteWord,
 	},
 	"Update taking the root no type holds": {
 		stocked: rootless,

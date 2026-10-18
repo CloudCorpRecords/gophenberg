@@ -168,6 +168,48 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
+// russianPages is the Russian word for pages, a label whose slug is no route word.
+const russianPages = "\U00000421\U00000442\U00000440\U00000430\U0000043D\U00000438\U00000446\U0000044B"
+
+// keycapPages is a label whose slug keeps the marks of its keycap digit.
+const keycapPages = "Pages 2\U0000FE0F\U000020E3"
+
+// keycapSlug is the slug of [keycapPages], marks kept.
+const keycapSlug = "pages-2\U0000FE0F\U000020E3"
+
+func TestRouteWordFallsBackToTheTypeKey(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		key         string
+		pluralLabel string
+		want        string
+	}{
+		"uses a valid slug":                     {key: "post", pluralLabel: "Posts", want: "posts"},
+		"keeps an accent-folded slug":           {key: "resume", pluralLabel: "R\U000000E9sum\U000000E9s", want: "resumes"},
+		"falls back for a non-Latin label":      {key: "page-list", pluralLabel: russianPages, want: "page-list"},
+		"falls back for a slug with marks":      {key: "page-list", pluralLabel: keycapPages, want: "page-list"},
+		"falls back for a symbol-only label":    {key: "model", pluralLabel: "???", want: "model"},
+		"falls back for an emoji-only label":    {key: "model", pluralLabel: "\U0001F389", want: "model"},
+		"falls back for an underscore label":    {key: "model", pluralLabel: "___", want: "model"},
+		"breaks underscores before falling":     {key: "faq", pluralLabel: "FAQ_Items", want: "faq-items"},
+		"leaves a reserved slug for validation": {key: "admin-type", pluralLabel: "Admin", want: "admin"},
+		"page key keeps an unusable slug":       {key: content.PageWord, pluralLabel: keycapPages, want: keycapSlug},
+		"page key keeps the untitled word":      {key: content.PageWord, pluralLabel: "???", want: "untitled"},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			typ := content.Type{Key: tc.key, PluralLabel: tc.pluralLabel}
+			if got := typ.DerivedRouteWord(); got != tc.want {
+				t.Errorf("Type{Key: %q, PluralLabel: %q}.DerivedRouteWord() = %q, want %q", tc.key, tc.pluralLabel, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlugifyStripsAccentsLikeWordPress(t *testing.T) {
 	t.Parallel()
 
@@ -280,8 +322,9 @@ func TestRouteWordBreaksAtUnderscoresTheWaySlugsNoLongerDo(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			if got := content.RouteWord(tc.in); got != tc.want {
-				t.Errorf("RouteWord(%q) = %q, want %q", tc.in, got, tc.want)
+			typ := content.Type{Key: "type", PluralLabel: tc.in}
+			if got := typ.DerivedRouteWord(); got != tc.want {
+				t.Errorf("DerivedRouteWord() of the label %q = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
