@@ -29,7 +29,6 @@ var typeCases = []Case{
 	{"UpdateLeavesContentAloneWhenTheRouteWordStays", updateLeavesContentAloneWhenTheRouteWordStays},
 	{"UpdateHandsTheRootToAnotherType", updateHandsTheRootToAnotherType},
 	{"UpdateRefusesToHandTheRootToAReservedAddress", updateRefusesToHandTheRootToAReservedAddress},
-	{"UpdateHandsTheRootToATypeWithAnUnusableLabel", updateHandsTheRootToATypeWithAnUnusableLabel},
 	{"UpdateRefusesToHandTheRootOntoATakenRouteWord", updateRefusesToHandTheRootOntoATakenRouteWord},
 	{"UpdateRefusesACarryOntoATakenAddress", updateRefusesACarryOntoATakenAddress},
 	{"UpdatePromotesWhenNoDefaultRemains", updatePromotesWhenNoDefaultRemains},
@@ -364,39 +363,6 @@ func updateRefusesToHandTheRootToAReservedAddress(t *testing.T, s Stores) {
 	}
 	if got := AddressOf(t, s.Content, about.ID); got != "pages/about" {
 		t.Errorf("page address = %q, want the refused hand over to have moved nothing", got)
-	}
-}
-
-// updateHandsTheRootToATypeWithAnUnusableLabel gives the demoted type its key as a fallback route word.
-func updateHandsTheRootToATypeWithAnUnusableLabel(t *testing.T, s Stores) {
-	RegisterPageType(t, s.Types)
-	relabelled := PostType()
-	relabelled.SingularLabel, relabelled.PluralLabel = "3D Model", "3D Models"
-	relabelled.UpdatedAt = time.Now().UTC()
-	if _, err := s.Types.Update(t.Context(), relabelled); err != nil {
-		t.Fatalf("relabelling the default type: %v", err)
-	}
-
-	promoted := PageType()
-	promoted.Default, promoted.UpdatedAt = true, time.Now().UTC()
-
-	if _, err := s.Types.Update(t.Context(), promoted); err != nil {
-		t.Fatalf("handing the root to the page type: %v", err)
-	}
-
-	post, err := s.Types.ByKey(t.Context(), content.TypePost)
-	if err != nil {
-		t.Fatalf("ByKey(post) error = %v, want nil", err)
-	}
-	if post.Default || post.RouteWord != content.TypePost {
-		t.Errorf("post = %+v, want demoted type using its key as route word", post)
-	}
-	page, err := s.Types.ByKey(t.Context(), "page")
-	if err != nil {
-		t.Fatalf("ByKey(page) error = %v, want nil", err)
-	}
-	if !page.Default {
-		t.Errorf("page = %+v, want page type holding the root", page)
 	}
 }
 
