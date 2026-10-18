@@ -45,6 +45,7 @@ export function errorTemplates(): Record<string, string> {
 			'This request carried %(attribute)s, which fields do not take. Reload the page so the admin and the server agree again.',
 			DOMAIN,
 		),
+		check_too_soon: __('Gophenberg checked for updates moments ago. Try again later.', DOMAIN),
 		client_assets_missing: __(
 			'The theme %(name)s does not carry %(path)s as a folder, so its styles and scripts are missing. Package the built theme rather than its source.',
 			DOMAIN,
