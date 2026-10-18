@@ -26,10 +26,11 @@ const (
 // ErrNotStored marks a check whose result the site setting store could not keep.
 var ErrNotStored = errors.New("update: the result of the check could not be stored")
 
-// Settings is the site setting store a check keeps its state in.
+// Settings is the site setting store a check keeps its state in, updating it as one write no other update overlaps.
 type Settings interface {
 	Lookup(ctx context.Context, key string) (string, bool, error)
 	Save(ctx context.Context, values map[string]string) error
+	Update(ctx context.Context, keys []string, change func(held map[string]string) (map[string]string, error)) error
 }
 
 // Result is what the checks found: the last good check, and the last failure since it.
@@ -66,7 +67,7 @@ func Run(ctx context.Context, cfg Config, store Settings) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	held, _, err := stateOf(ctx, store)
+	held, err := takenOf(ctx, store)
 	if err != nil {
 		return Result{}, err
 	}
@@ -91,12 +92,24 @@ func ResultOf(ctx context.Context, store Settings) (Result, error) {
 	return result, nil
 }
 
-// record stores the outcome of a check of src over the state stored now, keeping a newer check's.
+// record stores the outcome of a check of src over the state stored now in one update, keeping a newer check's.
 func record(ctx context.Context, store Settings, src source, done outcome) (Result, error) {
-	held, stored, err := stateOf(ctx, store)
+	var result Result
+	keys := []string{serialsKey, resultKey}
+	err := store.Update(ctx, keys, func(values map[string]string) (map[string]string, error) {
+		held, stored := stateFrom(values)
+		var kept map[string]string
+		result, kept = done.over(held, stored, src)
+		return kept, nil
+	})
 	if err != nil {
-		return Result{}, errors.Join(fmt.Errorf("%w: %w", ErrNotStored, err), done.err)
+		return result, errors.Join(fmt.Errorf("%w: %w", ErrNotStored, err), done.err)
 	}
+	return result, done.err
+}
+
+// over returns the result once done ends over the serials taken and the result stored, and the values that keep it.
+func (done outcome) over(held taken, stored Result, src source) (Result, map[string]string) {
 	if done.err == nil && held.of(src).newerThan(done.serials) {
 		return stored, nil
 	}
@@ -105,10 +118,7 @@ func record(ctx context.Context, store Settings, src source, done outcome) (Resu
 	if done.err == nil {
 		values[serialsKey] = written(held.with(src, done.serials))
 	}
-	if err := store.Save(ctx, values); err != nil {
-		return result, errors.Join(fmt.Errorf("%w: %w", ErrNotStored, err), done.err)
-	}
-	return result, done.err
+	return result, values
 }
 
 // newerThan reports whether either serial comes after the matching one of other.
@@ -163,23 +173,20 @@ func siteID(ctx context.Context, store Settings) (string, error) {
 	return id, store.Save(ctx, map[string]string{siteIDKey: id})
 }
 
-// stateOf returns the serials taken and the result stored, starting again from any it cannot read.
-func stateOf(ctx context.Context, store Settings) (taken, Result, error) {
+// takenOf returns the serials taken that store holds, starting again from any it cannot read.
+func takenOf(ctx context.Context, store Settings) (taken, error) {
+	held, _, err := store.Lookup(ctx, serialsKey)
+	serials, _ := stateFrom(map[string]string{serialsKey: held})
+	return serials, err
+}
+
+// stateFrom returns the serials taken and the result that values hold, starting again from any it cannot read.
+func stateFrom(values map[string]string) (taken, Result) {
 	var serials taken
 	var result Result
-	for _, read := range []struct {
-		key  string
-		into any
-	}{{serialsKey, &serials}, {resultKey, &result}} {
-		held, found, err := store.Lookup(ctx, read.key)
-		if err != nil {
-			return taken{}, Result{}, err
-		}
-		if found {
-			_ = json.Unmarshal([]byte(held), read.into)
-		}
-	}
-	return serials, result, nil
+	_ = json.Unmarshal([]byte(values[serialsKey]), &serials)
+	_ = json.Unmarshal([]byte(values[resultKey]), &result)
+	return serials, result
 }
 
 // written returns v as the JSON a setting holds.

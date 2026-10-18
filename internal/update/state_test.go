@@ -8,6 +8,7 @@ import (
 	"errors"
 	"maps"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,34 +20,68 @@ var errPlanted = errors.New("planted failure")
 
 // memoryStore is a site setting store in memory that honours its context and fails a lookup or a save when told to.
 type memoryStore struct {
-	values      map[string]string
-	lookupFail  error
-	failKey     string
-	saveFail    error
-	serialsRead int
-	meanwhile   func(m *memoryStore)
+	mu         sync.Mutex
+	values     map[string]string
+	lookupFail error
+	failKey    string
+	saveFail   error
+	meanwhile  func(m *memoryStore)
 }
 
-// Lookup returns the value stored under key, running meanwhile before the second read of the serials.
+// Lookup returns the value stored under key.
 func (m *memoryStore) Lookup(ctx context.Context, key string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lookup(ctx, key)
+}
+
+// Save stores every given value.
+func (m *memoryStore) Save(ctx context.Context, values map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.save(ctx, values)
+}
+
+// Update runs meanwhile, then stores what change makes of the values held under keys, as one write.
+func (m *memoryStore) Update(
+	ctx context.Context, keys []string, change func(held map[string]string) (map[string]string, error),
+) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.meanwhile != nil {
+		m.meanwhile(m)
+	}
+	held := map[string]string{}
+	for _, key := range keys {
+		value, found, err := m.lookup(ctx, key)
+		if err != nil {
+			return err
+		}
+		if found {
+			held[key] = value
+		}
+	}
+	values, err := change(held)
+	if err != nil {
+		return err
+	}
+	return m.save(ctx, values)
+}
+
+// lookup returns the value stored under key, failing when told to or when the context ended.
+func (m *memoryStore) lookup(ctx context.Context, key string) (string, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return "", false, err
 	}
 	if m.lookupFail != nil && (m.failKey == "" || m.failKey == key) {
 		return "", false, m.lookupFail
 	}
-	if key == "update_serials" {
-		m.serialsRead++
-		if m.serialsRead == 2 && m.meanwhile != nil {
-			m.meanwhile(m)
-		}
-	}
 	value, found := m.values[key]
 	return value, found, nil
 }
 
-// Save stores every given value, or none when told to fail or when the context ended.
-func (m *memoryStore) Save(ctx context.Context, values map[string]string) error {
+// save stores every given value, or none when told to fail or when the context ended.
+func (m *memoryStore) save(ctx context.Context, values map[string]string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
