@@ -25,7 +25,8 @@ const usage = `usage:
   releasetool keys   -release <multikey> -standby <multikey> [-serial <n>] [-valid <duration>]
   releasetool sign-keys -key <root file> [-passphrase-file <file>] <keys.json>
   releasetool index  [-channel <name>] [-previous <file>] -record <file> -release-json <file> [-valid <duration>]
-  releasetool index  [-channel <name>] -previous <file> -withdraw <version> [-valid <duration>]
+                     [-keep <n>]
+  releasetool index  [-channel <name>] -previous <file> -withdraw <version> [-valid <duration>] [-keep <n>]
 `
 
 // command runs one releasetool command over its arguments.

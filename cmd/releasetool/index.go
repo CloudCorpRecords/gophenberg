@@ -15,8 +15,12 @@ import (
 	"github.com/gopherium/gophenberg/internal/version"
 )
 
-// indexValidity is how long an index stays valid when -valid names no other span.
-const indexValidity = 720 * time.Hour
+const (
+	// indexValidity is how long an index stays valid when -valid names no other span.
+	indexValidity = 720 * time.Hour
+	// indexKeep is how many of the newest offers an index keeps when -keep names no other number.
+	indexKeep = 20
+)
 
 // indexOptions holds the flags of one index run.
 type indexOptions struct {
@@ -26,6 +30,7 @@ type indexOptions struct {
 	releaseJSON string
 	withdraw    string
 	valid       time.Duration
+	keep        int
 	extra       int
 }
 
@@ -52,9 +57,22 @@ func index(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	now := time.Now()
+	next.Offers = newestOffers(next.Offers, opts.keep)
 	next.Serial = max(next.Serial+1, now.Unix())
 	next.Expires = now.Add(opts.valid).UTC().Truncate(time.Second)
-	return writeJSON(stdout, next)
+	return writeIndex(stdout, next)
+}
+
+// writeIndex writes the index to w, refusing one larger than a site reads.
+func writeIndex(w io.Writer, next update.Index) error {
+	var written bytes.Buffer
+	_ = writeJSON(&written, next)
+	if written.Len() > update.MaxFileSize {
+		return fmt.Errorf("refused to write an index of %d bytes, above the %d a site reads, so keep fewer offers "+
+			"with -keep", written.Len(), update.MaxFileSize)
+	}
+	_, err := written.WriteTo(w)
+	return err
 }
 
 // parseIndexFlags reads the flags of an index run, refusing a run that neither adds nor withdraws one release.
@@ -67,6 +85,7 @@ func parseIndexFlags(args []string, stderr io.Writer) (indexOptions, error) {
 	flags.StringVar(&opts.releaseJSON, "release-json", "", "the release.json of the release to add")
 	flags.StringVar(&opts.withdraw, "withdraw", "", "the version to withdraw")
 	flags.DurationVar(&opts.valid, "valid", indexValidity, "how long the index stays valid")
+	flags.IntVar(&opts.keep, "keep", indexKeep, "how many of the newest offers the index keeps")
 	if err := parseFlags(flags, args); err != nil {
 		return opts, err
 	}
@@ -79,6 +98,8 @@ func (o indexOptions) check() error {
 	switch {
 	case o.valid <= 0 || o.extra != 0:
 		return usageError{"index needs a -valid above zero and reads no other file"}
+	case o.keep < 1:
+		return usageError{"index needs a -keep of one offer or more"}
 	case o.withdraw != "":
 		return o.checkWithdrawal()
 	case o.record == "" || o.releaseJSON == "":
@@ -125,8 +146,13 @@ func (o indexOptions) change(next *update.Index) error {
 	}
 	next.Offers = slices.DeleteFunc(next.Offers, func(held update.Offer) bool { return held.Version() == offer.Version() })
 	next.Offers = append(next.Offers, offer)
-	slices.SortStableFunc(next.Offers, newestFirst)
 	return nil
+}
+
+// newestOffers returns the keep newest offers, the newest first.
+func newestOffers(offers []update.Offer, keep int) []update.Offer {
+	slices.SortStableFunc(offers, newestFirst)
+	return offers[:min(len(offers), keep)]
 }
 
 // offer returns the offer of the release the record and its release.json describe, to every site and notify only.

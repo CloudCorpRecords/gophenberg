@@ -14,7 +14,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/update"
 )
 
-// releaseFiles writes the release record and the release.json of version to dir, and returns their paths.
+// releaseFilesOf writes the release record and the release.json of version to dir, and returns their paths.
 func releaseFilesOf(t *testing.T, dir, version, minimum string) (string, string) {
 	t.Helper()
 	record := writeFile(t, dir, "record-"+version+".json", fmt.Sprintf(
@@ -160,6 +160,7 @@ func TestIndexRefusesWhatItCannotWrite(t *testing.T) {
 		{"a record without its release.json", 2, []string{"-record", record}},
 		{"a withdrawal with no index", 2, []string{"-withdraw", "0.20.0"}},
 		{"a validity of zero", 2, []string{"-record", record, "-release-json", facts, "-valid", "0s"}},
+		{"no offer to keep", 2, []string{"-record", record, "-release-json", facts, "-keep", "0"}},
 		{"an argument it does not take", 2, []string{"-record", record, "-release-json", facts, "more"}},
 		{"a flag it does not know", 2, []string{"-offer", record}},
 		{"a version no offer names", 1, []string{"-previous", previous, "-withdraw", "0.19.0"}},
@@ -177,6 +178,50 @@ func TestIndexRefusesWhatItCannotWrite(t *testing.T) {
 		if got := runTool(append([]string{"index"}, tc.args...)...); got.code != tc.code {
 			t.Errorf("index with %s = %d, %q, want %d", tc.name, got.code, got.stderr, tc.code)
 		}
+	}
+}
+
+// versionsFrom returns the versions 0.newest.0 down to 0.oldest.0.
+func versionsFrom(newest, oldest int) []string {
+	versions := make([]string, 0, newest-oldest+1)
+	for minor := newest; minor >= oldest; minor-- {
+		versions = append(versions, fmt.Sprintf("0.%d.0", minor))
+	}
+	return versions
+}
+
+func TestIndexKeepsOnlyTheNewestOffers(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		keep []string
+		want []string
+	}{
+		"twenty by default":      {want: versionsFrom(41, 22)},
+		"as many as -keep names": {keep: []string{"-keep", "2"}, want: versionsFrom(41, 40)},
+	} {
+		dir := t.TempDir()
+		previous := previousIndex(t, dir, 7, versionsFrom(40, 20)...)
+		record, facts := releaseFilesOf(t, dir, "0.41.0", "0.41.0")
+		args := append([]string{"index", "-previous", previous, "-record", record, "-release-json", facts}, tc.keep...)
+
+		if got := versionsOf(readIndexOf(t, runTool(args...))); !slices.Equal(got, tc.want) {
+			t.Errorf("index keeping %s offers %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestIndexRefusesAnIndexLargerThanASiteReads(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	previous := previousIndex(t, dir, 7, versionsFrom(400, 1)...)
+	record, facts := releaseFilesOf(t, dir, "0.401.0", "0.401.0")
+
+	got := runTool("index", "-previous", previous, "-record", record, "-release-json", facts, "-keep", "1000")
+
+	if got.code != 1 || got.stdout != "" || !strings.Contains(got.stderr, "-keep") {
+		t.Errorf("index of 401 offers = %d, %q, want 1, nothing written and -keep named", got.code, got.stderr)
 	}
 }
 
