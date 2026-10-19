@@ -31,7 +31,7 @@ func TestImportKeepsPageReservedUnlessTheTypeAlreadyUsesIt(t *testing.T) {
 			stored: []content.Type{{Key: "chapter", RouteWord: "page"}},
 		},
 		{
-			name: "another type uses page", want: content.ErrRouteWordReserved,
+			name: "new type beside a legacy page type", want: content.ErrRouteWordReserved,
 			stored: []content.Type{{Key: "other", RouteWord: "page"}},
 		},
 	} {
