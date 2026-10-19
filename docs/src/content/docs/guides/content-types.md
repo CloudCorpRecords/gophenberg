@@ -55,6 +55,13 @@ importing it leaves each description as it stands. See
 The route word is the first part of every address a type serves. A
 guide with the slug `first-steps` answers at `/guides/first-steps`.
 
+A few words belong to Gophenberg itself, so no type can take them:
+`admin`, `api`, `media`, `gophenberg`, `_gophenberg` and `page`. The
+front page numbers its listing behind `page`, so `/page/2` always
+shows its second page, and no item can sit there either. When the
+default type nests, a child of an item called Page cannot take a
+number as its slug.
+
 One type owns the root of the site instead of a route word. It is
 marked **Default** in the table, and its items answer at `/{slug}`
 directly. Press **Make default** on another type to hand the root
@@ -65,9 +72,16 @@ plural label, so **Posts** moves to `/posts`. When the label makes no
 usable word, such as `3D Models` or a label in another alphabet, the
 type uses its key instead. A type keyed `page` cannot fall back this
 way, because `/page/2` is the second page of a listing, so give it a
-label that makes a word first. When an import brings a new default
-type and your site keeps its own root, the new type gets its route
-word the same way.
+label that makes a word first.
+
+Handing the root over is refused when that word is one Gophenberg keeps, like
+the label Page gives. It is also refused when it would move an item to
+a numbered page of the front page, like a page filed at
+`/pages/page/2`. Relabel the type or rename the item, then try again.
+When an import brings a new default type and your site keeps its own
+root, the new type gets its route word the same way, and the import is
+refused before it changes anything when that word is one Gophenberg
+keeps.
 
 **Change address** moves a type to a new route word. Every address of
 that type moves with it, at once, including nested items. Links kept

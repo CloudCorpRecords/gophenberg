@@ -386,7 +386,9 @@ curl "https://example.com/api/content/v1/resolve?path=/pages/page/2"
 
 An address holding an item beats one that reads as a listing, so a page
 genuinely filed at `pages/page/2` is served instead of the second
-archive page. Nothing published at an address answers
+archive page. The front page is the exception: `/page/{n}` always
+answers the front page listing, and no item can be stored at
+`page/{n}`. Nothing published at an address answers
 `404 {"error":"content: not found"}`, and so does a page number below
 one.
 
