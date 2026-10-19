@@ -9,11 +9,12 @@ import (
 	"github.com/gopherium/gophenberg/internal/postgres/db"
 )
 
-// checkPaginationPaths refuses addresses a write would take from the root listing.
+// checkPaginationPaths refuses addresses a write would take from the root listing, naming the first one.
 func checkPaginationPaths(paths []string) error {
 	for _, path := range paths {
 		if content.RootPagination(path) {
-			return content.ErrReservedAddress
+			return content.Refuse(content.ErrReservedAddress, "address_reserved",
+				content.ErrReservedAddress.Error(), content.Details{"path": path})
 		}
 	}
 	return nil
