@@ -41,7 +41,8 @@ func validateTypes(declared []TypeDefinition, stored []content.Type) error {
 		if err := siteOwns(stored, d.Key); err != nil {
 			return err
 		}
-		if err := typeFrom(d).Validate(); err != nil {
+		held, found := typeAmong(stored, d.Key)
+		if err := importedAs(d, found).ValidateChange(held); err != nil {
 			return err
 		}
 		if d.Default {
@@ -62,6 +63,15 @@ func siteOwns(stored []content.Type, key string) error {
 		return content.OwnedBy(held.Origin)
 	}
 	return nil
+}
+
+// importedAs returns the declared type as the import checks it, beside the root when it creates a default type.
+func importedAs(d TypeDefinition, found bool) content.Type {
+	wanted := typeFrom(d)
+	if found || !d.Default {
+		return wanted
+	}
+	return beside(wanted, content.Type{}, ActionCreate)
 }
 
 // typeFrom returns the content type the declaration stands for.

@@ -838,13 +838,17 @@ func (q *Queries) ReparentContentField(ctx context.Context, arg ReparentContentF
 	return i, err
 }
 
-const retypeContentPaths = `-- name: RetypeContentPaths :exec
-UPDATE core.content c
-SET path = trim(leading '/' from $1::text || '/' ||
-        CASE WHEN $2::text = '' THEN c.path
-            ELSE substring(c.path from length($2::text) + 2) END),
-    updated_at = $3
-WHERE c.type = $4
+const retypeContentPaths = `-- name: RetypeContentPaths :many
+WITH moved AS (
+    UPDATE core.content c
+    SET path = trim(leading '/' from $1::text || '/' ||
+            CASE WHEN $2::text = '' THEN c.path
+                ELSE substring(c.path from length($2::text) + 2) END),
+        updated_at = $3
+    WHERE c.type = $4
+    RETURNING c.path
+)
+SELECT path FROM moved WHERE path LIKE 'page/%'
 `
 
 type RetypeContentPathsParams struct {
@@ -854,14 +858,29 @@ type RetypeContentPathsParams struct {
 	Key       string
 }
 
-func (q *Queries) RetypeContentPaths(ctx context.Context, arg RetypeContentPathsParams) error {
-	_, err := q.db.Exec(ctx, retypeContentPaths,
+func (q *Queries) RetypeContentPaths(ctx context.Context, arg RetypeContentPathsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, retypeContentPaths,
 		arg.RouteWord,
 		arg.Was,
 		arg.UpdatedAt,
 		arg.Key,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		items = append(items, path)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const stripContentFieldPath = `-- name: StripContentFieldPath :exec

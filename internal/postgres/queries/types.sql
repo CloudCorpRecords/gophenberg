@@ -47,13 +47,17 @@ FROM core.content_types t
 WHERE t.key = @key
 FOR UPDATE;
 
--- name: RetypeContentPaths :exec
-UPDATE core.content c
-SET path = trim(leading '/' from @route_word::text || '/' ||
-        CASE WHEN @was::text = '' THEN c.path
-            ELSE substring(c.path from length(@was::text) + 2) END),
-    updated_at = @updated_at
-WHERE c.type = @key;
+-- name: RetypeContentPaths :many
+WITH moved AS (
+    UPDATE core.content c
+    SET path = trim(leading '/' from @route_word::text || '/' ||
+            CASE WHEN @was::text = '' THEN c.path
+                ELSE substring(c.path from length(@was::text) + 2) END),
+        updated_at = @updated_at
+    WHERE c.type = @key
+    RETURNING c.path
+)
+SELECT path FROM moved WHERE path LIKE 'page/%';
 
 -- name: LockDefaultContentType :one
 SELECT t.key, t.singular_label, t.plural_label, t.route_word, t.hierarchical, t.revisions,

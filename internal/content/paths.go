@@ -96,6 +96,9 @@ func guardAddress(path string) error {
 	if ReservedRoot(FirstSegment(path)) {
 		return ErrReservedAddress
 	}
+	if RootPagination(path) {
+		return ErrReservedAddress
+	}
 	return nil
 }
 

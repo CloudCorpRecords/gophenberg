@@ -147,20 +147,24 @@ WHERE p.id = @id AND p.updated_at = @expected_updated_at
 RETURNING p.id, p.type, p.status, p.slug, p.title, p.content, p.excerpt,
     p.author_id, p.published_at, p.created_at, p.updated_at, p.parent_id, p.path, p.fields;
 
--- name: MoveDescendants :exec
+-- name: MoveDescendants :many
 WITH RECURSIVE moved AS (
-    SELECT c.id, @path::text AS path
+    SELECT c.id, @path::text AS path, c.path AS previous_path
     FROM core.content c
     WHERE c.id = @id
   UNION ALL
-    SELECT child.id, moved.path || '/' || child.slug
+    SELECT child.id, moved.path || '/' || child.slug, child.path
     FROM core.content child
     JOIN moved ON child.parent_id = moved.id
-) CYCLE id SET looped USING trail
-UPDATE core.content AS p
-SET path = moved.path, updated_at = @updated_at
-FROM moved
-WHERE p.id = moved.id AND p.id <> @id;
+) CYCLE id SET looped USING trail,
+rewritten AS (
+    UPDATE core.content AS p
+    SET path = moved.path, updated_at = @updated_at
+    FROM moved
+    WHERE p.id = moved.id AND p.id <> @id
+    RETURNING p.path, moved.previous_path
+)
+SELECT path FROM rewritten WHERE path <> previous_path AND path LIKE 'page/%';
 
 -- name: CountChildren :one
 SELECT count(*) FROM core.content p WHERE p.parent_id = @id;

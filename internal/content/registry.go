@@ -146,7 +146,7 @@ func (r *Registry) ByRouteWord(ctx context.Context, word string) (Type, error) {
 
 // Create registers the type, or reports why it may not join the registry.
 func (r *Registry) Create(ctx context.Context, t Type) (Type, error) {
-	if err := t.Validate(); err != nil {
+	if err := t.ValidateChange(Type{}); err != nil {
 		return Type{}, err
 	}
 	if err := r.free(ctx, t); err != nil {
@@ -197,6 +197,9 @@ func (r *Registry) Update(ctx context.Context, t Type) (Type, error) {
 	stored, found := typeAmong(types, t.Key)
 	if !found {
 		return Type{}, ErrTypeNotFound
+	}
+	if err := t.ValidateChange(stored); err != nil {
+		return Type{}, err
 	}
 	if err := pluginKeeps(ctx, stored, t); err != nil {
 		return Type{}, err

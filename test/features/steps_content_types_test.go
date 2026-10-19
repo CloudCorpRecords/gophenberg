@@ -224,13 +224,22 @@ func theAdministratorSendsTheTypeToTheRoot(ctx context.Context, key string) erro
 	return w.patchJSON(typesPath+"/"+key, `{"route_word":""}`)
 }
 
-// theAdministratorMakesTheTypeDefault asks the registry to hand the root to a type.
-func theAdministratorMakesTheTypeDefault(ctx context.Context, key string) error {
+// theAdministratorAsksToMakeTheTypeDefault asks the registry to hand the root to a type, keeping the answer.
+func theAdministratorAsksToMakeTheTypeDefault(ctx context.Context, key string) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
 	}
-	if err := w.patchJSON(typesPath+"/"+key, `{"default":true}`); err != nil {
+	return w.patchJSON(typesPath+"/"+key, `{"default":true}`)
+}
+
+// theAdministratorMakesTheTypeDefault asks the registry to hand the root to a type.
+func theAdministratorMakesTheTypeDefault(ctx context.Context, key string) error {
+	if err := theAdministratorAsksToMakeTheTypeDefault(ctx, key); err != nil {
+		return err
+	}
+	w, err := worldOf(ctx)
+	if err != nil {
 		return err
 	}
 	return w.expect(http.StatusOK)
@@ -401,6 +410,7 @@ func initializeContentTypes(sc *godog.ScenarioContext) {
 	sc.When(`^the administrator describes "([^"]*)" as "([^"]*)"$`, theAdministratorDescribesTheType)
 	sc.When(`^the administrator sends "([^"]*)" to the root$`, theAdministratorSendsTheTypeToTheRoot)
 	sc.When(`^the administrator makes "([^"]*)" the default type$`, theAdministratorMakesTheTypeDefault)
+	sc.When(`^the administrator asks to make "([^"]*)" the default type$`, theAdministratorAsksToMakeTheTypeDefault)
 	sc.When(`^the administrator relabels "([^"]*)" as "([^"]*)" and "([^"]*)"$`, theAdministratorRelabelsTheType)
 	sc.When(`^the administrator deactivates the type "([^"]*)"$`, theAdministratorDeactivatesTheType)
 	sc.When(`^the administrator deletes the type "([^"]*)"$`, theAdministratorDeletesTheType)
@@ -410,6 +420,7 @@ func initializeContentTypes(sc *godog.ScenarioContext) {
 	sc.Then(`^the type "([^"]*)" is not listed$`, theTypeIsNotListed)
 	sc.Then(`^a car named "([^"]*)" can be created$`, aCarCanBeCreated)
 	sc.Then(`^the request is refused$`, theRequestIsRefused)
+	sc.Then(`^the request is refused with the code "([^"]*)"$`, theRequestIsRefusedWithTheCode)
 	sc.Then(`^the type "([^"]*)" carries the labels "([^"]*)" and "([^"]*)"$`, theTypeCarriesTheLabels)
 	sc.Then(`^the type "([^"]*)" answers under "([^"]*)"$`, theTypeAnswersUnder)
 	sc.Then(`^the type "([^"]*)" carries the description "([^"]*)"$`, theTypeCarriesTheDescription)

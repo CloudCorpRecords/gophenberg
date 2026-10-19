@@ -156,6 +156,9 @@ func (s *Store) writeType(ctx context.Context, queries Queries, t content.Type) 
 func readied(
 	ctx context.Context, queries Queries, t content.Type, was TypeRow,
 ) (content.Type, error) {
+	if err := t.ValidateChange(toType(was)); err != nil {
+		return content.Type{}, err
+	}
 	if was.Hierarchical && !t.Hierarchical {
 		if err := flattenable(ctx, queries, t.Key); err != nil {
 			return content.Type{}, err
@@ -184,11 +187,13 @@ func flattenable(ctx context.Context, queries Queries, key string) error {
 
 // updateTypeFailure returns the error the type update carries, and wraps anything else.
 func (s *Store) updateTypeFailure(err error) error {
-	if errors.Is(err, content.ErrTypeNotFound) ||
-		errors.Is(err, content.ErrRouteWordReserved) ||
-		errors.Is(err, content.ErrInvalidRouteWord) ||
-		errors.Is(err, content.ErrNestingInUse) {
-		return err
+	for _, carried := range []error{
+		content.ErrTypeNotFound, content.ErrRouteWordReserved, content.ErrReservedAddress,
+		content.ErrInvalidRouteWord, content.ErrNestingInUse,
+	} {
+		if errors.Is(err, carried) {
+			return err
+		}
 	}
 	if taken := s.errorFor(typeUpdateErrors, err); taken != nil {
 		return taken
@@ -208,7 +213,7 @@ func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 	demoted := toType(row)
 	demoted.RouteWord = demoted.DerivedRouteWord()
 	demoted.Default, demoted.UpdatedAt = false, at
-	if err := demoted.Validate(); err != nil {
+	if err := demoted.ValidateChange(content.Type{}); err != nil {
 		return err
 	}
 	if _, err := queries.UpdateContentType(ctx, updateParams(demoted)); err != nil {

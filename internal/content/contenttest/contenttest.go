@@ -34,7 +34,7 @@ type Case struct {
 func Cases() []Case {
 	return slices.Concat(
 		contentCases, slugCases, revisionCases, autosaveCases, trashCases, pathCases, publishedCases, nestingCases,
-		relationCases, backlinkCases, nestedRelationCases, listCases, filterCases, valueCases,
+		relationCases, backlinkCases, nestedRelationCases, listCases, filterCases, valueCases, rootPaginationCases,
 	)
 }
 
@@ -42,7 +42,7 @@ func Cases() []Case {
 func TypeCases() []Case {
 	return slices.Concat(
 		typeCases, typeRootWordCases, typeNestingCases, groupCases, groupValueCases, groupRecheckCases, groupRepointCases,
-		originCases, settingCases, kindCases, adoptCases, typeFieldCases, fieldParentCases,
+		typeRootPaginationCases, originCases, settingCases, kindCases, adoptCases, typeFieldCases, fieldParentCases,
 		fieldDepthCases, subFieldWriteCases, fieldMoveCases, fieldMoveValueCases, fieldSweepCases,
 		layoutSweepCases, definitionSweepCases, contractKeyCases, contractStampCases, contractOrderCases,
 		contractSweepCases, frozenSweepCases, frozenKeepCases, frozenRelationCases, contractWriteCases,

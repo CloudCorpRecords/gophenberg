@@ -91,6 +91,9 @@ func (s *ContentStore) create(
 	if len(c.Fields) > 0 || c.ParentID != nil {
 		return s.createHeld(ctx, c, params)
 	}
+	if err := checkPaginationPaths([]string{params.Path}); err != nil {
+		return content.Content{}, err
+	}
 	row, err := s.queries.CreateContent(ctx, params)
 	if err != nil {
 		return content.Content{}, fmt.Errorf("postgres: create content: %w", err)
@@ -110,6 +113,9 @@ func (s *ContentStore) createHeld(
 			return err
 		}
 		params.Path = content.AddressUnder(prefix, params.Slug)
+		if err := checkPaginationPaths([]string{params.Path}); err != nil {
+			return err
+		}
 		matching, err := declaredValues(ctx, queries, c)
 		if err != nil {
 			return err
@@ -378,7 +384,7 @@ func (s *ContentStore) update(
 		if err := writeRelations(ctx, queries, c, resolved); err != nil {
 			return err
 		}
-		if err := queries.MoveDescendants(ctx, db.MoveDescendantsParams{
+		if err := moveDescendants(ctx, queries, db.MoveDescendantsParams{
 			ID:        c.ID,
 			Path:      path,
 			UpdatedAt: c.UpdatedAt,
@@ -398,6 +404,9 @@ func (s *ContentStore) update(
 
 // writeContent applies the edited fields, telling a stale write apart from a missing item.
 func writeContent(ctx context.Context, queries *db.Queries, p db.UpdateContentParams) (db.CoreContent, error) {
+	if err := checkPaginationEdit(ctx, queries, p); err != nil {
+		return db.CoreContent{}, err
+	}
 	row, err := queries.UpdateContent(ctx, p)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return row, err
@@ -541,7 +550,7 @@ func valuesDeclared(ctx context.Context, queries *db.Queries, c content.Content)
 var domainWriteErrors = []error{
 	content.ErrNotFound, content.ErrConflict, content.ErrUnknownField, content.ErrNotHierarchical,
 	content.ErrTargetNotFound, content.ErrTargetType, content.ErrParentType, content.ErrParentTrashed,
-	content.ErrCycle,
+	content.ErrCycle, content.ErrReservedAddress,
 }
 
 // writeFailure returns the error the write carries, and wraps anything else.
@@ -665,7 +674,7 @@ func restorable(ctx context.Context, queries *db.Queries, id uuid.UUID) error {
 	return held.Restore()
 }
 
-// restoredRow returns the item to draft under its original slug, or under the trashed one when that is taken.
+// restoredRow returns the item to draft under its original slug, or the trashed one when that address is unavailable.
 func restoredRow(
 	ctx context.Context, queries *db.Queries, tx pgx.Tx, id uuid.UUID, updatedAt time.Time,
 ) (db.CoreContent, error) {
@@ -675,12 +684,17 @@ func restoredRow(
 		row, taken = queries.WithTx(attempt).RestoreContent(
 			ctx, db.RestoreContentParams{ID: id, UpdatedAt: updatedAt},
 		)
-		return taken
+		if taken != nil {
+			return taken
+		}
+		return checkPaginationPaths([]string{row.Path})
 	})
-	if !isSlugTaken(err) {
+	switch {
+	case isSlugTaken(err), errors.Is(err, content.ErrReservedAddress):
+		return queries.RestoreContentKeepingSlug(ctx, db.RestoreContentKeepingSlugParams{ID: id, UpdatedAt: updatedAt})
+	default:
 		return row, err
 	}
-	return queries.RestoreContentKeepingSlug(ctx, db.RestoreContentKeepingSlugParams{ID: id, UpdatedAt: updatedAt})
 }
 
 // Counts returns the number of items of the type in each status.

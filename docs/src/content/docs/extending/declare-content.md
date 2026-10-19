@@ -47,6 +47,11 @@ filter** when the field is a switch or a choice.
 Keys follow the same shape everywhere in Gophenberg. Start with a
 lowercase letter, then lowercase letters, numbers and hyphens.
 
+A route word takes that shape too, and a few words are kept for
+Gophenberg itself: `admin`, `api`, `media`, `gophenberg`,
+`_gophenberg` and `page`. A type declared under one of them is
+refused, and the site will not start.
+
 ## Declaring runs on every start
 
 The registrar is not a one time installer. It runs at every startup,
