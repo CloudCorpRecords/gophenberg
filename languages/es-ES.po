@@ -1802,8 +1802,8 @@ msgid "This item is in the trash. Restore it first to work on it again."
 msgstr "Este elemento está en la papelera. Restáuralo primero para volver a trabajar en él."
 
 #, fuzzy
-msgid "\"%(title)s\" goes to the trash. You can restore it from the Trash tab."
-msgstr "«%(title)s» va a la papelera. Puedes restaurarlo desde la pestaña Papelera."
+msgid "Are you sure you want to move \"%s\" to the trash?"
+msgstr "¿Seguro que quieres mover «%s» a la papelera?"
 
 #, fuzzy
 msgid "\"%s\" has been restored."
@@ -1949,10 +1949,6 @@ msgid_plural "Move %s items to the trash?"
 msgstr[0] "¿Mover %s elemento a la papelera?"
 msgstr[1] "¿Mover %s de elementos a la papelera?"
 msgstr[2] "¿Mover %s elementos a la papelera?"
-
-#, fuzzy
-msgid "Move to trash?"
-msgstr "¿Mover a la papelera?"
 
 #, fuzzy
 msgid "Name"

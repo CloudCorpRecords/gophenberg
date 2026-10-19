@@ -2636,12 +2636,8 @@ msgid "Items could not be loaded."
 msgstr "Les éléments n'ont pas pu être chargés."
 
 #, fuzzy
-msgid "Move to trash?"
-msgstr "Déplacer dans la corbeille ?"
-
-#, fuzzy
-msgid "\"%(title)s\" goes to the trash. You can restore it from the Trash tab."
-msgstr "« %(title)s » va dans la corbeille. Vous pouvez le restaurer depuis l'onglet Corbeille."
+msgid "Are you sure you want to move \"%s\" to the trash?"
+msgstr "Voulez-vous vraiment déplacer « %s » dans la corbeille ?"
 
 #, fuzzy
 msgid "Empty the trash?"
