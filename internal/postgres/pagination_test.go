@@ -66,6 +66,39 @@ func TestLegacyPaginationItemCanBeEditedWithoutMoving(t *testing.T) {
 	}
 }
 
+func TestLegacyPaginationParentCanBeEditedInPlace(t *testing.T) {
+	t.Parallel()
+
+	store, author, pool := newContentStoreWithPool(t)
+	root := contenttest.PostType()
+	root.Hierarchical = true
+	if _, err := postgres.NewTypeStore(pool).Update(t.Context(), root); err != nil {
+		t.Fatal(err)
+	}
+	parent := rootChild(t, store, nil, "Page", author)
+	child := rootChild(t, store, &parent, "About", author)
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE core.content SET slug = '2', path = 'page/2' WHERE id = $1`, child.ID); err != nil {
+		t.Fatal(err)
+	}
+	edited := contenttest.EditTitle(parent, "Updated title")
+	edited.UpdatedAt = time.Now().UTC()
+	updated, err := store.Update(t.Context(), edited, parent.UpdatedAt, nil, 0)
+	if err != nil {
+		t.Fatalf("Update() error = %v, want the parent of a legacy item editable in place", err)
+	}
+	if updated.Path != "page" || updated.Title != "Updated title" {
+		t.Errorf("Update() = %+v, want the edited title at page", updated)
+	}
+	after, err := store.ByID(t.Context(), child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Path != "page/2" {
+		t.Errorf("child path = %q, want the legacy child kept at page/2", after.Path)
+	}
+}
+
 func TestRestoreKeepsASafeAddressWhenTheOriginalIsReserved(t *testing.T) {
 	t.Parallel()
 
