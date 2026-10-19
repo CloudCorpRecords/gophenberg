@@ -153,9 +153,10 @@ question names the post. Its button reads **Move to trash**. Tick
 several rows and the **Trash…**
 button under the list moves them all at once, behind one question.
 
-The editor's Document panel offers **Move to trash**. It asks in a
-dialog titled "Move to trash?". The text under the title names
-the post and reminds you that the Trash tab can bring it back.
+The editor's Document panel offers **Move to trash** under the
+excerpt, above the item's fields. It asks first, in a small dialog
+with no header:
+`Are you sure you want to move "Hello world" to the trash?`
 Cancel has the focus when the dialog opens, and while the post moves
 the confirm button shows a spinner and both buttons wait.
 
@@ -167,7 +168,7 @@ counts them instead. There is no Undo. A trashed post comes back
 from the Trash tab.
 
 When the server refuses, the list shows the reason in a notice above
-the rows, and the editor shows it under the buttons of its dialog,
+the rows, and the editor shows it above the buttons of its dialog,
 which stays open. A page that
 still holds pages nested inside it cannot go to the trash until
 those move or go first. The notice above the list stays until your
