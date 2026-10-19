@@ -24,6 +24,10 @@ Feature: Managing content types
     When the administrator creates the type "car" labeled "Car" and "Cars" under "admin"
     Then the request is refused
 
+  Scenario: The page word is refused as a route word
+    When the administrator creates the type "car" labeled "Car" and "Cars" under "page"
+    Then the request is refused with the code "route_word_reserved"
+
   Scenario: A route word in use is refused
     Given the type "car" labeled "Car" and "Cars" under "cars"
     When the administrator creates the type "van" labeled "Van" and "Vans" under "cars"
@@ -40,6 +44,13 @@ Feature: Managing content types
     Then "page" is the default type
     And the type "page" answers under ""
     And the type "post" answers under "posts"
+
+  Scenario: The root stays while the old root's label makes the page word
+    Given the type "page" labeled "Page" and "Pages" under "pages"
+    When the administrator relabels "post" as "Page" and "Page"
+    And the administrator asks to make "page" the default type
+    Then the request is refused with the code "route_word_reserved"
+    And "post" is the default type
 
   Scenario: Relabeling a type leaves its key and address alone
     When the administrator relabels "post" as "Story" and "Stories"

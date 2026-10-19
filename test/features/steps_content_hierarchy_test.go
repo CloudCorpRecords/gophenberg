@@ -121,6 +121,11 @@ func theAdministratorFilesThePageUnder(ctx context.Context, title, parent string
 
 // theAdministratorFilesAPostUnder stores a post beneath the named parent.
 func theAdministratorFilesAPostUnder(ctx context.Context, parent string) error {
+	return theAdministratorFilesThePostUnder(ctx, "Nested", parent)
+}
+
+// theAdministratorFilesThePostUnder stores the titled post beneath the named parent, keeping the answer.
+func theAdministratorFilesThePostUnder(ctx context.Context, title, parent string) error {
 	w, err := worldOf(ctx)
 	if err != nil {
 		return err
@@ -129,7 +134,7 @@ func theAdministratorFilesAPostUnder(ctx context.Context, parent string) error {
 	if !found {
 		return fmt.Errorf("the scenario stored no post titled %q", parent)
 	}
-	return storeItem(w, "post", "Nested", held.ID)
+	return storeItem(w, "post", title, held.ID)
 }
 
 // theAdministratorFilesUnder moves stored content beneath another item.

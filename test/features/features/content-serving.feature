@@ -1,6 +1,7 @@
 Feature: Serving content by address
   Every public address resolves through one lookup against the stored path,
-  and the registry decides what renders. Content always beats pagination.
+  and the registry decides what renders. Content beats pagination under a
+  route word, and the front page always keeps its numbered pages.
 
   Background:
     Given a running Gophenberg with the default content types
@@ -32,6 +33,14 @@ Feature: Serving content by address
     Given the published page "Page"
     And the published page "2" filed under "Page"
     Then "/pages/page/2" answers with "2"
+
+  Scenario: The front page keeps its numbered pages
+    Given the administrator lets the type "post" nest
+    And the published post "Page"
+    When the administrator files the post "2" under "Page"
+    Then the request is refused with the code "address_reserved"
+    When a visitor resolves "/page/2"
+    Then the answer is an archive of "post"
 
   Scenario: A draft answers nowhere
     Given the page "Not Yet"
