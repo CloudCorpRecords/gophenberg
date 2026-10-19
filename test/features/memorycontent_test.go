@@ -376,6 +376,9 @@ func (s *memoryContent) Create(_ context.Context, c content.Content) (content.Co
 	if err != nil {
 		return content.Content{}, err
 	}
+	if err := offPagination(content.AddressUnder(prefix, c.Slug)); err != nil {
+		return content.Content{}, err
+	}
 	if err := s.valuesDeclared(c); err != nil {
 		return content.Content{}, err
 	}
@@ -508,18 +511,42 @@ func (s *memoryContent) addressHeld(path string, except uuid.UUID) bool {
 	return false
 }
 
-// carryDescendants moves everything nested under the item to follow its address.
-func (s *memoryContent) carryDescendants(moved content.Content, was string) {
+// offPagination returns the refusal naming an address the root listing keeps for its numbered pages, if it is one.
+func offPagination(path string) error {
+	if !content.RootPagination(path) {
+		return nil
+	}
+	return content.Refuse(content.ErrReservedAddress, "address_reserved",
+		content.ErrReservedAddress.Error(), content.Details{"path": path})
+}
+
+// movedOffPagination returns the refusal naming the first moved address the root listing keeps, if there is one.
+func movedOffPagination(moved map[uuid.UUID]content.Content) error {
+	for _, next := range moved {
+		if err := offPagination(next.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// carriedUnder returns the item's descendants at their new addresses, or refuses one on root pagination.
+func (s *memoryContent) carriedUnder(moved content.Content, was string) (map[uuid.UUID]content.Content, error) {
+	carried := make(map[uuid.UUID]content.Content)
 	if was == moved.Path {
-		return
+		return carried, nil
 	}
 	for id, stored := range s.items {
-		if stored.ID == moved.ID || !strings.HasPrefix(stored.Path, was+"/") {
+		if stored.ID == moved.ID || stored.Type != moved.Type || !strings.HasPrefix(stored.Path, was+"/") {
 			continue
 		}
 		stored.Path = moved.Path + strings.TrimPrefix(stored.Path, was)
-		s.items[id] = stored
+		if err := offPagination(stored.Path); err != nil {
+			return nil, err
+		}
+		carried[id] = stored
 	}
+	return carried, nil
 }
 
 // typeCarry names a type whose addresses move from the route word it answered under to another, and their stamp.
@@ -545,6 +572,9 @@ func (s *memoryContent) carryTypes(carries ...typeCarry) error {
 			stored.UpdatedAt = carry.at
 			moved[id] = stored
 		}
+	}
+	if err := movedOffPagination(moved); err != nil {
+		return err
 	}
 	if s.addressesClash(moved) {
 		return content.ErrSlugTaken
@@ -832,11 +862,18 @@ func (s *memoryContent) Update(
 	if s.addressHeld(settled.Path, c.ID) {
 		return content.Content{}, content.ErrSlugTaken
 	}
+	if settled.Path != stored.Path && content.RootPagination(settled.Path) {
+		return content.Content{}, content.ErrReservedAddress
+	}
+	carried, err := s.carriedUnder(settled, stored.Path)
+	if err != nil {
+		return content.Content{}, err
+	}
 	if err := s.snapshotRevision(c.ID, snapshot, revisionCap); err != nil {
 		return content.Content{}, err
 	}
 	s.items[settled.ID] = settled
-	s.carryDescendants(settled, stored.Path)
+	maps.Copy(s.items, carried)
 	return settled, nil
 }
 
@@ -954,7 +991,7 @@ func (s *memoryContent) Restore(_ context.Context, id uuid.UUID, updatedAt time.
 	restored := stored
 	restored.Slug = trashMarker.ReplaceAllString(stored.Slug, "")
 	restored.Path = trashMarker.ReplaceAllString(stored.Path, "")
-	if s.addressHeld(restored.Path, id) {
+	if s.addressHeld(restored.Path, id) || content.RootPagination(restored.Path) {
 		restored = stored
 	}
 	s.items[id] = restored

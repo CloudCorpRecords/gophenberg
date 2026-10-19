@@ -933,6 +933,9 @@ func (s *memoryTypes) Update(ctx context.Context, t content.Type) (content.Type,
 		if stored.Key != t.Key {
 			continue
 		}
+		if err := t.ValidateChange(stored); err != nil {
+			return content.Type{}, err
+		}
 		if stored.Hierarchical && !t.Hierarchical && nested > 0 {
 			return content.Type{}, content.NestingInUse(t.Key, nested)
 		}
@@ -984,7 +987,7 @@ func (s *memoryTypes) handRootOver(at time.Time) (typeCarry, error) {
 		}
 		was := stored.RouteWord
 		stored.RouteWord, stored.Default, stored.UpdatedAt = stored.DerivedRouteWord(), false, at
-		if err := stored.Validate(); err != nil {
+		if err := stored.ValidateChange(content.Type{}); err != nil {
 			return typeCarry{}, err
 		}
 		if s.routeWordTaken(stored.Key, stored.RouteWord) {
