@@ -108,3 +108,26 @@ test('carries a message for every code the server can answer with', () => {
 
 	expect(emitted.filter((code) => held[code] === undefined)).toEqual([])
 })
+
+test('names the label a root hand-over trips on', () => {
+	const held = errorText({
+		error: 'content: route word reserved: the label "Page" would become the route word "page"',
+		code: 'route_word_reserved_by_label',
+		meta: { label: 'Page', word: 'page' },
+	})
+
+	expect(held).toContain('Page')
+	expect(held).toContain('page')
+	expect(held).toMatch(/plural name/i)
+})
+
+test('names the address a root hand-over trips on', () => {
+	const held = errorText({
+		error: 'content: the address is reserved: "page/2"',
+		code: 'pagination_address_reserved',
+		meta: { path: 'page/2' },
+	})
+
+	expect(held).toContain('page/2')
+	expect(held).toMatch(/slug/i)
+})

@@ -220,8 +220,15 @@ func TestRootHandoverRefusesPageDerivedFromTheOldRootLabel(t *testing.T) {
 	held := mustCreate(t, store, "Existing post", author)
 	promoted := contenttest.PageType()
 	promoted.Default, promoted.UpdatedAt = true, time.Now().UTC()
-	if _, err := types.Update(t.Context(), promoted); !errors.Is(err, content.ErrRouteWordReserved) {
+	_, err = types.Update(t.Context(), promoted)
+	if !errors.Is(err, content.ErrRouteWordReserved) {
 		t.Fatalf("Update() error = %v, want the derived page route refused", err)
+	}
+	if code, _ := content.CodeOf(err); code != "route_word_reserved_by_label" {
+		t.Errorf("code = %q, want route_word_reserved_by_label", code)
+	}
+	if held, _ := content.DetailsOf(err); held["label"] != "Page" || held["word"] != "page" {
+		t.Errorf("details = %v, want the label Page and the word page named", held)
 	}
 	for _, before := range []content.Type{root, contenttest.PageType()} {
 		after, err := types.ByKey(t.Context(), before.Key)
@@ -324,6 +331,12 @@ func TestTypePromotionCannotCreateRootPaginationAddresses(t *testing.T) {
 	_, err = content.NewRegistry(types).Update(t.Context(), promoted)
 	if !errors.Is(err, content.ErrReservedAddress) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrReservedAddress)
+	}
+	if code, _ := content.CodeOf(err); code != "pagination_address_reserved" {
+		t.Errorf("code = %q, want pagination_address_reserved", code)
+	}
+	if held, _ := content.DetailsOf(err); held["path"] != "page/2" {
+		t.Errorf("details = %v, want the path page/2 named", held)
 	}
 	held, err := types.ByKey(t.Context(), "page")
 	if err != nil {

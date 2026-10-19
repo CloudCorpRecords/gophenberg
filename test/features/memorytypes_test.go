@@ -5,6 +5,7 @@ package features_test
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -988,6 +989,9 @@ func (s *memoryTypes) handRootOver(at time.Time) (typeCarry, error) {
 		was := stored.RouteWord
 		stored.RouteWord, stored.Default, stored.UpdatedAt = stored.DerivedRouteWord(), false, at
 		if err := stored.ValidateChange(content.Type{}); err != nil {
+			if errors.Is(err, content.ErrRouteWordReserved) {
+				return typeCarry{}, content.LabelRouteWordReserved(stored)
+			}
 			return typeCarry{}, err
 		}
 		if s.routeWordTaken(stored.Key, stored.RouteWord) {

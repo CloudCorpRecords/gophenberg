@@ -516,8 +516,7 @@ func offPagination(path string) error {
 	if !content.RootPagination(path) {
 		return nil
 	}
-	return content.Refuse(content.ErrReservedAddress, "address_reserved",
-		content.ErrReservedAddress.Error(), content.Details{"path": path})
+	return content.PaginationAddressReserved(path)
 }
 
 // movedOffPagination returns the refusal naming the first moved address the root listing keeps, if there is one.

@@ -320,6 +320,10 @@ export function errorTemplates(): Record<string, string> {
 			DOMAIN,
 		),
 		page_kind_unknown: __('There is no page kind called %(value)s. Pick one of these instead: %(allowed)s.', DOMAIN),
+		pagination_address_reserved: __(
+			'The address %(path)s is kept for the front page listing, so no item can answer there. Give the item a different slug and try again.',
+			DOMAIN,
+		),
 		parent_cycle: __(
 			'An item cannot sit inside itself, or inside one of the items nested under it. Pick a parent outside this branch.',
 			DOMAIN,
@@ -420,6 +424,10 @@ export function errorTemplates(): Record<string, string> {
 		),
 		route_word_reserved: __(
 			'Gophenberg keeps this word for itself, so no content type can answer under it. Pick a different route word.',
+			DOMAIN,
+		),
+		route_word_reserved_by_label: __(
+			'The plural name %(label)s would become the route word %(word)s, which Gophenberg keeps for itself. Change the plural name and try again.',
 			DOMAIN,
 		),
 		route_word_taken: __('Another content type already answers under this route word. Pick a different word.', DOMAIN),

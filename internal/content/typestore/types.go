@@ -214,12 +214,20 @@ func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 	demoted.RouteWord = demoted.DerivedRouteWord()
 	demoted.Default, demoted.UpdatedAt = false, at
 	if err := demoted.ValidateChange(content.Type{}); err != nil {
-		return err
+		return handoverRefusal(demoted, err)
 	}
 	if _, err := queries.UpdateContentType(ctx, updateParams(demoted)); err != nil {
 		return err
 	}
 	return carryContent(ctx, queries, demoted, row.RouteWord)
+}
+
+// handoverRefusal names the label blocking a root hand-over, or carries any other failure unchanged.
+func handoverRefusal(demoted content.Type, err error) error {
+	if !errors.Is(err, content.ErrRouteWordReserved) {
+		return err
+	}
+	return content.LabelRouteWordReserved(demoted)
 }
 
 // Delete removes the type, or reports it missing or still in use.

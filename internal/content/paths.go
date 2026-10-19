@@ -4,6 +4,7 @@ package content
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -23,6 +24,14 @@ var ErrTooDeep = errors.New("content: the nesting limit is reached")
 
 // ErrReservedAddress reports that an address names a place the CMS keeps.
 var ErrReservedAddress = errors.New("content: the address is reserved")
+
+// PaginationAddressReserved returns the refusal for an address the root listing keeps for its
+// numbered pages, naming the address so the message says what to change.
+func PaginationAddressReserved(path string) error {
+	return Refuse(ErrReservedAddress, "pagination_address_reserved",
+		fmt.Sprintf("%s: %q", ErrReservedAddress, path),
+		Details{"path": path})
+}
 
 // ErrHoldsChildren reports that content still holds content nested under it.
 var ErrHoldsChildren = errors.New("content: the item still holds children")

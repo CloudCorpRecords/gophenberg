@@ -1117,6 +1117,9 @@ msgstr "Le fichier %(file)s appelle ce thème %(declared)s, mais il s'installe s
 msgid "The %(file)s inside %(name)s is not valid JSON, so it could not be read. Fix that file and package the theme again."
 msgstr "Le fichier %(file)s dans %(name)s n'est pas du JSON valide, il n'a donc pas pu être lu. Corrigez ce fichier et réempaquetez le thème."
 
+msgid "The address %(path)s is kept for the front page listing, so no item can answer there. Give the item a different slug and try again."
+msgstr "L'adresse %(path)s est réservée à la liste de la page d'accueil, donc aucun élément ne peut y répondre. Donnez un autre slug à l'élément et réessayez."
+
 #, fuzzy
 msgid "The browser kept an unsaved version of this post."
 msgstr "Le navigateur a gardé une version non enregistrée de cet article."
@@ -1284,6 +1287,9 @@ msgstr "Le nom change. Rien de ce qui est stocké sous ce champ ne bouge."
 #, fuzzy
 msgid "The number of revisions to keep has to be a whole number, and it cannot be negative. Enter a different number."
 msgstr "Le nombre de révisions à conserver doit être un nombre entier, et il ne peut pas être négatif. Saisissez un autre nombre."
+
+msgid "The plural name %(label)s would become the route word %(word)s, which Gophenberg keeps for itself. Change the plural name and try again."
+msgstr "Le nom au pluriel %(label)s deviendrait le mot de route %(word)s, que Gophenberg se réserve. Changez le nom au pluriel et réessayez."
 
 #, fuzzy
 msgid "The registry could not be reached."

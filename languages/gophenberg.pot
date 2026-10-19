@@ -1448,6 +1448,9 @@ msgstr ""
 msgid "The %(plugin)s plugin declares %(name)s flat, and the site keeps it nesting while its items sit inside another."
 msgstr ""
 
+msgid "The address %(path)s is kept for the front page listing, so no item can answer there. Give the item a different slug and try again."
+msgstr ""
+
 msgid "The browser kept an unsaved version of this post."
 msgstr ""
 
@@ -1554,6 +1557,9 @@ msgid "The new order has to name every field of this content type exactly once. 
 msgstr ""
 
 msgid "The number of revisions to keep has to be a whole number, and it cannot be negative. Enter a different number."
+msgstr ""
+
+msgid "The plural name %(label)s would become the route word %(word)s, which Gophenberg keeps for itself. Change the plural name and try again."
 msgstr ""
 
 msgid "The registry could not be reached."

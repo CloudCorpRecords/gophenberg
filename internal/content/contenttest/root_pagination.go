@@ -39,11 +39,22 @@ func nestingPosts(t *testing.T, types content.TypeStore) content.Type {
 	return stored
 }
 
-// carriedOnto fails the case unless the refusal carries address_reserved and names the path.
+// labelReserved fails the case unless the refusal names the label and the route word it would make.
+func labelReserved(t *testing.T, err error, label, word string) {
+	t.Helper()
+	if code, _ := content.CodeOf(err); code != "route_word_reserved_by_label" {
+		t.Errorf("code = %q, want route_word_reserved_by_label", code)
+	}
+	if held, _ := content.DetailsOf(err); held["label"] != label || held["word"] != word {
+		t.Errorf("details = %v, want the label %q and the word %q named", held, label, word)
+	}
+}
+
+// carriedOnto fails the case unless the refusal carries pagination_address_reserved and names the path.
 func carriedOnto(t *testing.T, err error, path string) {
 	t.Helper()
-	if code, _ := content.CodeOf(err); code != "address_reserved" {
-		t.Errorf("code = %q, want address_reserved", code)
+	if code, _ := content.CodeOf(err); code != "pagination_address_reserved" {
+		t.Errorf("code = %q, want pagination_address_reserved", code)
 	}
 	if held, _ := content.DetailsOf(err); held["path"] != path {
 		t.Errorf("details = %v, want the path %s named", held, path)
@@ -252,6 +263,7 @@ func updateRefusesAHandOverWhoseOldRootLabelGivesPage(t *testing.T, s Stores) {
 	if !errors.Is(err, content.ErrRouteWordReserved) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrRouteWordReserved)
 	}
+	labelReserved(t, err, "Page", "page")
 	if held, err := s.Types.ByKey(t.Context(), content.TypePost); err != nil || !held.Default || held.RouteWord != "" {
 		t.Errorf("post = %+v, %v, want it still holding the root", held, err)
 	}

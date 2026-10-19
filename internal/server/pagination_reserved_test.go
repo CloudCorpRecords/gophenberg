@@ -3,11 +3,26 @@
 package server_test
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/server"
 )
+
+// errorMeta reads the data a refused request carries.
+func errorMeta(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var answered struct {
+		Meta map[string]any `json:"meta"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answered); err != nil {
+		t.Fatalf("reading the error response: %v", err)
+	}
+	return answered.Meta
+}
 
 func TestTypeAPIKeepsPageReservedForPagination(t *testing.T) {
 	t.Parallel()
@@ -73,5 +88,51 @@ func TestContentAPIRefusesAChildAtTheRootPaginationAddress(t *testing.T) {
 	}
 	if code := errorCode(t, recorder); code != "address_reserved" {
 		t.Errorf("code = %q, want address_reserved", code)
+	}
+}
+
+func TestTypeAPINamesTheLabelBlockingARootHandOver(t *testing.T) {
+	t.Parallel()
+
+	users := newFakeUserStore()
+	addAda(t, users)
+	types := newFakeTypeStore()
+	types.register(pageType())
+	types.updateErr = content.LabelRouteWordReserved(content.Type{PluralLabel: "Page", RouteWord: "page"})
+	handler := authedServerWithStores(t, server.Config{Users: users, Content: newFakePostStore(), Types: types})
+
+	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"description":"Site pages"}`)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("PATCH status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if code := errorCode(t, recorder); code != "route_word_reserved_by_label" {
+		t.Errorf("code = %q, want route_word_reserved_by_label", code)
+	}
+	if meta := errorMeta(t, recorder); meta["label"] != "Page" || meta["word"] != "page" {
+		t.Errorf("meta = %v, want the label Page and the word page named", meta)
+	}
+}
+
+func TestTypeAPINamesTheAddressBlockingARootHandOver(t *testing.T) {
+	t.Parallel()
+
+	users := newFakeUserStore()
+	addAda(t, users)
+	types := newFakeTypeStore()
+	types.register(pageType())
+	types.updateErr = content.PaginationAddressReserved("page/2")
+	handler := authedServerWithStores(t, server.Config{Users: users, Content: newFakePostStore(), Types: types})
+
+	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"description":"Site pages"}`)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("PATCH status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if code := errorCode(t, recorder); code != "pagination_address_reserved" {
+		t.Errorf("code = %q, want pagination_address_reserved", code)
+	}
+	if meta := errorMeta(t, recorder); meta["path"] != "page/2" {
+		t.Errorf("meta = %v, want the path page/2 named", meta)
 	}
 }

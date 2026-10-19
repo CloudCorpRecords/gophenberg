@@ -13,8 +13,7 @@ import (
 func checkPaginationPaths(paths []string) error {
 	for _, path := range paths {
 		if content.RootPagination(path) {
-			return content.Refuse(content.ErrReservedAddress, "address_reserved",
-				content.ErrReservedAddress.Error(), content.Details{"path": path})
+			return content.PaginationAddressReserved(path)
 		}
 	}
 	return nil
