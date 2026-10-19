@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 const RUN = Math.random().toString(36).slice(2, 8)
 const TITLE = `A post the golden path wrote ${RUN}`
@@ -86,6 +86,18 @@ test.afterEach(async ({ page }) => {
 })
 
 /**
+ * Clicks a block just inside its end edge.
+ * @param block - The block to click.
+ */
+async function clickAtEnd(block: Locator) {
+	const found = await block.boundingBox()
+	if (found === null) {
+		throw new Error('the block takes no box on screen')
+	}
+	await block.click({ position: { x: found.width - 4, y: found.height / 2 } })
+}
+
+/**
  * Writes a title, a paragraph and a heading into the open editor.
  * @param page - The page to drive.
  */
@@ -155,7 +167,7 @@ test('keeps an edit made to an already published post', async ({ page }) => {
 	await page.getByRole('button', { name: 'Publish', exact: true }).click()
 	await expect(page.getByRole('button', { name: 'Update' })).toBeVisible()
 
-	await canvas(page).getByText(PARAGRAPH).click()
+	await clickAtEnd(canvas(page).getByText(PARAGRAPH))
 	await page.keyboard.press('End')
 	await page.keyboard.press('Enter')
 	await page.keyboard.type(added)
@@ -186,7 +198,7 @@ test('round-trips every field of the editor without a full reload', async ({ pag
 	await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Published')
 
 	await page.getByRole('textbox', { name: 'Title' }).fill(edited.title)
-	await canvas(page).getByText(PARAGRAPH).click()
+	await clickAtEnd(canvas(page).getByText(PARAGRAPH))
 	await page.keyboard.press('End')
 	await page.keyboard.press('Enter')
 	await page.keyboard.type(edited.paragraph)

@@ -11,7 +11,7 @@ import {
 	toAttachment,
 } from '../media/editorMedia'
 import type { EditorAttachment } from '../media/editorMedia'
-import { EDITOR_SETTINGS } from '../content/editorSetup'
+import { EDITOR_SETTINGS, editorSettings } from '../content/editorSetup'
 
 const HARBOR = {
 	id: 7,
@@ -270,6 +270,14 @@ test('hands the editor the media seam settings', () => {
 	expect(EDITOR_SETTINGS.imageDefaultSize).toBe('large')
 	expect(EDITOR_SETTINGS.imageEditing).toBe(false)
 	expect(EDITOR_SETTINGS.maxUploadFileSize).toBe(MAX_UPLOAD_BYTES)
+})
+
+test('fixes the block toolbar above the canvas on a narrow window, as WordPress forces it', () => {
+	expect(editorSettings(true)).toEqual({ ...EDITOR_SETTINGS, hasFixedToolbar: true })
+})
+
+test('leaves the block toolbar to float by its block on a wide window', () => {
+	expect(editorSettings(false)).toEqual({ ...EDITOR_SETTINGS, hasFixedToolbar: false })
 })
 
 test('mirrors the upload rules the server enforces', () => {

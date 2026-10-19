@@ -12,12 +12,24 @@ declare module '@wordpress/block-library' {
 declare module '@wordpress/block-editor' {
 	import type { ComponentType, ReactNode } from 'react'
 
+	export interface LayoutSizes {
+		contentSize?: string
+		wideSize?: string
+	}
+	export interface BlockListLayout extends LayoutSizes {
+		type: string
+	}
 	export interface BlockEditorSettings {
 		hasFixedToolbar?: boolean
 		bodyPlaceholder?: string
 		maxWidth?: number
 		styles?: { css: string }[]
 		__experimentalBlockPatterns?: unknown[]
+		__experimentalFeatures?: {
+			layout?: LayoutSizes
+			useRootPaddingAwareAlignments?: boolean
+		}
+		__unstableIsBlockBasedTheme?: boolean
 	}
 	export const BlockEditorProvider: ComponentType<{
 		value?: import('@wordpress/blocks').Block[]
@@ -31,7 +43,7 @@ declare module '@wordpress/block-editor' {
 		styles?: { css: string }[]
 		children?: ReactNode
 	}>
-	export const BlockList: ComponentType<Record<string, never>>
+	export const BlockList: ComponentType<{ className?: string; layout?: BlockListLayout }>
 	export const BlockBreadcrumb: ComponentType<{ rootLabelText?: string }>
 	export const __experimentalListView: ComponentType<{ isExpanded?: boolean; focusOnMount?: boolean }>
 	export const Inserter: ComponentType<{
@@ -39,6 +51,15 @@ declare module '@wordpress/block-editor' {
 		toggleProps?: { label?: string }
 	}>
 	export const BlockToolbar: ComponentType<{ hideDragHandle?: boolean }>
+	export const BlockIcon: ComponentType<{ icon?: unknown }>
+	export const NavigableToolbar: ComponentType<{
+		'aria-label'?: string
+		className?: string
+		variant?: string
+		focusEditorOnEscape?: boolean
+		shouldUseKeyboardFocusShortcut?: boolean
+		children?: ReactNode
+	}>
 	export const BlockInspector: ComponentType<Record<string, never>>
 	export const WritingFlow: ComponentType<{ children?: ReactNode }>
 	export const ObserveTyping: ComponentType<{ children?: ReactNode }>

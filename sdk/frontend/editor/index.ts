@@ -12,13 +12,14 @@ export {
 	__experimentalListView as ListView,
 } from '@wordpress/block-editor'
 export { BlockPreview } from './preview'
+export { BlockToolbar } from './toolbar'
 export { getBlockTypes, parse, serialize } from '@wordpress/blocks'
 export type { Block } from '@wordpress/blocks'
 export { SlotFillProvider } from '@wordpress/components'
 export { ShortcutProvider } from '@wordpress/keyboard-shortcuts'
 export { useStateWithHistory } from '@wordpress/compose'
 export { CURATED_BLOCKS, registerCuratedBlocks } from './blocks'
-export { CANVAS_STYLES } from './styles'
+export { CANVAS_LAYOUT, CANVAS_STYLES } from './styles'
 export { apiFetchAttempts, clearApiFetchAttempts, installApiFetchGuard } from './guard'
 export { BLOCK_EDITOR_STORE, registerMediaCategories, registerMediaLibrary } from './media'
 export type {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, expect, test } from 'vitest'
 
@@ -56,6 +56,35 @@ test('says which block is selected when none is', async () => {
 	await userEvent.click(await screen.findByRole('tab', { name: 'Block' }))
 
 	expect(await screen.findByText(/no block selected/i)).toBeInTheDocument()
+})
+
+test('closes the settings from their own header and hands focus back to the settings button', async () => {
+	renderAt(EDITOR_PATH)
+
+	await userEvent.click(await screen.findByRole('button', { name: 'Close Settings' }))
+
+	expect(document.querySelector('.gophenberg-editor__sidebar')).toHaveAttribute('hidden')
+	expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus()
+})
+
+test('brings the settings back on the tab they showed', async () => {
+	renderAt(EDITOR_PATH)
+	await userEvent.click(await screen.findByRole('tab', { name: 'Block' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Close Settings' }))
+
+	await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+	expect(screen.getByRole('tab', { name: 'Block' })).toHaveAttribute('aria-selected', 'true')
+})
+
+test('holds the tabs and the close button in one row', async () => {
+	renderAt(EDITOR_PATH)
+
+	const close = await screen.findByRole('button', { name: 'Close Settings' })
+	const row = close.closest('.gophenberg-editor__sidebar-header') as HTMLElement
+
+	expect(row).not.toBeNull()
+	expect(within(row).getByRole('tablist')).toBeInTheDocument()
 })
 
 test('shows a status it holds no label for as the server named it', async () => {

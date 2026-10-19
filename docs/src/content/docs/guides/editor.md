@@ -13,7 +13,8 @@ list.
 The header holds, left to right: a back link, the block inserter,
 undo and redo, a list view toggle, the document name, the save
 state (Saved, Unsaved changes, or Saving), a preview width select,
-and the save and publish buttons.
+the save button, a **Settings** button that shows and hides the
+sidebar, and the publish button.
 
 The title is its own field above the canvas, where blocks live. A
 breadcrumb at the bottom shows where in the block structure you
@@ -21,7 +22,34 @@ stand.
 
 The sidebar has two tabs: **Document** for status, slug, and
 excerpt, covered in [Publishing](/guides/publishing/), and
-**Block** for the selected block's settings.
+**Block** for the selected block's settings. A close button ends
+its tab row. On a screen 782 pixels wide or wider the sidebar
+starts open and slides in and out.
+
+## On a phone
+
+On a screen narrower than 782 pixels the editor works like the
+WordPress editor on a phone:
+
+- The editor fits the screen, so the page never scrolls sideways.
+- The sidebar starts closed. **Settings** opens it over the writing
+  area at the full width of the screen, and its close button puts
+  it away.
+- Undo, redo, the preview width select, the save state word, and
+  the breadcrumb leave the screen. The save button names the state
+  instead: **Save draft**, **Saving**, or **Saved**.
+- The block toolbar sits in its own row above the title. Until you
+  select a block, its buttons are greyed out.
+- The list view opens over the writing area.
+
+On a screen narrower than 600 pixels, **Save draft** shows as a
+cloud icon. At 600 pixels and narrower the document name leaves out
+the post type. At 403 pixels and narrower the document name leaves
+the header.
+
+If the window narrows past 782 pixels while the sidebar is open,
+the sidebar closes, and it opens again when the window widens. A
+sidebar you closed yourself stays closed.
 
 ## Working with blocks
 

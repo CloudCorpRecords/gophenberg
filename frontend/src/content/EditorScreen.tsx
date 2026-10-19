@@ -7,6 +7,7 @@ import {
 	BlockCanvas,
 	BlockEditorProvider,
 	BlockList,
+	BlockToolbar,
 	CANVAS_STYLES,
 	ListView,
 	ShortcutProvider,
@@ -20,6 +21,7 @@ import { useSession } from '@gopherium/react-auth'
 import { __ } from '@wordpress/i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
+import { useMemo, useRef } from 'react'
 
 import './editor.css'
 
@@ -29,7 +31,7 @@ import { fetchPost } from './api'
 import type { PostDetail } from './api'
 import { PostReadView } from './PostReadView'
 import { writesSettled } from './postWrites'
-import { EDITOR_SETTINGS, canvasClass } from './editorSetup'
+import { CANVAS_ROOT, canvasClass, editorClass, editorSettings, sidebarClass } from './editorSetup'
 import { EditorHeader } from './EditorHeader'
 import { EditorSidebar } from './EditorSidebar'
 import { RestoreBanner } from './RestoreBanner'
@@ -38,6 +40,7 @@ import { useAutosave } from './useAutosave'
 import { useContentType } from './useContentType'
 import { useEditorBuffer } from './useEditorBuffer'
 import { useEditorViews } from './useEditorViews'
+import { useEditorWidth } from './useEditorWidth'
 
 registerCuratedBlocks()
 installApiFetchGuard()
@@ -81,8 +84,16 @@ export function EditorScreen() {
 function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 	const listed = useContentType()
 	const buffer = useEditorBuffer(postId, stored, listed.fields)
-	const views = useEditorViews()
+	const width = useEditorWidth()
+	const views = useEditorViews(width.narrow)
+	const settingsRef = useRef<HTMLButtonElement>(null)
+	const settings = useMemo(() => editorSettings(width.narrow), [width.narrow])
 	useAutosave(postId, buffer)
+	const closeSettings = () => {
+		const toggle = settingsRef.current as HTMLButtonElement
+		views.closeSidebar()
+		toggle.focus()
+	}
 	return (
 		<SlotFillProvider>
 			<ShortcutProvider>
@@ -90,10 +101,16 @@ function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 					value={buffer.blocks}
 					onInput={buffer.onInput}
 					onChange={buffer.onChange}
-					settings={EDITOR_SETTINGS}
+					settings={settings}
 				>
-					<div className="gophenberg-editor godmin-arrival">
-						<EditorHeader buffer={buffer} type={stored.type} views={views} />
+					<div className={editorClass(width.narrow)}>
+						<EditorHeader
+							buffer={buffer}
+							type={stored.type}
+							views={views}
+							width={width}
+							settingsRef={settingsRef}
+						/>
 						<div className="gophenberg-editor__main">
 							{views.listOpen ? (
 								<div className="gophenberg-editor__outline">
@@ -106,6 +123,7 @@ function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 									stored={stored}
 									onRestore={buffer.restore}
 								/>
+								{width.narrow ? <BlockToolbar hideDragHandle showPlaceholder /> : null}
 								<div className="gophenberg-editor__title">
 									<InputControl
 										label={__('Title', 'gophenberg')}
@@ -116,17 +134,19 @@ function Editor({ postId, stored }: { postId: string, stored: PostDetail }) {
 								</div>
 								<div className={canvasClass(views.preview)}>
 									<BlockCanvas height="100%" styles={CANVAS_STYLES}>
-										<BlockList />
+										<BlockList {...CANVAS_ROOT} />
 									</BlockCanvas>
 								</div>
 							</div>
-							<div className="gophenberg-editor__sidebar">
-								<EditorSidebar postId={postId} buffer={buffer} />
+							<div className={sidebarClass(views.sidebarMoved)} id={views.sidebarId} hidden={!views.sidebarOpen}>
+								<EditorSidebar postId={postId} buffer={buffer} onClose={closeSettings} />
 							</div>
 						</div>
-						<div className="gophenberg-editor__foot">
-							<BlockBreadcrumb rootLabelText={singularOf(listed)} />
-						</div>
+						{width.narrow ? null : (
+							<div className="gophenberg-editor__foot">
+								<BlockBreadcrumb rootLabelText={singularOf(listed)} />
+							</div>
+						)}
 					</div>
 				</BlockEditorProvider>
 			</ShortcutProvider>

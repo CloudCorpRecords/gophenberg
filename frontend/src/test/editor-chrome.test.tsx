@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { sidebarIcon, sidebarRtlIcon } from '@gophenberg/frontend-sdk'
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import type { ReactElement } from 'react'
+import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { renderAt } from './render'
 import { storedPost } from './postFixture'
@@ -11,6 +14,16 @@ import { storedPost } from './postFixture'
 const EDITOR_PATH = `/content/post/${storedPost.id}/edit`
 
 const patched: Record<string, unknown>[] = []
+
+/**
+ * Returns the outline an icon draws.
+ * @param held - The element holding the icon, or the icon itself.
+ * @returns The path data of its first path.
+ */
+function outlineOf(held: Element | ReactElement): string | null {
+	const element = held instanceof Element ? held : render(held).container
+	return element.querySelector('path')?.getAttribute('d') ?? null
+}
 
 beforeAll(async () => {
 	await import('../content/EditorScreen')
@@ -142,6 +155,51 @@ test('reports a publication the server refused', async () => {
 	await userEvent.click(await screen.findByRole('button', { name: 'Publish' }))
 
 	expect(await screen.findByText(/invalid transition/i)).toBeInTheDocument()
+})
+
+test('offers the settings right before publish, pressed and expanded while they show', async () => {
+	renderAt(EDITOR_PATH)
+
+	const publish = await screen.findByRole('button', { name: 'Publish' })
+	const settings = screen.getByRole('button', { name: 'Settings' })
+
+	expect(settings.nextElementSibling).toBe(publish)
+	expect(settings).toHaveAttribute('aria-pressed', 'true')
+	expect(settings).toHaveAttribute('aria-expanded', 'true')
+	expect(document.getElementById(settings.getAttribute('aria-controls') as string)).toBe(
+		document.querySelector('.gophenberg-editor__sidebar'),
+	)
+})
+
+test('hides the settings when asked and says so on the button', async () => {
+	renderAt(EDITOR_PATH)
+	const settings = await screen.findByRole('button', { name: 'Settings' })
+
+	await userEvent.click(settings)
+
+	expect(settings).toHaveAttribute('aria-pressed', 'false')
+	expect(settings).toHaveAttribute('aria-expanded', 'false')
+	expect(document.querySelector('.gophenberg-editor__sidebar')).toHaveAttribute('hidden')
+	expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+})
+
+test('draws the settings drawer on the right for a left to right reader', async () => {
+	renderAt(EDITOR_PATH)
+
+	const settings = await screen.findByRole('button', { name: 'Settings' })
+
+	expect(outlineOf(settings)).toBe(outlineOf(sidebarIcon))
+})
+
+test('draws the settings drawer on the left for a right to left reader', async () => {
+	setLocaleData({ 'text direction\u0004ltr': ['rtl'] })
+	onTestFinished(() => resetLocaleData({}))
+	renderAt(EDITOR_PATH)
+
+	const settings = await screen.findByRole('button', { name: 'Settings' })
+
+	expect(outlineOf(settings)).toBe(outlineOf(sidebarRtlIcon))
+	expect(outlineOf(sidebarRtlIcon)).not.toBe(outlineOf(sidebarIcon))
 })
 
 test('leaves the title its focus ring, which the design system draws around it', async () => {
