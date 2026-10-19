@@ -13,9 +13,6 @@ msgstr ""
 msgid " or "
 msgstr ""
 
-msgid "\"%(title)s\" goes to the trash. You can restore it from the Trash tab."
-msgstr ""
-
 msgid "\"%s\" has been restored."
 msgstr ""
 
@@ -417,6 +414,9 @@ msgid "Apply"
 msgstr ""
 
 msgid "April"
+msgstr ""
+
+msgid "Are you sure you want to move \"%s\" to the trash?"
 msgstr ""
 
 msgid "Audio"
@@ -968,9 +968,6 @@ msgid "Move the field"
 msgstr ""
 
 msgid "Move to trash"
-msgstr ""
-
-msgid "Move to trash?"
 msgstr ""
 
 msgid "Name"

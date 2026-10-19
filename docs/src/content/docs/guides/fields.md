@@ -233,7 +233,8 @@ a section and a repeater's rows.
 ## Filling fields in
 
 The editor's Document panel shows one control per field reaching the
-item, under the excerpt. The plain controls come first, then
+item, under the excerpt and the **Move to trash** button. The plain
+controls come first, then
 Sections, Repeaters and Flexible content fields, then the relation
 and media pickers, and last the Linked from lists. Each of those
 sets follows group order. Values save with the item and travel with

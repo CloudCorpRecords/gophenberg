@@ -7,6 +7,7 @@ const RUN = Math.random().toString(36).slice(2, 8)
 const TITLE = `A post the golden path wrote ${RUN}`
 const TRASH_TITLE = `A post the golden path trashed ${RUN}`
 const READ_TITLE = `A post the golden path read in the trash ${RUN}`
+const LAYOUT_TITLE = `A post the golden path asked to trash ${RUN}`
 const FLEXIBLE_TITLE = `A post the golden path built in rows ${RUN}`
 const PARAGRAPH = 'The paragraph the golden path typed.'
 const HEADING = 'The heading the golden path typed'
@@ -258,7 +259,7 @@ test('takes a post trashed from the editor back out of the trash from the list',
 
 	const named = await toastName(page, TRASH_TITLE)
 	await page.getByRole('button', { name: 'Move to trash' }).click()
-	const confirm = page.getByRole('alertdialog', { name: 'Move to trash?' })
+	const confirm = page.getByRole('dialog', { name: `Are you sure you want to move "${named}" to the trash?` })
 	await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
 	await confirm.getByRole('button', { name: 'Move to trash' }).click()
 
@@ -274,6 +275,42 @@ test('takes a post trashed from the editor back out of the trash from the list',
 	await expect(page.getByRole('link', { name: TRASH_TITLE })).toBeVisible()
 })
 
+test('lays out Move to trash and the small confirm it opens as the WordPress editor does', async ({ page }) => {
+	await openNewDraft(page)
+	await page.getByRole('textbox', { name: 'Title' }).fill(LAYOUT_TITLE)
+	const named = await toastName(page, LAYOUT_TITLE)
+	const trigger = page.getByRole('button', { name: 'Move to trash' })
+
+	const placed = await trigger.evaluate((element) => {
+		const box = element.getBoundingClientRect()
+		const above = (element.previousElementSibling as HTMLElement).getBoundingClientRect()
+		const below = element.nextElementSibling?.getBoundingClientRect()
+		const panel = element.closest('.gophenberg-editor__sidebar-panel') as HTMLElement
+		const inset = getComputedStyle(panel)
+		const room = panel.getBoundingClientRect()
+		return {
+			gap: Math.round(box.top - above.bottom),
+			under: Math.round((below?.top ?? Number.NaN) - box.bottom),
+			height: Math.round(box.height),
+			left: Math.round(box.left - room.left - Number.parseFloat(inset.paddingLeft)),
+			right: Math.round(room.right - Number.parseFloat(inset.paddingRight) - box.right),
+		}
+	})
+	expect(placed).toEqual({ gap: 16, under: 16, height: 40, left: 0, right: 0 })
+	const field = await page.getByLabel('On sale').boundingBox()
+	const button = await trigger.boundingBox()
+	expect(field?.y ?? 0).toBeGreaterThan((button?.y ?? 0) + (button?.height ?? 0))
+
+	await trigger.click()
+	const confirm = page.getByRole('dialog', { name: `Are you sure you want to move "${named}" to the trash?` })
+	await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
+	await expect(confirm.getByRole('heading')).toHaveCount(0)
+	await expect.poll(async () => Math.round((await confirm.boundingBox())?.width ?? 0)).toBe(400)
+	await confirm.getByRole('button', { name: 'Cancel', exact: true }).click()
+	await expect(confirm).toBeHidden()
+	await expect(trigger).toBeFocused()
+})
+
 test('reads a trashed post and restores it into the editor', async ({ page }) => {
 	const statuses: number[] = []
 	page.on('response', (response) => {
@@ -287,7 +324,7 @@ test('reads a trashed post and restores it into the editor', async ({ page }) =>
 	await expect(shown(page, 'Draft saved.')).toBeVisible()
 	const named = await toastName(page, READ_TITLE)
 	await page.getByRole('button', { name: 'Move to trash' }).click()
-	await page.getByRole('alertdialog').getByRole('button', { name: 'Move to trash' }).click()
+	await page.getByRole('dialog').getByRole('button', { name: 'Move to trash' }).click()
 	await expect(shown(page, `"${named}" moved to the trash.`)).toBeVisible()
 
 	await statusTab(page, 'Trash').click()

@@ -77,29 +77,31 @@ export function DocumentPanels({ postId, buffer }: { postId: string, buffer: Edi
 	const { items, selected } = useMemo(() => statusItems(buffer.status), [buffer.status])
 	const listed = useContentType()
 	return (
-		<Stack direction="column" gap="md">
-			<SelectControl
-				label={_x('Status', 'post', 'gophenberg')}
-				items={items}
-				value={selected}
-				onValueChange={(item) => buffer.setStatus(chosenStatus(item, buffer.status))}
-			/>
-			<InputControl label={__('Slug', 'gophenberg')} value={buffer.slug} onValueChange={buffer.setSlug} />
-			{listed.hierarchical && (
-				<ParentPicker
-					postId={postId}
-					type={listed.key}
-					parentId={buffer.parentId}
-					onChange={buffer.setParentId}
+		<Stack direction="column" gap="lg">
+			<Stack direction="column" gap="md">
+				<SelectControl
+					label={_x('Status', 'post', 'gophenberg')}
+					items={items}
+					value={selected}
+					onValueChange={(item) => buffer.setStatus(chosenStatus(item, buffer.status))}
 				/>
-			)}
-			<TextareaControl
-				label={__('Excerpt', 'gophenberg')}
-				value={buffer.excerpt}
-				onValueChange={buffer.setExcerpt}
-			/>
-			<FieldsPanel postId={postId} declared={listed.fields} buffer={buffer} />
+				<InputControl label={__('Slug', 'gophenberg')} value={buffer.slug} onValueChange={buffer.setSlug} />
+				{listed.hierarchical && (
+					<ParentPicker
+						postId={postId}
+						type={listed.key}
+						parentId={buffer.parentId}
+						onChange={buffer.setParentId}
+					/>
+				)}
+				<TextareaControl
+					label={__('Excerpt', 'gophenberg')}
+					value={buffer.excerpt}
+					onValueChange={buffer.setExcerpt}
+				/>
+			</Stack>
 			<TrashPost postId={postId} title={buffer.title} />
+			<FieldsPanel postId={postId} declared={listed.fields} buffer={buffer} />
 		</Stack>
 	)
 }

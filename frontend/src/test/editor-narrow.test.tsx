@@ -260,5 +260,7 @@ test('moves the post to the trash through the settings', async () => {
 
 	await userEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
 
-	expect(await screen.findByRole('alertdialog', { name: 'Move to trash?' })).toBeInTheDocument()
+	expect(
+		await screen.findByRole('dialog', { name: 'Are you sure you want to move "Welcome to Gophenberg" to the trash?' }),
+	).toBeInTheDocument()
 })
