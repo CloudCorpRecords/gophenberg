@@ -223,6 +223,13 @@ jobs:
             echo "the release $GITHUB_REF_NAME is published already, and a published release never changes" >&2
             exit 1
           fi
+          if [ "$draft" = true ]; then
+            author="$(gh release view "$GITHUB_REF_NAME" --json author --jq .author.login)"
+            if [ "$author" != "github-actions[bot]" ]; then
+              echo "the draft $GITHUB_REF_NAME was made by $author and not by this workflow" >&2
+              exit 1
+            fi
+          fi
           if [ -z "$draft" ]; then
             flags=(--draft --verify-tag --title "Gophenberg ${GITHUB_REF_NAME#v}" --notes "")
             case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac
@@ -236,6 +243,13 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "${flags[@]}"
           fi
           gh release upload --clobber "$GITHUB_REF_NAME" dist/*
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets.txt"
+          while read -r name; do
+            if [ ! -f "dist/$name" ]; then
+              echo "the draft $GITHUB_REF_NAME holds $name, which this run did not upload" >&2
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/assets.txt"
 
   image:
     if: github.event_name == 'release'
@@ -261,9 +275,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_KEY_MULTIKEY: ${{ vars.RELEASE_KEY_MULTIKEY }}
         run: |
+          author="$(gh release view "$GITHUB_REF_NAME" --json author --jq .author.login)"
+          if [ "$author" != "github-actions[bot]" ]; then
+            echo "the release $GITHUB_REF_NAME was made by $author and not by this workflow" >&2
+            exit 1
+          fi
           gh release download "$GITHUB_REF_NAME" --dir dist
           cd dist
           sha256sum -c SHA256SUMS
+          for file in *; do
+            name="${file%.sig}"
+            if [ "$name" != SHA256SUMS ] && [ -z "$(awk -v n="$name" '$2 == n' SHA256SUMS)" ]; then
+              echo "the release $GITHUB_REF_NAME holds $file, which SHA256SUMS does not list" >&2
+              exit 1
+            fi
+          done
           version="${GITHUB_REF_NAME#v}"
           "$RUNNER_TEMP/releasetool" verify -public "$RELEASE_KEY_MULTIKEY" SHA256SUMS \
             "gophenberg_${version}_linux_amd64.tar.gz" "gophenberg_${version}_linux_arm64.tar.gz"
