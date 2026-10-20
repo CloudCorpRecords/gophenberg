@@ -56,7 +56,7 @@ export function NewUserScreen() {
 	const incomplete = email.trim() === '' || name.trim() === '' || password === ''
 	const roles = grantable.map((offered) => ({ value: offered, label: roleLabel(offered) }))
 	return (
-		<Page title={__('New user', 'gophenberg')}>
+		<Page title={__('Add User', 'gophenberg')}>
 			<form
 				className="godmin-form"
 				onSubmit={(event) => {
