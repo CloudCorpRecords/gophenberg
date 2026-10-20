@@ -45,7 +45,7 @@ import {
 } from './fields'
 import { typesQueryKey } from './nav'
 import { StatusTabs } from './StatusTabs'
-import { pluralOf, typeText } from './typeText'
+import { addLabelOf, pluralOf, typeText } from './typeText'
 import { listTypes } from './types'
 import type { ContentType } from './types'
 import { useAddNew } from './useAddNew'
@@ -225,14 +225,14 @@ function narrows(view: OfferedView<View>, status: string): boolean {
 
 /**
  * Renders what a list shows when it holds no item.
- * @param props - Whether a search, a filter or a tab narrowed the list.
+ * @param props - Whether a search, a filter or a tab narrowed the list, and the type the list shows.
  * @returns The empty state, telling how to add an item when nothing narrowed the list.
  */
-function PostsEmpty({ narrowed }: { narrowed: boolean }) {
+function PostsEmpty({ narrowed, listed }: { narrowed: boolean, listed: ContentType }) {
 	if (narrowed) {
 		return <ListEmpty icon={postIcon} title={__('No items found.', 'gophenberg')} />
 	}
-	const hint = __('Add one with Add New.', 'gophenberg')
+	const hint = sprintf(__('Add one with %(button)s.', 'gophenberg'), { button: addLabelOf(listed) })
 	return <ListEmpty icon={postIcon} title={__('No items yet.', 'gophenberg')} hint={hint} />
 }
 
@@ -262,7 +262,7 @@ function PostsTable(props: {
 		<DataViews
 			key={`${listed.key} ${props.status}`}
 			{...pageProps(listed, posts.data, props.settings)}
-			empty={<PostsEmpty narrowed={narrows(props.view, props.status)} />}
+			empty={<PostsEmpty narrowed={narrows(props.view, props.status)} listed={listed} />}
 			fields={columnsOn(props.columns, props.status)}
 			actions={props.actions}
 			view={props.view}
@@ -283,7 +283,7 @@ function PostsTable(props: {
 }
 
 /**
- * Renders the Add New of the list header, its failure shown above the list like the failure of any run.
+ * Renders the add button of the list header, its failure shown above the list like the failure of any run.
  * @param props - The type the list shows and what the list does around a run.
  * @returns The header button.
  */
@@ -294,13 +294,12 @@ function HeaderAddNew({ listed, run }: { listed: ContentType, run: ListRun }) {
 			variant="solid"
 			size="compact"
 			loading={addNew.isPending}
-			disabled={addNew.waiting}
 			onClick={() => {
 				const settle = run.onStart()
 				addNew.mutate(undefined, { onError: (failure) => settle(failure.message, false) })
 			}}
 		>
-			{__('Add New', 'gophenberg')}
+			{addLabelOf(listed)}
 		</Button>
 	)
 }
@@ -327,7 +326,7 @@ export function PostsScreen() {
 					{offersEmptyTrash(status, posts.data, held, session) ? (
 						<EmptyTrash type={listed.key} count={held} list={run} />
 					) : null}
-					<HeaderAddNew listed={listed} run={run} />
+					{waiting ? null : <HeaderAddNew listed={listed} run={run} />}
 				</>
 			}
 			tabs={<StatusTabs current={current} />}

@@ -281,7 +281,7 @@ test.each([
 	renderAt(address)
 
 	expect(await screen.findByText('No items found.')).toBeInTheDocument()
-	expect(screen.queryByText('Add one with Add New.')).not.toBeInTheDocument()
+	expect(screen.queryByText('Add one with Add Post.')).not.toBeInTheDocument()
 })
 
 test('says no items are found in the words of WordPress es_ES for a Spanish reader', async () => {
@@ -298,7 +298,25 @@ test('says no items are there yet, and how to add one, when nothing narrows the 
 	renderAt('/content/post')
 
 	expect(await screen.findByText('No items yet.')).toBeInTheDocument()
-	expect(screen.getByText('Add one with Add New.')).toBeInTheDocument()
+	expect(screen.getByText('Add one with Add Post.')).toBeInTheDocument()
+})
+
+test('names the header button in the Spanish hint of an empty list', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	serveRows([], 0, 20)
+	renderAt('/content/post')
+
+	expect(await screen.findByText('Añade un elemento con Añadir entrada.')).toBeInTheDocument()
+})
+
+test('names the header button in the French hint of an empty list', async () => {
+	setLocaleData(await catalogFor('fr-FR'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	serveRows([], 0, 20)
+	renderAt('/content/post')
+
+	expect(await screen.findByText('Ajoutez un élément avec Ajouter un article.')).toBeInTheDocument()
 })
 
 test.each([
@@ -427,6 +445,15 @@ test.each([
 		expect(screen.getByRole('columnheader', { name: 'Author' }).style.maxWidth).toBe('15ch')
 	},
 )
+
+test('names the header button of a declared type in the hint of its empty list', async () => {
+	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, PAGE_TYPE, BOOK_TYPE] })))
+	serveRows([], 0, 20)
+	renderAt('/content/book')
+
+	expect(await screen.findByText('No items yet.')).toBeInTheDocument()
+	expect(screen.getByText('Add one with Add Book.')).toBeInTheDocument()
+})
 
 test('shows the excerpt under the title', async () => {
 	serveRows([{ ...PUBLISHED, excerpt: 'A short tour of the editor.' }], 1, 20)

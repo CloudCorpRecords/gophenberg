@@ -52,6 +52,6 @@ test('adds from the list header alone, the rail offering no row of its own', asy
 	await within(rail).findByRole('link', { name: 'Posts' })
 
 	expect(within(rail).queryByRole('link', { name: 'All Posts' })).not.toBeInTheDocument()
-	expect(within(rail).queryByRole('button', { name: 'Add New' })).not.toBeInTheDocument()
-	expect(within(screen.getByRole('main')).getByRole('button', { name: 'Add New' })).toBeInTheDocument()
+	expect(within(rail).queryByRole('button', { name: 'Add Post' })).not.toBeInTheDocument()
+	expect(within(screen.getByRole('main')).getByRole('button', { name: 'Add Post' })).toBeInTheDocument()
 })

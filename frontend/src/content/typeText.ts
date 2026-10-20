@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { __, _x } from '@wordpress/i18n'
+import { __, _x, sprintf } from '@wordpress/i18n'
 
 /** A text of a content type the admin shows. */
 export type TypeField = 'singular' | 'plural' | 'description'
@@ -11,8 +11,11 @@ interface Shipped {
 	read: () => string
 }
 
-/** The texts Gophenberg ships for the types it registers itself, by type key and field. */
-const SHIPPED = new Map<string, Record<TypeField, Shipped>>([
+/** The texts Gophenberg ships for one built-in type, with the words of the button adding one. */
+type ShippedType = Record<TypeField, Shipped> & { add: () => string }
+
+/** The texts Gophenberg ships for the types it registers itself, by type key. */
+const SHIPPED = new Map<string, ShippedType>([
 	[
 		'post',
 		{
@@ -22,6 +25,7 @@ const SHIPPED = new Map<string, Record<TypeField, Shipped>>([
 				english: 'Manage the posts on this site.',
 				read: () => __('Manage the posts on this site.', 'gophenberg'),
 			},
+			add: () => __('Add Post', 'gophenberg'),
 		},
 	],
 	[
@@ -33,6 +37,7 @@ const SHIPPED = new Map<string, Record<TypeField, Shipped>>([
 				english: 'Manage the pages on this site.',
 				read: () => __('Manage the pages on this site.', 'gophenberg'),
 			},
+			add: () => __('Add Page', 'gophenberg'),
 		},
 	],
 	[
@@ -44,6 +49,7 @@ const SHIPPED = new Map<string, Record<TypeField, Shipped>>([
 				english: 'Manage the categories on this site.',
 				read: () => __('Manage the categories on this site.', 'gophenberg'),
 			},
+			add: () => __('Add Category', 'gophenberg'),
 		},
 	],
 ])
@@ -55,6 +61,18 @@ interface TypeIdentity {
 }
 
 /**
+ * Returns the shipped texts of a type no plugin declared while the given text still holds the shipped English.
+ * @param type - The type the text belongs to.
+ * @param field - Which text of the type it is.
+ * @param stored - The text the type holds.
+ * @returns The shipped texts of the type, none when it holds other words or Gophenberg does not ship it.
+ */
+function shippedFor(type: TypeIdentity, field: TypeField, stored: string): ShippedType | undefined {
+	const shipped = (type.origin ?? '') === '' ? SHIPPED.get(type.key) : undefined
+	return shipped?.[field].english === stored ? shipped : undefined
+}
+
+/**
  * Returns a type's text in the reader's language while it holds the shipped English and no plugin declared it.
  * @param type - The type the text belongs to.
  * @param field - Which text of the type it is.
@@ -62,11 +80,17 @@ interface TypeIdentity {
  * @returns The catalogue's text for a shipped English, the stored text otherwise.
  */
 export function typeText(type: TypeIdentity, field: TypeField, stored: string): string {
-	if ((type.origin ?? '') !== '') {
-		return stored
-	}
-	const shipped = SHIPPED.get(type.key)?.[field]
-	return shipped?.english === stored ? shipped.read() : stored
+	return shippedFor(type, field, stored)?.[field].read() ?? stored
+}
+
+/**
+ * Returns the words of the button adding an item of a type.
+ * @param named - The type and the singular name it holds.
+ * @returns The shipped words of a built-in type, Add and the singular name as typed otherwise.
+ */
+export function addLabelOf(named: TypeIdentity & { singularLabel: string }): string {
+	const shipped = shippedFor(named, 'singular', named.singularLabel)
+	return shipped === undefined ? sprintf(__('Add %(type)s', 'gophenberg'), { type: named.singularLabel }) : shipped.add()
 }
 
 /**
