@@ -28,7 +28,7 @@ export function UsersScreen() {
 			title={__('Users', 'gophenberg')}
 			actions={
 				<Button variant="solid" size="compact" render={<Link to="/users/new" />}>
-					{__('New user', 'gophenberg')}
+					{__('Add User', 'gophenberg')}
 				</Button>
 			}
 		>

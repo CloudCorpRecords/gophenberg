@@ -9,7 +9,7 @@ what it places from the same library.
 
 ## Uploading a file
 
-Open Media in the menu and press **Upload media** at the top of the
+Open Media in the menu and press **Add Media File** at the top of the
 screen. You can pick several files at once, or drop them straight
 onto the library, which reads "Drop files to upload" while you drag.
 Either way the upload starts at once, every file sent side by side,

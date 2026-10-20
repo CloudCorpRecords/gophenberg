@@ -3,7 +3,7 @@
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import { afterEach, expect, test } from 'vitest'
 
-import { pluralOf, singularOf, typeText } from '../content/typeText'
+import { addLabelOf, pluralOf, singularOf, typeText } from '../content/typeText'
 import type { TypeField } from '../content/typeText'
 import { catalogFor } from '../i18n/catalog'
 
@@ -121,4 +121,58 @@ test('names a type a plugin declared by both its names as declared', async () =>
 	const declared = { key: 'category', singularLabel: 'Category', pluralLabel: 'Categories', origin: 'shop' }
 
 	expect([singularOf(declared), pluralOf(declared)]).toEqual(['Category', 'Categories'])
+})
+
+/** The add button of every built-in type, in the words of WordPress and of its es_ES catalogue. */
+const SHIPPED_ADD: { key: string, singular: string, english: string, spanish: string, french: string }[] = [
+	{ key: 'post', singular: 'Post', english: 'Add Post', spanish: 'Añadir entrada', french: 'Ajouter un article' },
+	{ key: 'page', singular: 'Page', english: 'Add Page', spanish: 'Añadir página', french: 'Ajouter une page' },
+	{
+		key: 'category',
+		singular: 'Category',
+		english: 'Add Category',
+		spanish: 'Añadir categoría',
+		french: 'Ajouter une catégorie',
+	},
+]
+
+test.each(SHIPPED_ADD)('names the add button of $key as WordPress does in English', ({ key, singular, english }) => {
+	expect(addLabelOf({ key, singularLabel: singular })).toBe(english)
+})
+
+test.each(SHIPPED_ADD)('names the add button of $key as WordPress es_ES does in Spanish', async (shipped) => {
+	await readIn('es-ES')
+
+	expect(addLabelOf({ key: shipped.key, singularLabel: shipped.singular })).toBe(shipped.spanish)
+})
+
+test.each(SHIPPED_ADD)('names the add button of $key in French', async (shipped) => {
+	await readIn('fr-FR')
+
+	expect(addLabelOf({ key: shipped.key, singularLabel: shipped.singular })).toBe(shipped.french)
+})
+
+test('names the add button of a type a person registered after its singular name', () => {
+	expect(addLabelOf({ key: 'book', singularLabel: 'Book' })).toBe('Add Book')
+})
+
+test.each([
+	{ named: 'a capitalised name', singular: 'Libro', shown: 'Añadir Libro' },
+	{ named: 'an acronym', singular: 'FAQ', shown: 'Añadir FAQ' },
+])('keeps $named exactly as typed in the Spanish add button', async ({ singular, shown }) => {
+	await readIn('es-ES')
+
+	expect(addLabelOf({ key: 'book', singularLabel: singular })).toBe(shown)
+})
+
+test('names the add button of a renamed built-in type after the name a person typed', async () => {
+	await readIn('es-ES')
+
+	expect(addLabelOf({ key: 'post', singularLabel: 'Article' })).toBe('Añadir Article')
+})
+
+test('names the add button of a type a plugin declared as declared, though it reads like a built-in name', async () => {
+	await readIn('es-ES')
+
+	expect(addLabelOf({ key: 'post', singularLabel: 'Post', origin: 'shop' })).toBe('Añadir Post')
 })

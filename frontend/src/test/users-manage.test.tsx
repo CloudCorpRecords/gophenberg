@@ -5,8 +5,10 @@ import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
 import { EmailTakenError, ValidationError } from '@gopherium/react-auth/admin'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
+import { catalogFor } from '../i18n/catalog'
 import { createFailureMessage } from '../users/NewUserScreen'
 import { renderAt } from './render'
 
@@ -77,12 +79,20 @@ test('offers to let a shut out account back in', async () => {
 	expect(within(row).getByText('Disabled')).toBeInTheDocument()
 })
 
-test('draws New user as the compact solid button every list header holds', async () => {
+test('draws Add User as the compact solid button every list header holds', async () => {
 	renderAt('/users')
 
-	const add = await within(await screen.findByRole('main')).findByText('New user')
+	const add = await within(await screen.findByRole('main')).findByText('Add User')
 
 	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
+})
+
+test('names the header button of the users list as WordPress es_ES does for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/users')
+
+	expect(await within(await screen.findByRole('main')).findByText('Añadir usuario')).toBeInTheDocument()
 })
 
 test('draws a shut out account as an outline badge, the WordPress badge for an inactive state', async () => {

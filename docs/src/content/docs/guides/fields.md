@@ -15,7 +15,7 @@ Cars, and every car gets a Price box in the editor.
 
 Open **Field Groups** in the admin menu.
 
-Press **Add New Group** and give it a name. A new group starts
+Press **Add Field Group** and give it a name. A new group starts
 placed on one content type.
 
 A group can be set aside without deleting it. **Deactivate** stops
@@ -108,8 +108,8 @@ a relation backwards, below, says how.
 Press **Settings** on a field to tune its control. **Instructions**
 is the help line under the control.
 
-**Default** fills the control in as you press Add New, and never
-reaches an item that already exists.
+**Default** fills the control in as you press the add button of a
+list, such as Add Post, and never reaches an item that already exists.
 
 A choice field lists its answers under **Choices**. Each answer has
 a **Value**, which is what gets stored, and a **Label**, which is

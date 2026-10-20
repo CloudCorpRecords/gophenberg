@@ -229,7 +229,7 @@ test('says no items are found when a search matches none', async ({ page }) => {
 	await page.goto(`/admin/content/post?search=${encodeURIComponent(`nothing matches ${RUN}`)}`)
 
 	await expect(page.getByText('No items found.')).toBeVisible()
-	await expect(page.getByText('Add one with Add New.')).toBeHidden()
+	await expect(page.getByText('Add one with Add Post.')).toBeHidden()
 })
 
 test('trashes two ticked items at once and counts them in a toast', async ({ page }) => {

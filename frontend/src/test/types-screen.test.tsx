@@ -87,7 +87,7 @@ function queued(client: QueryClient) {
 }
 
 /**
- * Registers a guide behind a held answer, then closes Add New Type and opens it again.
+ * Registers a guide behind a held answer, then closes Add Content Type and opens it again.
  * @returns The gate holding the answer, the query client, and the reopened dialog.
  */
 async function reopenWhileRegistering() {
@@ -100,7 +100,7 @@ async function reopenWhileRegistering() {
 	)
 	const client = renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -111,7 +111,7 @@ async function reopenWhileRegistering() {
 	)
 	await userEvent.keyboard('{Escape}')
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
 	return { register, client, reopened }
 }
@@ -150,7 +150,7 @@ test('registers a type from the labels it was given', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
 	await userEvent.type(screen.getByLabelText('Description'), 'Manage the guides on this site.')
@@ -178,7 +178,7 @@ test('registers a type with no description', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
 	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
@@ -199,13 +199,13 @@ test('empties the description field once a type is registered', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
 	await userEvent.type(screen.getByLabelText('Description'), 'Manage the guides on this site.')
 	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 
 	expect(await screen.findByLabelText('Description')).toHaveValue('')
 })
@@ -214,7 +214,7 @@ test('ties the address hint to the plural name of a new type', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 
 	expect(await screen.findByLabelText('Plural name')).toHaveAccessibleDescription(
 		'This type will answer under /address.',
@@ -229,7 +229,7 @@ test('explains the description field of a new type', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 
 	expect(await screen.findByLabelText('Description')).toHaveAccessibleDescription(
 		'A descriptive summary of the content type.',
@@ -397,7 +397,7 @@ test('carries the reason the registry refused a type', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	await userEvent.type(screen.getByLabelText('Singular name'), 'Page')
 	await userEvent.type(screen.getByLabelText('Plural name'), 'Pages')
 	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
@@ -590,10 +590,10 @@ test('reopens a type that was closed', async () => {
 	await waitFor(() => expect(sent[0]).toEqual({ active: true }))
 })
 
-test('draws Add New Type as the compact solid button every list header holds', async () => {
+test('draws Add Content Type as the compact solid button every list header holds', async () => {
 	renderAt('/content-types')
 
-	const add = await screen.findByRole('button', { name: 'Add New Type' })
+	const add = await screen.findByRole('button', { name: 'Add Content Type' })
 
 	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
 })
@@ -929,7 +929,7 @@ test('closes Change address on Keep it while its move runs', async () => {
 	expect(await screen.findByText(/route word taken/)).toBeInTheDocument()
 })
 
-test('closes Add New Type on Cancel while the type is registered', async () => {
+test('closes Add Content Type on Cancel while the type is registered', async () => {
 	const register = gate()
 	server.use(
 		http.post('/api/types', async () => {
@@ -940,7 +940,7 @@ test('closes Add New Type on Cancel while the type is registered', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -1160,7 +1160,7 @@ test('sends an edit to one type while a save to another type runs', async () => 
 	await waitFor(() => expect(client.isMutating()).toBe(0))
 })
 
-test('leaves a reopened Add New Type on its new fields when an earlier type is registered', async () => {
+test('leaves a reopened Add Content Type on its new fields when an earlier type is registered', async () => {
 	const register = gate()
 	server.use(
 		http.post('/api/types', async () => {
@@ -1171,7 +1171,7 @@ test('leaves a reopened Add New Type on its new fields when an earlier type is r
 	const client = renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -1181,7 +1181,7 @@ test('leaves a reopened Add New Type on its new fields when an earlier type is r
 	)
 	await userEvent.keyboard('{Escape}')
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
 
 	expect(within(reopened).getByRole('button', { name: 'Register' })).not.toHaveAttribute('aria-disabled', 'true')
@@ -1199,7 +1199,7 @@ test('leaves a reopened Add New Type on its new fields when an earlier type is r
 	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('Lessons')
 })
 
-test('opens Add New Type empty once a type it was closed on is registered', async () => {
+test('opens Add Content Type empty once a type it was closed on is registered', async () => {
 	const register = gate()
 	server.use(
 		http.post('/api/types', async () => {
@@ -1210,7 +1210,7 @@ test('opens Add New Type empty once a type it was closed on is registered', asyn
 	const client = renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -1224,7 +1224,7 @@ test('opens Add New Type empty once a type it was closed on is registered', asyn
 	register.release()
 	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
 	await waitFor(() => expect(client.isMutating()).toBe(0))
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
 
 	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('')
@@ -1232,7 +1232,7 @@ test('opens Add New Type empty once a type it was closed on is registered', asyn
 	expect(within(reopened).getByLabelText('Description')).toHaveValue('')
 })
 
-test('empties a reopened Add New Type once the type it still holds is registered', async () => {
+test('empties a reopened Add Content Type once the type it still holds is registered', async () => {
 	const { register, client, reopened } = await reopenWhileRegistering()
 
 	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('Guide')
@@ -1255,7 +1255,7 @@ test.each([
 		typed: ' Kept by the team.',
 		kept: ['Guide', 'Guides', 'Manage the guides on this site. Kept by the team.'],
 	},
-])('keeps a reopened Add New Type on its draft once its $label changed and an earlier type is registered', async ({
+])('keeps a reopened Add Content Type on its draft once its $label changed and an earlier type is registered', async ({
 	label,
 	typed,
 	kept,
@@ -1273,7 +1273,7 @@ test.each([
 	expect(within(reopened).getByLabelText('Description')).toHaveValue(kept[2])
 })
 
-test('closes Add New Type once the registry turns the type away', async () => {
+test('closes Add Content Type once the registry turns the type away', async () => {
 	server.use(
 		http.post('/api/types', () =>
 			HttpResponse.json({ error: 'content: the route word is taken' }, { status: 422 }),
@@ -1282,7 +1282,7 @@ test('closes Add New Type once the registry turns the type away', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -1303,7 +1303,7 @@ test('names the type it registered when its plural name changes while it runs', 
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
@@ -1317,11 +1317,11 @@ test('names the type it registered when its plural name changes while it runs', 
 	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
 })
 
-test('closes Add New Type when it is cancelled', async () => {
+test('closes Add Content Type when it is cancelled', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
 
@@ -1369,7 +1369,7 @@ test('registers nothing when the new type is cancelled', async () => {
 	renderAt('/content-types')
 	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Type' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
 	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
 	await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 

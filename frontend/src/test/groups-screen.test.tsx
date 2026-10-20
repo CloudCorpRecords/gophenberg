@@ -119,7 +119,7 @@ test('writes how many fields a group holds in the site format', async () => {
 test('draws one compact solid header button beside compact outline ones, as WordPress does', async () => {
 	renderAt('/field-groups')
 
-	const add = await screen.findByRole('button', { name: 'Add New Group' })
+	const add = await screen.findByRole('button', { name: 'Add Field Group' })
 
 	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
 	expect([...screen.getByRole('link', { name: 'Export definitions' }).classList]).toEqual(
@@ -212,7 +212,7 @@ test('creates a group named after what the operator typed', async () => {
 	renderAt('/field-groups')
 	await screen.findByRole('region', { name: 'Field Groups' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Group' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Field Group' }))
 	await userEvent.type(await screen.findByLabelText('Title'), 'Extras')
 	await userEvent.click(screen.getByRole('button', { name: 'Create' }))
 
@@ -230,7 +230,7 @@ test('seeds a new group with a rule so it is never born matching nowhere', async
 	renderAt('/field-groups')
 	await screen.findByRole('region', { name: 'Field Groups' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Group' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Field Group' }))
 	await userEvent.type(await screen.findByLabelText('Title'), 'Extras')
 	await userEvent.click(screen.getByRole('button', { name: 'Create' }))
 
@@ -397,7 +397,7 @@ test('closes the form and reports why a group could not be created', async () =>
 	renderAt('/field-groups')
 	await screen.findByRole('region', { name: 'Field Groups' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Group' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Field Group' }))
 	await userEvent.type(await screen.findByLabelText('Title'), 'Extras')
 	await userEvent.click(screen.getByRole('button', { name: 'Create' }))
 
@@ -416,7 +416,7 @@ test('stores nothing when the create form is abandoned', async () => {
 	renderAt('/field-groups')
 	await screen.findByRole('region', { name: 'Field Groups' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add New Group' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Add Field Group' }))
 	await userEvent.type(await screen.findByLabelText('Title'), 'Extras')
 	await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -485,7 +485,7 @@ test('names the built-in type a new group starts on for a Spanish reader', async
 	renderAt('/field-groups')
 	await screen.findByText('Article details')
 
-	await userEvent.click(screen.getByRole('button', { name: 'Añadir grupo nuevo' }))
+	await userEvent.click(screen.getByRole('button', { name: 'Añadir grupo de campos' }))
 
 	expect(
 		await screen.findByText('Empieza en Entradas, y las reglas se pueden editar después.'),

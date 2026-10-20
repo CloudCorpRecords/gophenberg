@@ -168,6 +168,14 @@ function useUpload(region: RefObject<HTMLDivElement | null>) {
 }
 
 /**
+ * Returns the words of the header button adding files to the library.
+ * @returns The button's words in the reader's language.
+ */
+function addLabel(): string {
+	return __('Add Media File', 'gophenberg')
+}
+
+/**
  * Renders what the library shows when it holds no item.
  * @param props - Whether a search or a filter narrowed the library.
  * @returns The empty state, telling how to add a file when nothing narrowed the library.
@@ -176,7 +184,7 @@ function MediaEmpty({ narrowed }: { narrowed: boolean }) {
 	if (narrowed) {
 		return <ListEmpty icon={mediaIcon} title={__('No media items found.', 'gophenberg')} />
 	}
-	const hint = __('Add one with Upload media.', 'gophenberg')
+	const hint = sprintf(__('Add one with %(button)s.', 'gophenberg'), { button: addLabel() })
 	return <ListEmpty icon={mediaIcon} title={__('No media items yet.', 'gophenberg')} hint={hint} />
 }
 
@@ -240,7 +248,7 @@ export function MediaScreen() {
 		queryFn: () => listMedia({ type: kind, search: view.search, page: view.page, perPage: view.perPage }),
 	})
 	const title = _x('Media', 'admin section', 'gophenberg')
-	const uploadLabel = __('Upload media', 'gophenberg')
+	const uploadLabel = addLabel()
 	return (
 		<Page
 			title={title}

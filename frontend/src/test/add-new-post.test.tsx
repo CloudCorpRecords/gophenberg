@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
+import { catalogFor } from '../i18n/catalog'
 import { gate } from './gate'
 import { renderAt, renderRoutedAt } from './render'
 import { storedPostWithId } from './postFixture'
@@ -42,14 +44,15 @@ function captureCreate(): { bodies: unknown[] } {
 }
 
 /**
- * Returns the Add New the list header holds, apart from the rail's.
- * @returns The header's Add New button.
+ * Returns the add button the list header holds, apart from the rail's.
+ * @param name - The words the button shows, Add Post unless a test names others.
+ * @returns The header's add button.
  */
-async function headerAddNew(): Promise<HTMLElement> {
-	return within(await screen.findByRole('main')).findByRole('button', { name: 'Add New' })
+async function headerAddNew(name = 'Add Post'): Promise<HTMLElement> {
+	return within(await screen.findByRole('main')).findByRole('button', { name })
 }
 
-test('the Add New of the list header creates a draft and opens it in the editor', async () => {
+test('the add button of the list header creates a draft and opens it in the editor', async () => {
 	const recorded = captureCreate()
 	server.use(http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })))
 	const { router } = renderRoutedAt('/content/post')
@@ -61,7 +64,7 @@ test('the Add New of the list header creates a draft and opens it in the editor'
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: {} }])
 })
 
-test('the Add New of the list header reports a failure above the list without navigating away', async () => {
+test('the add button of the list header reports a failure above the list without navigating away', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
 		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
@@ -125,7 +128,7 @@ test('add new starts a draft on the defaults its fields name', async () => {
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: { rating: 5 } }])
 })
 
-test('keeps Add New off until the type registry answers, then drafts on its defaults', async () => {
+test('draws no add button until the type registry answers, then drafts on its defaults', async () => {
 	const registry = gate()
 	server.use(
 		http.get('/api/types', async () => {
@@ -136,15 +139,93 @@ test('keeps Add New off until the type registry answers, then drafts on its defa
 	)
 	const recorded = captureCreate()
 	renderAt('/content/post')
-	const button = await headerAddNew()
-	expect(button).toHaveAttribute('aria-disabled', 'true')
+	const main = await screen.findByRole('main')
+	await within(main).findByRole('heading', { level: 1, name: 'Content' })
 
-	await userEvent.click(button)
+	expect(within(main).queryByRole('button', { name: 'Add Content' })).not.toBeInTheDocument()
+	expect(within(main).queryByRole('button', { name: 'Add Post' })).not.toBeInTheDocument()
 
-	expect(recorded.bodies).toEqual([])
 	registry.release()
-	await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled', 'true'))
-	await userEvent.click(button)
+	await userEvent.click(await headerAddNew())
 	await screen.findByTitle('Editor canvas')
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: { rating: 5 } }])
+})
+
+test.each([
+	{
+		when: 'the type registry fails to load',
+		types: () => HttpResponse.json({ error: 'unavailable' }, { status: 500 }),
+		path: '/content/post',
+	},
+	{
+		when: 'the registry does not hold the listed type',
+		types: () => HttpResponse.json({ items: [RATED_TYPE] }),
+		path: '/content/missing',
+	},
+])('draws no add button and no add hint when $when', async ({ types, path }) => {
+	server.use(
+		http.get('/api/types', types),
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
+	)
+	renderAt(path)
+	const main = await screen.findByRole('main')
+	await within(main).findByText('No items yet.')
+
+	expect(within(main).queryByRole('button', { name: 'Add Content' })).not.toBeInTheDocument()
+	expect(within(main).queryByText('Add one with Add Content.')).not.toBeInTheDocument()
+})
+
+/**
+ * Returns a type a person registered, with no field.
+ * @param key - The type key.
+ * @param singular - The singular name the person typed.
+ * @param plural - The plural name the person typed.
+ * @returns The type as the registry serves it.
+ */
+function registeredType(key: string, singular: string, plural: string) {
+	return {
+		...RATED_TYPE,
+		key,
+		singular_label: singular,
+		plural_label: plural,
+		route_word: key,
+		default: false,
+		fields: [],
+	}
+}
+
+/**
+ * Serves the built-in post type beside one type a person registered, and an empty list.
+ * @param registered - The type the person registered.
+ */
+function serveTypes(registered: ReturnType<typeof registeredType>) {
+	server.use(
+		http.get('/api/types', () => HttpResponse.json({ items: [RATED_TYPE, registered] })),
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
+	)
+}
+
+test('names the header button of a type a person registered after its singular name', async () => {
+	serveTypes(registeredType('book', 'Book', 'Books'))
+	renderAt('/content/book')
+
+	expect(await headerAddNew('Add Book')).toBeInTheDocument()
+})
+
+test('names the header button of the posts list as WordPress es_ES does for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	serveTypes(registeredType('book', 'Libro', 'Libros'))
+	renderAt('/content/post')
+
+	expect(await headerAddNew('Añadir entrada')).toBeInTheDocument()
+})
+
+test('names the header button of a registered type with its name as typed for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	serveTypes(registeredType('book', 'Libro', 'Libros'))
+	renderAt('/content/book')
+
+	expect(await headerAddNew('Añadir Libro')).toBeInTheDocument()
 })

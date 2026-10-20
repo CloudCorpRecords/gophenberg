@@ -569,7 +569,7 @@ function AddGroup(props: Reporter & { types: ContentType[] }) {
 	return (
 		<>
 			<Button variant="solid" size="compact" onClick={() => setOpen(true)}>
-				{__('Add New Group', 'gophenberg')}
+				{__('Add Field Group', 'gophenberg')}
 			</Button>
 			<Dialog.Root open={open} onOpenChange={setOpen}>
 				<Dialog.Popup>

@@ -51,11 +51,21 @@ msgstr "Activar"
 msgid "Active"
 msgstr "Activo"
 
-msgid "Add New"
-msgstr "Añadir nuevo"
+#, fuzzy
+msgid "Add Category"
+msgstr "Añadir categoría"
 
-msgid "Add New Type"
-msgstr "Añadir tipo nuevo"
+#, fuzzy
+msgid "Add Content Type"
+msgstr "Añadir tipo de contenido"
+
+#, fuzzy
+msgid "Add Page"
+msgstr "Añadir página"
+
+#, fuzzy
+msgid "Add Post"
+msgstr "Añadir entrada"
 
 msgid "Add block"
 msgstr "Añadir bloque"
@@ -350,8 +360,9 @@ msgstr "Navegación"
 msgid "Nests"
 msgstr "Anida"
 
-msgid "New user"
-msgstr "Usuario nuevo"
+#, fuzzy
+msgid "Add User"
+msgstr "Añadir usuario"
 
 msgid "Newer posts"
 msgstr "Entradas más recientes"
@@ -1038,8 +1049,8 @@ msgid "A rule matching any %(source)s cannot be turned into an exclusion. Leave 
 msgstr "Una regla que vale para cualquier %(source)s no se puede convertir en exclusión. Déjala como está, o nombra los que quieras dejar fuera."
 
 #, fuzzy
-msgid "Add New Group"
-msgstr "Añadir grupo nuevo"
+msgid "Add Field Group"
+msgstr "Añadir grupo de campos"
 
 #, fuzzy
 msgid "Add choice"
@@ -1886,8 +1897,8 @@ msgid "A listing carries between 1 and %(max)s items, so %(value)s is not a size
 msgstr "Un listado muestra entre 1 y %(max)s elementos, así que %(value)s no es un tamaño que Gophenberg acepte. Elige un número dentro de ese rango."
 
 #, fuzzy
-msgid "Add one with Add New."
-msgstr "Añade uno con Añadir nuevo."
+msgid "Add one with %(button)s."
+msgstr "Añade un elemento con %(button)s."
 
 #, fuzzy
 msgid "Content nests at most %(max)s levels deep, and this item would sit deeper. Pick a parent closer to the top."
@@ -2121,10 +2132,6 @@ msgid "%(file)s: %(reason)s"
 msgstr "%(file)s: %(reason)s"
 
 #, fuzzy
-msgid "Add one with Upload media."
-msgstr "Añade uno con Subir medios."
-
-#, fuzzy
 msgid "Delete \"%(type)s\"?"
 msgstr "¿Borrar «%(type)s»?"
 
@@ -2165,8 +2172,8 @@ msgid "This cannot be undone."
 msgstr "Esto no se puede deshacer."
 
 #, fuzzy
-msgid "Upload media"
-msgstr "Subir medios"
+msgid "Add Media File"
+msgstr "Añadir medios"
 
 #, fuzzy
 msgid "Upload theme"

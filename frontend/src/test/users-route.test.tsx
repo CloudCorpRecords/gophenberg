@@ -3,8 +3,10 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
+import { catalogFor } from '../i18n/catalog'
 import { renderAt } from './render'
 
 beforeEach(() =>
@@ -55,13 +57,21 @@ test('keeps the users heading when the accounts cannot be loaded', async () => {
 	expect(within(main).getAllByRole('heading', { level: 1 })).toHaveLength(1)
 })
 
-test('names the new user screen with its only first level heading', async () => {
+test('names the add user screen with its only first level heading, as WordPress does', async () => {
 	renderAt('/users/new')
 
 	const main = await screen.findByRole('main')
 
-	expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('New user')
+	expect(within(main).getByRole('heading', { level: 1 })).toHaveTextContent('Add User')
 	expect(within(main).getAllByRole('heading', { level: 1 })).toHaveLength(1)
+})
+
+test('names the add user screen as WordPress es_ES does for a Spanish reader', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/users/new')
+
+	expect(await screen.findByRole('heading', { level: 1, name: 'Añadir usuario' })).toBeInTheDocument()
 })
 
 test('serves the users screen at /users', async () => {

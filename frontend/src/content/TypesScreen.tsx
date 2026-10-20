@@ -555,14 +555,14 @@ function ChangeAddress(props: Reporter & { registered: ContentType }) {
 	)
 }
 
-/** The fields of Add New Type. */
+/** The fields of Add Content Type. */
 type TypeForm = Pick<NewType, 'singularLabel' | 'pluralLabel' | 'description'>
 
-/** The fields of Add New Type with nothing typed. */
+/** The fields of Add Content Type with nothing typed. */
 const emptyForm: TypeForm = { singularLabel: '', pluralLabel: '', description: '' }
 
 /**
- * Returns whether the fields of Add New Type still hold the type sent to be registered.
+ * Returns whether the fields of Add Content Type still hold the type sent to be registered.
  * @param form - The fields as they are now.
  * @param sent - The type sent to be registered.
  * @returns Whether every field matches what was sent.
@@ -618,7 +618,7 @@ function AddType(props: Reporter) {
 	return (
 		<>
 			<Button variant="solid" size="compact" onClick={() => change(true)}>
-				{__('Add New Type', 'gophenberg')}
+				{__('Add Content Type', 'gophenberg')}
 			</Button>
 			<Dialog.Root open={dialog.open} onOpenChange={change}>
 				<Dialog.Popup>
