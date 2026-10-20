@@ -4,6 +4,7 @@ package themehost
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -78,8 +79,7 @@ func (m *Manager) List(ctx context.Context) ([]Installed, error) {
 	if err != nil {
 		return nil, err
 	}
-	answering, healthy := m.holder.Serving()
-	if !mark(installed, active, answering, healthy, m.holder.StartFailed()) && active != "" {
+	if !mark(installed, active, m.holder) && active != "" {
 		installed = append(installed, Installed{
 			Name:   active,
 			Broken: "the theme is not installed",
@@ -89,8 +89,10 @@ func (m *Manager) List(ctx context.Context) ([]Installed, error) {
 	return installed, nil
 }
 
-// mark labels each theme with the operator's choice and the one answering, reporting the choice found.
-func mark(installed []Installed, active, answering string, healthy, startFailed bool) bool {
+// mark labels each theme with the operator's choice and the one holder answers with, reporting the choice found.
+func mark(installed []Installed, active string, holder *Holder) bool {
+	answering, healthy := holder.Serving()
+	startFailed := holder.StartFailed()
 	found := false
 	for i := range installed {
 		installed[i].Active = installed[i].Name == active
@@ -145,6 +147,21 @@ func (m *Manager) Boot(ctx context.Context) error {
 	m.cfg.Supervision.Logger.Info("serving through a theme",
 		"mode", "theme", "theme", loaded.Name, "version", loaded.Version)
 	m.retire(m.holder.Swap(m.supervise(loaded)))
+	return nil
+}
+
+// CheckChoice refuses a public site not served through the theme the site chose, as when the stored one will not load.
+func (m *Manager) CheckChoice(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	chosen, err := m.active(ctx)
+	if err != nil {
+		return err
+	}
+	if serving, _ := m.holder.Serving(); serving != chosen {
+		return fmt.Errorf("themehost: the site chose the theme %s, which does not serve the public site", chosen)
+	}
 	return nil
 }
 
