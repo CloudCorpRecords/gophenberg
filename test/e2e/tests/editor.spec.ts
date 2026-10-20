@@ -72,7 +72,7 @@ const created: string[] = []
  */
 async function openNewDraft(page: Page) {
 	await page.goto('/admin/content/post')
-	await page.getByRole('main').getByRole('button', { name: 'Add New', exact: true }).click()
+	await page.getByRole('main').getByRole('button', { name: 'Add Post', exact: true }).click()
 	await expect(page.getByRole('textbox', { name: 'Title' })).toBeVisible()
 	const id = page.url().match(/content\/[a-z-]+\/([0-9a-f-]+)\/edit/)?.[1]
 	if (id !== undefined) {
@@ -140,7 +140,7 @@ test('keeps the words of a draft the author left for the posts list', async ({ p
 	await page.getByRole('textbox', { name: 'Title' }).fill(title)
 
 	await page.getByRole('link', { name: 'Back to posts' }).click()
-	await expect(page.getByRole('main').getByRole('button', { name: 'Add New', exact: true })).toBeVisible()
+	await expect(page.getByRole('main').getByRole('button', { name: 'Add Post', exact: true })).toBeVisible()
 	await page.goBack()
 
 	await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue(title)
@@ -263,7 +263,7 @@ test('takes a post trashed from the editor back out of the trash from the list',
 	await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
 	await confirm.getByRole('button', { name: 'Move to trash' }).click()
 
-	await expect(page.getByRole('main').getByRole('button', { name: 'Add New', exact: true })).toBeVisible()
+	await expect(page.getByRole('main').getByRole('button', { name: 'Add Post', exact: true })).toBeVisible()
 	await expect(shown(page, `"${named}" moved to the trash.`)).toBeVisible()
 
 	await statusTab(page, 'Trash').click()

@@ -20,7 +20,7 @@ test.describe('the admin read in the proof locale', () => {
 	test('opens the default list from the root in the reader language', async ({ page }) => {
 		await page.goto('/admin/')
 
-		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true })).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir entrada', exact: true })).toBeVisible()
 		await expect(page).toHaveURL(/\/admin\/content\/post$/)
 	})
 
@@ -29,7 +29,7 @@ test.describe('the admin read in the proof locale', () => {
 
 		await expect(page.getByRole('heading', { level: 1, name: 'Entradas' })).toBeVisible()
 		await expect(page.getByText('Gestiona las entradas de este sitio.')).toBeVisible()
-		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true })).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir entrada', exact: true })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Ver opciones' })).toBeVisible()
 		await expect(page.getByRole('searchbox', { name: 'Buscar entradas…', exact: true })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Añadir filtro' })).toBeVisible()
@@ -61,7 +61,7 @@ test.describe('the admin read in the proof locale', () => {
 		await page.goto('/admin/content-types')
 
 		await expect(page.getByRole('heading', { name: 'Tipos de contenido' })).toBeVisible()
-		await expect(page.getByRole('button', { name: 'Añadir tipo nuevo' })).toBeVisible()
+		await expect(page.getByRole('button', { name: 'Añadir tipo de contenido' })).toBeVisible()
 		await expect(page.getByRole('region', { name: 'Tipos de contenido' }).getByText('Entradas', { exact: true }))
 			.toBeVisible()
 	})
@@ -70,7 +70,7 @@ test.describe('the admin read in the proof locale', () => {
 		await page.goto('/admin/media')
 
 		await expect(page.getByRole('heading', { name: 'Medios' })).toBeVisible()
-		await expect(page.getByRole('main').getByRole('button', { name: 'Subir medios' })).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Añadir medios' })).toBeVisible()
 	})
 
 	test('names the themes screen in the reader language', async ({ page }) => {
@@ -85,6 +85,7 @@ test.describe('the admin read in the proof locale', () => {
 
 		await expect(page.getByRole('heading', { name: 'Usuarios' })).toBeVisible()
 		await expect(page.getByRole('columnheader', { name: 'Estado' })).toBeVisible()
+		await expect(page.getByRole('main').getByRole('link', { name: 'Añadir usuario' })).toBeVisible()
 	})
 
 	test('names the language screen and reports the chosen language', async ({ page }) => {
@@ -96,7 +97,7 @@ test.describe('the admin read in the proof locale', () => {
 
 	test('names the editor chrome in the reader language', async ({ page }) => {
 		await page.goto('/admin/content/post')
-		await page.getByRole('main').getByRole('button', { name: 'Añadir nuevo', exact: true }).click()
+		await page.getByRole('main').getByRole('button', { name: 'Añadir entrada', exact: true }).click()
 
 		await expect(page.getByRole('button', { name: 'Guardar el borrador' })).toBeVisible()
 		await expect(page.getByRole('button', { name: 'Publicar' })).toBeVisible()
@@ -109,7 +110,7 @@ test.describe('the admin read in the proof locale', () => {
 
 		await page.goto('/admin/')
 
-		await expect(page.getByRole('main').getByRole('button', { name: 'Add New', exact: true })).toBeVisible()
+		await expect(page.getByRole('main').getByRole('button', { name: 'Add Post', exact: true })).toBeVisible()
 		await english.close()
 	})
 })

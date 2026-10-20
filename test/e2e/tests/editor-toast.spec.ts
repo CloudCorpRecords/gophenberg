@@ -37,7 +37,7 @@ const created: string[] = []
 
 test.beforeEach(async ({ page }) => {
 	await page.goto('/admin/content/post')
-	await page.getByRole('main').getByRole('button', { name: 'Add New', exact: true }).click()
+	await page.getByRole('main').getByRole('button', { name: 'Add Post', exact: true }).click()
 	await expect(page.getByRole('textbox', { name: 'Title' })).toBeVisible()
 	const id = page.url().match(/content\/[a-z-]+\/([0-9a-f-]+)\/edit/)?.[1]
 	if (id !== undefined) {
