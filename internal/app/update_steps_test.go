@@ -12,10 +12,12 @@ import (
 
 // offerUpdate starts an update site whose stable index offers version, and points the settings at it.
 func (s *operatorScenario) offerUpdate(version string) {
-	s.site = newUpdateSite(s.t)
-	s.site.offered = version
-	s.site.publishKeyList("the first root", "the second root")
-	s.site.publishIndex(s.site.release, unchanged)
+	s.offerRelease(version, version)
+}
+
+// offerRelease starts an update site whose stable index offers offered under minimum, and points the settings at it.
+func (s *operatorScenario) offerRelease(offered, minimum string) {
+	s.site = newOfferingSite(s.t, offered, minimum)
 	s.env["GOPHENBERG_UPDATE_URL"] = s.site.address
 	s.env["GOPHENBERG_TRUSTED_KEYS"] = s.site.trustedRoots()
 }
@@ -28,6 +30,17 @@ func (s *operatorScenario) signKeyListAlone(name string) {
 // signIndexAsStranger serves the index signed by a key the key list does not name.
 func (s *operatorScenario) signIndexAsStranger() {
 	s.site.publishIndex(s.site.stranger, unchanged)
+}
+
+// changeArchive serves other bytes in place of the archive the release record names.
+func (s *operatorScenario) changeArchive() {
+	s.site.put(s.site.archivePath(), []byte("an archive changed after its release"))
+}
+
+// signArchiveAsStranger serves the archive signed by a key the key list does not name, in the index too.
+func (s *operatorScenario) signArchiveAsStranger() {
+	s.site.publishArchive(s.site.stranger)
+	s.site.publishIndex(s.site.release, unchanged)
 }
 
 // expireIndex serves an index that expired a day ago.

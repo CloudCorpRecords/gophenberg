@@ -74,11 +74,7 @@ func updatesAt(t *testing.T, site *updateSite) (updateSettings, *heldSettings) {
 // offeringSite returns an update site whose stable index offers 99.0.0, signed by both roots.
 func offeringSite(t *testing.T) *updateSite {
 	t.Helper()
-	site := newUpdateSite(t)
-	site.offered = "99.0.0"
-	site.publishKeyList("the first root", "the second root")
-	site.publishIndex(site.release, unchanged)
-	return site
+	return newOfferingSite(t, "99.0.0", "99.0.0")
 }
 
 // major returns a read of the server's major that answers major and err.

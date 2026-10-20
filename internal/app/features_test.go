@@ -80,12 +80,13 @@ type operatorScenario struct {
 	offered *commanding
 	notes   *noting
 	site    *updateSite
+	stamp   string
 }
 
 // initializeOperatorCommands returns the binding of the operator command steps on engine, t holding their databases.
 func initializeOperatorCommands(t *testing.T, engine operatorEngine) func(*godog.ScenarioContext) {
 	return func(sc *godog.ScenarioContext) {
-		s := &operatorScenario{t: t, engine: engine, env: map[string]string{}}
+		s := &operatorScenario{t: t, engine: engine, env: map[string]string{}, stamp: version.Stamp()}
 		sc.Given(`^the settings point at an empty database$`, s.pointAtAnEmptyDatabase)
 		sc.Given(`^the settings name no database$`, s.nameNoDatabase)
 		sc.When(`^the operator runs gophenberg with no command$`, s.runWithNoCommand)
@@ -124,6 +125,7 @@ func initializeOperatorCommands(t *testing.T, engine operatorEngine) func(*godog
 		sc.Then(`^the database holds the minimum version of this binary$`, s.holdsOwnMinimumVersion)
 		sc.Then(`^the database still holds the minimum version "([^"]*)"$`, s.holdsMinimumVersion)
 		initializeUpdateChecks(sc, s)
+		initializeCoreUpdates(sc, s)
 	}
 }
 
@@ -370,9 +372,17 @@ func (s *operatorScenario) nameNoDatabase() {
 	delete(s.env, "GOPHENBERG_DATABASE_URL")
 }
 
-// run runs the command line in process over the scenario's settings, feeding stdin.
+// run runs the command line in process over the scenario's settings, feeding stdin, with the exit code main answers.
 func (s *operatorScenario) run(stdin string, args ...string) {
-	s.result = testkit.Run(s.t, Program(testkit.Getenv(s.env), s.loaded), stdin, args...)
+	s.result = s.answer(stdin, args...)
+}
+
+// answer returns what the command line answers in process over the scenario's settings, with the code main answers.
+func (s *operatorScenario) answer(stdin string, args ...string) testkit.Result {
+	exits := &exitCodes{}
+	answered := testkit.Run(s.t, commandLine(testkit.Getenv(s.env), s.loaded, exits, s.stamp), stdin, args...)
+	answered.Code = exits.of(answered.Code)
+	return answered
 }
 
 // runWithNoCommand runs the command line naming no command.
@@ -540,30 +550,36 @@ func untouchedSQLiteFile(_ context.Context, address string) error {
 	return nil
 }
 
-func TestOperatorCommands(t *testing.T) {
-	t.Parallel()
-
+// runOperatorFeature runs the feature at path over the operator steps on engine, the @wip scenarios only when asked.
+func runOperatorFeature(t *testing.T, path string, engine operatorEngine) {
+	t.Helper()
 	tags := "~@wip"
 	if os.Getenv("GOPHENBERG_BDD_WIP") != "" {
 		tags = ""
 	}
+	suite := godog.TestSuite{
+		ScenarioInitializer: initializeOperatorCommands(t, engine),
+		Options: &godog.Options{
+			Format:   "pretty",
+			Paths:    []string{path},
+			Tags:     tags,
+			Strict:   true,
+			TestingT: t,
+		},
+	}
+	if suite.Run() != 0 {
+		t.Error("the feature did not pass")
+	}
+}
+
+func TestOperatorCommands(t *testing.T) {
+	t.Parallel()
+
 	for name, engine := range map[string]operatorEngine{"postgres": postgresOperators(), "sqlite": sqliteOperators()} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			suite := godog.TestSuite{
-				ScenarioInitializer: initializeOperatorCommands(t, engine),
-				Options: &godog.Options{
-					Format:   "pretty",
-					Paths:    []string{operatorCommandsFeature},
-					Tags:     tags,
-					Strict:   true,
-					TestingT: t,
-				},
-			}
-			if suite.Run() != 0 {
-				t.Error("the feature did not pass")
-			}
+			runOperatorFeature(t, operatorCommandsFeature, engine)
 		})
 	}
 }
