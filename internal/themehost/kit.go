@@ -23,11 +23,16 @@ func NewestKit() string {
 
 // ServesKit reports whether this release serves a theme built on the declared kit version.
 func ServesKit(declared string) bool {
+	return KitsServe(servedKits, declared)
+}
+
+// KitsServe reports whether a release serving the theme kit versions kits serves a theme built on the declared one.
+func KitsServe(kits []string, declared string) bool {
 	built, ok := parseKit(declared)
 	if !ok {
 		return false
 	}
-	for _, candidate := range servedKits {
+	for _, candidate := range kits {
 		if served, ok := parseKit(candidate); ok && serves(served, built) {
 			return true
 		}
