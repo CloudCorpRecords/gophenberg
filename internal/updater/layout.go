@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package updater
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+const (
+	// Current names the link to the build that runs.
+	Current = "current"
+	// Previous names the link to the build an update goes back to.
+	Previous = "previous"
+	// versionsFolder holds one folder per build.
+	versionsFolder = "versions"
+	// downloadsFolder holds the archive a download writes, never the temporary folder of the system.
+	downloadsFolder = "downloads"
+	// backupsFolder holds the backups of the database taken before each switch.
+	backupsFolder = "backups"
+	// stateFolder holds the state file.
+	stateFolder = "state"
+	// partialSuffix ends the name of a file a step is still writing.
+	partialSuffix = ".partial"
+)
+
+// Layout is an install root: one folder per build side by side, and the links naming the current and previous builds.
+type Layout struct {
+	Root string
+}
+
+// Build returns the folder of the build called name.
+func (l Layout) Build(name string) string {
+	return filepath.Join(l.Root, versionsFolder, name)
+}
+
+// Binary returns the gophenberg binary of the build called name.
+func (l Layout) Binary(name string) string {
+	return filepath.Join(l.Build(name), binaryName)
+}
+
+// Download returns the partial file the archive of release downloads into.
+func (l Layout) Download(release string) string {
+	return filepath.Join(l.Root, downloadsFolder, release+partialSuffix)
+}
+
+// Backups returns the folder that keeps the backups of the database.
+func (l Layout) Backups() string {
+	return filepath.Join(l.Root, backupsFolder)
+}
+
+// folders returns the install root and each folder a job writes into.
+func (l Layout) folders() []string {
+	return []string{
+		l.Root, filepath.Join(l.Root, versionsFolder), filepath.Join(l.Root, downloadsFolder), l.Backups(),
+		filepath.Join(l.Root, stateFolder),
+	}
+}
+
+// Named returns the build the link called link names, like 0.20.0 for versions/0.20.0, refusing any other target.
+func (l Layout) Named(link string) (string, error) {
+	target, err := os.Readlink(filepath.Join(l.Root, link))
+	if err != nil {
+		return "", fmt.Errorf("updater: read the %s link: %w", link, err)
+	}
+	name := filepath.Base(target)
+	if filepath.Join(versionsFolder, name) != target {
+		return "", fmt.Errorf("updater: the %s link names %s, not a build in %s", link, target, versionsFolder)
+	}
+	return name, nil
+}
+
+// Point points the link called link at the build called name, renaming a new link over the old one.
+func (l Layout) Point(link, name string) error {
+	staged := filepath.Join(l.Root, "."+link+partialSuffix)
+	_ = os.Remove(staged)
+	err := os.Symlink(filepath.Join(versionsFolder, name), staged)
+	if err == nil {
+		err = os.Rename(staged, filepath.Join(l.Root, link))
+	}
+	if err == nil {
+		err = syncFolder(l.Root)
+	}
+	if err != nil {
+		_ = os.Remove(staged)
+		return fmt.Errorf("updater: point %s at %s: %w", link, name, err)
+	}
+	return nil
+}
