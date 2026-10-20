@@ -13,7 +13,7 @@ to it.
 
 ## Registering a type
 
-Press **Add New Type** and give it a singular and a plural name, like
+Press **Add Content Type** and give it a singular and a plural name, like
 Guide and Guides. Gophenberg derives the rest: the plural becomes the
 route word, so Guides answer under `/guides`.
 

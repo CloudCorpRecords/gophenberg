@@ -108,7 +108,8 @@ holds nothing at all says `No items yet.` and how to add one.
 
 ## Creating a post
 
-Press **Add New** at the top of the list. Gophenberg creates a draft
+Press the button at the top of the list that names the type, such as
+**Add Post** or **Add Page**. Gophenberg creates a draft
 and opens it in [the editor](/guides/editor/). The button waits until
 the screen has read the content type, so the draft starts on the
 defaults its fields name. If it fails, the list says why above the
