@@ -151,6 +151,30 @@ test('draws no add button until the type registry answers, then drafts on its de
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: { rating: 5 } }])
 })
 
+test.each([
+	{
+		when: 'the type registry fails to load',
+		types: () => HttpResponse.json({ error: 'unavailable' }, { status: 500 }),
+		path: '/content/post',
+	},
+	{
+		when: 'the registry does not hold the listed type',
+		types: () => HttpResponse.json({ items: [RATED_TYPE] }),
+		path: '/content/missing',
+	},
+])('draws no add button and no add hint when $when', async ({ types, path }) => {
+	server.use(
+		http.get('/api/types', types),
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
+	)
+	renderAt(path)
+	const main = await screen.findByRole('main')
+	await within(main).findByText('No items yet.')
+
+	expect(within(main).queryByRole('button', { name: 'Add Content' })).not.toBeInTheDocument()
+	expect(within(main).queryByText('Add one with Add Content.')).not.toBeInTheDocument()
+})
+
 /**
  * Returns a type a person registered, with no field.
  * @param key - The type key.

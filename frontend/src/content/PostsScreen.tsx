@@ -91,7 +91,7 @@ function readsList(key: QueryKey | undefined, type: string, status: string): boo
  * @param type - The type the list shows.
  * @param status - The status the list shows.
  * @param asked - The search, sort, page and filters to ask for.
- * @returns The query of the page, and whether the list still waits for the registry.
+ * @returns The page query, whether the list waits for the registry and whether the registry holds the type.
  */
 function usePostPage(type: string, status: string, asked: PostQuery) {
 	const registry = useQuery({ queryKey: typesQueryKey, queryFn: listTypes })
@@ -102,7 +102,7 @@ function usePostPage(type: string, status: string, asked: PostQuery) {
 		enabled: !registry.isPending,
 		placeholderData: (previous, last) => (readsList(last?.queryKey, type, status) ? previous : undefined),
 	})
-	return { posts, waiting: registry.isPending }
+	return { posts, waiting: registry.isPending, registered: registry.data?.some((held) => held.key === type) === true }
 }
 
 /**
@@ -225,21 +225,25 @@ function narrows(view: OfferedView<View>, status: string): boolean {
 
 /**
  * Renders what a list shows when it holds no item.
- * @param props - Whether a search, a filter or a tab narrowed the list, and the type the list shows.
- * @returns The empty state, telling how to add an item when nothing narrowed the list.
+ * @param props - Whether a search, a filter or a tab narrowed the list, and the type its add button adds, if any.
+ * @returns The empty state, telling how to add an item when nothing narrowed the list and it offers its add button.
  */
-function PostsEmpty({ narrowed, listed }: { narrowed: boolean, listed: ContentType }) {
+function PostsEmpty({ narrowed, adding }: { narrowed: boolean, adding: ContentType | undefined }) {
 	if (narrowed) {
 		return <ListEmpty icon={postIcon} title={__('No items found.', 'gophenberg')} />
 	}
-	const hint = sprintf(__('Add one with %(button)s.', 'gophenberg'), { button: addLabelOf(listed) })
+	const hint =
+		adding === undefined
+			? undefined
+			: sprintf(__('Add one with %(button)s.', 'gophenberg'), { button: addLabelOf(adding) })
 	return <ListEmpty icon={postIcon} title={__('No items yet.', 'gophenberg')} hint={hint} />
 }
 
 /**
  * Renders the rows of a type's list, or the failure of their read.
- * @param props - The type and status shown, the page query, whether the list waits for the type registry, the list
- *   view, the view the columns draw, the columns, the settings and the row actions.
+ * @param props - The type and status shown, the page query, whether the list waits for the type registry and whether
+ *   the registry holds the type, the list view, the view the columns draw, the columns, the settings and the row
+ *   actions.
  * @returns The list, or the failure notice.
  */
 function PostsTable(props: {
@@ -247,6 +251,7 @@ function PostsTable(props: {
 	status: string
 	posts: UseQueryResult<PostPage>
 	waiting: boolean
+	registered: boolean
 	list: ListView<View>
 	view: OfferedView<View>
 	columns: Field<Post>[]
@@ -262,7 +267,7 @@ function PostsTable(props: {
 		<DataViews
 			key={`${listed.key} ${props.status}`}
 			{...pageProps(listed, posts.data, props.settings)}
-			empty={<PostsEmpty narrowed={narrows(props.view, props.status)} listed={listed} />}
+			empty={<PostsEmpty narrowed={narrows(props.view, props.status)} adding={props.registered ? listed : undefined} />}
 			fields={columnsOn(props.columns, props.status)}
 			actions={props.actions}
 			view={props.view}
@@ -312,7 +317,7 @@ export function PostsScreen() {
 	const listed = useContentType()
 	const current = useSearch({ strict: false, select: (search) => search.status })
 	const status = current ?? ''
-	const { list, columns, view, settings, posts, waiting } = usePostList(listed, status)
+	const { list, columns, view, settings, posts, waiting, registered } = usePostList(listed, status)
 	const { failure, run, region } = useListRun(`${listed.key} ${status}`, list.onChangeSelection)
 	const actions = usePostActions(status, listed, run)
 	const held = useTrashTotal(listed.key, status)
@@ -326,7 +331,7 @@ export function PostsScreen() {
 					{offersEmptyTrash(status, posts.data, held, session) ? (
 						<EmptyTrash type={listed.key} count={held} list={run} />
 					) : null}
-					{waiting ? null : <HeaderAddNew listed={listed} run={run} />}
+					{registered ? <HeaderAddNew listed={listed} run={run} /> : null}
 				</>
 			}
 			tabs={<StatusTabs current={current} />}
@@ -340,6 +345,7 @@ export function PostsScreen() {
 				status={status}
 				posts={posts}
 				waiting={waiting}
+				registered={registered}
 				list={list}
 				view={view}
 				columns={columns}
