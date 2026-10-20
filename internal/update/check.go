@@ -42,24 +42,39 @@ func NewClient(timeout time.Duration) *http.Client {
 	}
 }
 
+// signed is a key list a trusted root signed and the index a key it names signed.
+type signed struct {
+	list  KeyList
+	index Index
+}
+
 // Check fetches and verifies the key list and the index, refuses serials older than the ones taken, finds the update.
 func Check(ctx context.Context, cfg Config, taken Serials) (*Found, Serials, error) {
 	defer cfg.Client.CloseIdleConnections()
-	list, err := cfg.keyList(ctx)
+	files, err := cfg.verified(ctx, taken)
 	if err != nil {
 		return nil, taken, err
+	}
+	return files.index.UpdateFor(cfg.Site), Serials{Keys: files.list.Serial, Index: files.index.Serial}, nil
+}
+
+// verified fetches and verifies the key list and the index, refusing serials older than the ones taken.
+func (c Config) verified(ctx context.Context, taken Serials) (signed, error) {
+	list, err := c.keyList(ctx)
+	if err != nil {
+		return signed{}, err
 	}
 	if err := notOlder("key list", list.Serial, taken.Keys); err != nil {
-		return nil, taken, err
+		return signed{}, err
 	}
-	index, err := cfg.index(ctx, list)
+	index, err := c.index(ctx, list)
 	if err != nil {
-		return nil, taken, err
+		return signed{}, err
 	}
 	if err := notOlder("index", index.Serial, taken.Index); err != nil {
-		return nil, taken, err
+		return signed{}, err
 	}
-	return index.UpdateFor(cfg.Site), Serials{Keys: list.Serial, Index: index.Serial}, nil
+	return signed{list: list, index: index}, nil
 }
 
 // notOlder returns an error when the serial of the file of kind comes before the one taken last.

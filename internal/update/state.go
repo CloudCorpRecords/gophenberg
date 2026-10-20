@@ -63,20 +63,25 @@ type source struct {
 
 // Run checks the update site for the site, keeping its identity, the serials taken and the result in store.
 func Run(ctx context.Context, cfg Config, store Settings) (Result, error) {
-	id, err := siteID(ctx, store)
+	cfg, held, err := prepared(ctx, cfg, store)
 	if err != nil {
 		return Result{}, err
 	}
-	held, err := takenOf(ctx, store)
-	if err != nil {
-		return Result{}, err
-	}
-	cfg.Site.ID = id
-	src := sourceOf(cfg)
-	found, serials, checked := Check(ctx, cfg, held.of(src))
+	found, serials, checked := Check(ctx, cfg, held)
 	saving, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Client.Timeout)
 	defer cancel()
-	return record(saving, store, src, outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
+	return record(saving, store, sourceOf(cfg), outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
+}
+
+// prepared returns cfg for the site whose identity store keeps, and the serials taken of what cfg reads.
+func prepared(ctx context.Context, cfg Config, store Settings) (Config, Serials, error) {
+	id, err := siteID(ctx, store)
+	if err != nil {
+		return cfg, Serials{}, err
+	}
+	held, err := takenOf(ctx, store)
+	cfg.Site.ID = id
+	return cfg, held.of(sourceOf(cfg)), err
 }
 
 // ResultOf returns what the checks stored in store, an empty result before the first check.

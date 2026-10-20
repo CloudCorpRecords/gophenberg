@@ -54,6 +54,38 @@ func TestUpdateForSkipsAWithdrawnOffer(t *testing.T) {
 	}
 }
 
+func TestUpdateForSkipsAVersionTheSiteRefused(t *testing.T) {
+	t.Parallel()
+
+	refusing := site("0.20.0", 18)
+	refusing.Refused = []string{"0.22.0"}
+
+	got := index(offer("0.21.0", "0.21.0"), offer("0.22.0", "0.22.0")).UpdateFor(refusing)
+
+	if got == nil || got.Version != "0.21.0" {
+		t.Errorf("UpdateFor() = %+v, want 0.21.0, since the site refused 0.22.0", got)
+	}
+}
+
+func TestLiftLetsASiteTakeARefusedVersionAgain(t *testing.T) {
+	t.Parallel()
+
+	refusing := site("0.20.0", 18)
+	refusing.Refused = []string{"0.21.0", "0.22.0"}
+
+	lifted := refusing.Lift("0.22.0")
+
+	if got := index(offer("0.22.0", "0.22.0")).UpdateFor(lifted); got == nil || got.Version != "0.22.0" {
+		t.Errorf("UpdateFor() after Lift(0.22.0) = %+v, want 0.22.0 taken again", got)
+	}
+	if !slices.Equal(lifted.Refused, []string{"0.21.0"}) {
+		t.Errorf("Lift(0.22.0) refuses %v, want only 0.21.0 left", lifted.Refused)
+	}
+	if !slices.Equal(refusing.Refused, []string{"0.21.0", "0.22.0"}) {
+		t.Errorf("Lift(0.22.0) changed the site it was called on to %v, want it kept", refusing.Refused)
+	}
+}
+
 func TestUpdateForTakesAnOfferOnlyWhenItsRolloutReachesTheSite(t *testing.T) {
 	t.Parallel()
 
