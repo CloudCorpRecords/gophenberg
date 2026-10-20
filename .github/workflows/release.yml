@@ -358,14 +358,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Point latest at the newest published stable release whose image is pushed
+      - name: Point latest at the newest stable version tag whose image is pushed
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          newest="$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1000 \
-            --json tagName --jq '.[].tagName' | grep -v -- - | sort -V | tail -n 1)"
+          newest="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" --paginate --jq '.[].ref' \
+            | sed 's|^refs/tags/||' | grep -v -- - | sort -V | tail -n 1)"
           if [ -z "$newest" ]; then
-            echo "no stable release is published, so latest stays where it is"
+            echo "no stable version tag exists, so latest stays where it is"
             exit 0
           fi
           image="ghcr.io/gopherium/gophenberg:${newest#v}"
