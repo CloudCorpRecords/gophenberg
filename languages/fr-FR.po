@@ -173,16 +173,24 @@ msgid "Active"
 msgstr "Actif"
 
 #, fuzzy
-msgid "Add New"
-msgstr "Ajouter"
+msgid "Add Category"
+msgstr "Ajouter une catégorie"
 
 #, fuzzy
-msgid "Add New Group"
-msgstr "Ajouter un nouveau groupe"
+msgid "Add Content Type"
+msgstr "Ajouter un type de contenu"
 
 #, fuzzy
-msgid "Add New Type"
-msgstr "Ajouter un nouveau type"
+msgid "Add Field Group"
+msgstr "Ajouter un groupe de champs"
+
+#, fuzzy
+msgid "Add Page"
+msgstr "Ajouter une page"
+
+#, fuzzy
+msgid "Add Post"
+msgstr "Ajouter un article"
 
 #, fuzzy
 msgid "Add block"
@@ -738,8 +746,8 @@ msgid "Nests"
 msgstr "Imbriqué"
 
 #, fuzzy
-msgid "New user"
-msgstr "Nouvel utilisateur"
+msgid "Add User"
+msgstr "Ajouter un utilisateur"
 
 #, fuzzy
 msgid "Newer posts"
@@ -2628,8 +2636,8 @@ msgid "No items yet."
 msgstr "Aucun élément pour l'instant."
 
 #, fuzzy
-msgid "Add one with Add New."
-msgstr "Ajoutez-en un avec Ajouter."
+msgid "Add one with %(button)s."
+msgstr "Ajoutez un élément avec %(button)s."
 
 #, fuzzy
 msgid "Items could not be loaded."
@@ -2707,8 +2715,8 @@ msgid "Visit Site"
 msgstr "Aller sur le site"
 
 #, fuzzy
-msgid "Upload media"
-msgstr "Téléverser des médias"
+msgid "Add Media File"
+msgstr "Ajouter un fichier média"
 
 #, fuzzy
 msgid "Upload theme"
@@ -2740,10 +2748,6 @@ msgstr "Aucun fichier média trouvé."
 #, fuzzy
 msgid "No media items yet."
 msgstr "Aucun fichier média pour l’instant."
-
-#, fuzzy
-msgid "Add one with Upload media."
-msgstr "Ajoutez-en un avec Téléverser des médias."
 
 #, fuzzy
 msgid "Delete \"%(type)s\"?"

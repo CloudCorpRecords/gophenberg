@@ -320,13 +320,25 @@ msgstr ""
 msgid "Add %(type)s"
 msgstr ""
 
-msgid "Add New"
+msgid "Add Category"
 msgstr ""
 
-msgid "Add New Group"
+msgid "Add Content Type"
 msgstr ""
 
-msgid "Add New Type"
+msgid "Add Field Group"
+msgstr ""
+
+msgid "Add Media File"
+msgstr ""
+
+msgid "Add Page"
+msgstr ""
+
+msgid "Add Post"
+msgstr ""
+
+msgid "Add User"
 msgstr ""
 
 msgid "Add block"
@@ -350,10 +362,7 @@ msgstr ""
 msgid "Add layout to %(field)s"
 msgstr ""
 
-msgid "Add one with Add New."
-msgstr ""
-
-msgid "Add one with Upload media."
+msgid "Add one with %(button)s."
 msgstr ""
 
 msgid "Add row"
@@ -980,9 +989,6 @@ msgid "Navigation"
 msgstr ""
 
 msgid "Nests"
-msgstr ""
-
-msgid "New user"
 msgstr ""
 
 msgid "Newer posts"
@@ -1762,9 +1768,6 @@ msgid "Update"
 msgstr ""
 
 msgid "Update failed."
-msgstr ""
-
-msgid "Upload media"
 msgstr ""
 
 msgid "Upload theme"
