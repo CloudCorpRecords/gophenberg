@@ -194,5 +194,5 @@ Three other checks reach the same answer another way:
   `go run ./cmd/releasetool verify -public z6MkhzygKXb6Xx7PB1NZsPhuNamiHiinZcaBijQZKMFYgWc3 gophenberg_%VERSION%_linux_amd64.tar.gz`
   checks the signature in one step. The long `z6Mk` text is the same
   release key, written as a Multikey.
-- `gh attestation verify gophenberg_%VERSION%_linux_amd64.tar.gz --repo gopherium/gophenberg`
-  checks that the repository's own release workflow built the file.
+- `gh attestation verify gophenberg_%VERSION%_linux_amd64.tar.gz --repo gopherium/gophenberg --signer-workflow gopherium/gophenberg/.github/workflows/release.yml --source-ref refs/tags/v%VERSION%`
+  checks that the release workflow built the file from the release tag.
