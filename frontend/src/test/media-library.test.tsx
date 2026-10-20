@@ -149,7 +149,7 @@ test('says the library holds nothing yet, and how to add a file, when nothing na
 
 	const empty = (await screen.findByText('No media items yet.')).closest('.godmin-empty') as HTMLElement
 
-	expect(within(empty).getByText('Add one with Upload media.')).toBeInTheDocument()
+	expect(within(empty).getByText('Add one with Add Media File.')).toBeInTheDocument()
 	expect(empty.querySelector('svg')).not.toBeNull()
 })
 
@@ -161,7 +161,7 @@ test('says no media item was found when a search narrows the library to nothing'
 	await userEvent.type(screen.getByRole('searchbox'), 'lighthouse')
 
 	expect(await screen.findByText('No media items found.')).toBeInTheDocument()
-	expect(screen.queryByText('Add one with Upload media.')).not.toBeInTheDocument()
+	expect(screen.queryByText('Add one with Add Media File.')).not.toBeInTheDocument()
 })
 
 test('says under the Media title what the library holds', async () => {
@@ -179,7 +179,7 @@ test('says no media item was found when the kind filter narrows the library to n
 	await userEvent.click(await screen.findByRole('option', { name: 'Files' }))
 
 	expect(await screen.findByText('No media items found.')).toBeInTheDocument()
-	expect(screen.queryByText('Add one with Upload media.')).not.toBeInTheDocument()
+	expect(screen.queryByText('Add one with Add Media File.')).not.toBeInTheDocument()
 })
 
 test('draws the library in the list region of the page, named Media', async () => {

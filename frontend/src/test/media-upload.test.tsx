@@ -71,12 +71,12 @@ function storing(): string[] {
 }
 
 /**
- * Hands the files to the hidden input behind Upload media once the library shows.
+ * Hands the files to the hidden input behind Add Media File once the library shows.
  * @param files - The files to choose.
  */
 async function choose(...files: File[]) {
 	await screen.findByText('Harbor at dawn')
-	await userEvent.upload(screen.getByLabelText('Upload media'), files)
+	await userEvent.upload(screen.getByLabelText('Add Media File'), files)
 }
 
 /**
@@ -94,10 +94,10 @@ beforeEach(() => {
 	listing()
 })
 
-test('offers Upload media as the compact solid header button, drawn with the upload icon', async () => {
+test('offers Add Media File as the compact solid header button, drawn with the upload icon', async () => {
 	renderAt('/media')
 
-	const button = await within(await screen.findByRole('main')).findByRole('button', { name: 'Upload media' })
+	const button = await within(await screen.findByRole('main')).findByRole('button', { name: 'Add Media File' })
 
 	expect([...button.classList]).toEqual(buttonClasses('solid', 'compact'))
 	expect(button.querySelector('svg')).not.toBeNull()
@@ -109,8 +109,8 @@ test('takes several files at once from the file dialog', async () => {
 
 	await screen.findByText('Harbor at dawn')
 
-	expect(screen.getByLabelText('Upload media')).toHaveAttribute('multiple')
-	expect(screen.getByLabelText('Upload media')).not.toBeVisible()
+	expect(screen.getByLabelText('Add Media File')).toHaveAttribute('multiple')
+	expect(screen.getByLabelText('Add Media File')).not.toBeVisible()
 })
 
 test('sends one upload for each file chosen', async () => {
@@ -196,7 +196,7 @@ test('clears the last failure when the next upload starts', async () => {
 	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('holds Upload media busy while the files upload', async () => {
+test('holds Add Media File busy while the files upload', async () => {
 	const held = gate()
 	server.use(
 		http.post('/api/media', async () => {
@@ -208,7 +208,7 @@ test('holds Upload media busy while the files upload', async () => {
 
 	await choose(file('harbor.jpg'))
 
-	const button = screen.getByRole('button', { name: 'Upload media' })
+	const button = screen.getByRole('button', { name: 'Add Media File' })
 	await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
 	held.release()
 	await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled', 'true'))
@@ -263,7 +263,7 @@ test('keeps the refusal of a drop made while an earlier upload still runs, namin
 	expect(notice).toHaveTextContent(`notes.txt: ${REFUSAL}`)
 })
 
-test('holds Upload media busy until the last of two overlapping uploads ends', async () => {
+test('holds Add Media File busy until the last of two overlapping uploads ends', async () => {
 	const first = gate()
 	const second = gate()
 	const holds = [first.held, second.held]
@@ -275,7 +275,7 @@ test('holds Upload media busy until the last of two overlapping uploads ends', a
 	)
 	renderAt('/media')
 	await choose(file('harbor.jpg'))
-	const button = screen.getByRole('button', { name: 'Upload media' })
+	const button = screen.getByRole('button', { name: 'Add Media File' })
 	await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
 
 	drop(file('market.jpg'))
