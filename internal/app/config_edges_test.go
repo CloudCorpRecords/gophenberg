@@ -15,8 +15,15 @@ import (
 	"github.com/gopherium/framework/pluginkit"
 
 	"github.com/gopherium/gophenberg/internal/definitions"
+	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/internal/webui"
 )
+
+// configOver returns the server settings a start over settings and built hands the server, with no plugin routes.
+func configOver(settings runConfig, built site) server.Config {
+	start := boot{settings: settings, built: built, host: pluginkit.NewHost(), logger: testLogger(io.Discard)}
+	return start.serverConfig(definitions.Walked{})
+}
 
 func TestServerConfigServesTheWebFolderTheEnvironmentNamed(t *testing.T) {
 	t.Parallel()
@@ -25,7 +32,7 @@ func TestServerConfigServesTheWebFolderTheEnvironmentNamed(t *testing.T) {
 	settings.webDir = t.TempDir()
 	writeAdminPage(t, settings.webDir)
 
-	held := serverConfig(settings, site{}, pluginkit.NewHost(), definitions.Walked{}, testLogger(io.Discard))
+	held := configOver(settings, site{})
 
 	if held.Web == nil {
 		t.Fatal("Web = nil, want the folder GOPHENBERG_WEB_DIR named")
@@ -38,7 +45,7 @@ func TestServerConfigServesTheWebFolderTheEnvironmentNamed(t *testing.T) {
 func TestServerConfigServesTheBuiltInAdminWhenNoFolderIsNamed(t *testing.T) {
 	t.Parallel()
 
-	held := serverConfig(timedConfig(), site{}, pluginkit.NewHost(), definitions.Walked{}, testLogger(io.Discard))
+	held := configOver(timedConfig(), site{})
 
 	if held.Web == nil {
 		t.Fatal("Web = nil with no folder named, want the admin built into this binary")

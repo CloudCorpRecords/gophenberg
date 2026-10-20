@@ -4,7 +4,6 @@ package app
 
 import (
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -12,11 +11,9 @@ import (
 
 	"github.com/gopherium/framework/goncierge"
 	"github.com/gopherium/framework/gonsole/testkit"
-	"github.com/gopherium/framework/pluginkit"
 	"github.com/gopherium/gouncer/avatar"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gopherium/gophenberg/internal/definitions"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -209,7 +206,7 @@ func TestServerConfigCarriesEveryComposedValue(t *testing.T) {
 	}
 	defer built.close()
 
-	cfg := serverConfig(settings, built, pluginkit.NewHost(), definitions.Walked{}, slog.New(slog.DiscardHandler))
+	cfg := configOver(settings, built)
 
 	if cfg.Registry != built.registry || cfg.Users != built.users || cfg.Content != built.content ||
 		cfg.Types != built.types || cfg.Settings != built.settings || cfg.Readers != built.readers {
