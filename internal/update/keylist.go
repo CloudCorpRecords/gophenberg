@@ -9,14 +9,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/gopherium/gophenberg/internal/signature"
 )
 
-// errNoTrustedRoot refuses a key list that carries no signature from a trusted root.
-var errNoTrustedRoot = errors.New("update: refused the key list, no trusted root signed it")
+var (
+	// errNoTrustedRoot refuses a key list that carries no signature from a trusted root.
+	errNoTrustedRoot = errors.New("update: refused the key list, no trusted root signed it")
+	// errNoTimestampKey refuses a key list that names no key to sign the timestamp file.
+	errNoTimestampKey = errors.New("update: refused the key list, which names no timestamp key")
+)
+
+// knownRoles are the roles this version reads a listed key under.
+var knownRoles = []Role{RoleRelease, RoleStandby, RoleTimestamp}
 
 // SignKeyList returns the line a root signs the exact bytes of a key list with: its Multikey, then its signature.
 func SignKeyList(body []byte, root *ecdsa.PrivateKey) (string, error) {
@@ -40,44 +48,59 @@ func ReadKeyList(body, sigs []byte, roots []*ecdsa.PublicKey, now time.Time) (Ke
 	if err := readable("key list", list.Schema, list.Expires, now); err != nil {
 		return KeyList{}, err
 	}
-	return list, list.checkSigners()
+	return list, list.checkKeys()
 }
 
 // Signers returns the Ed25519 keys the list names as release or standby keys.
 func (l KeyList) Signers() []ed25519.PublicKey {
-	var signers []ed25519.PublicKey
-	for _, listed := range l.Keys {
-		if key, ok := listed.signer(); ok {
-			signers = append(signers, key)
-		}
-	}
-	return signers
+	return l.keysOf(RoleRelease, RoleStandby)
 }
 
-// checkSigners returns an error naming a release or standby key that is not an Ed25519 Multikey.
-func (l KeyList) checkSigners() error {
+// TimestampKeys returns the Ed25519 keys the list names as timestamp keys.
+func (l KeyList) TimestampKeys() []ed25519.PublicKey {
+	return l.keysOf(RoleTimestamp)
+}
+
+// keysOf returns the Ed25519 keys the list names under any of roles.
+func (l KeyList) keysOf(roles ...Role) []ed25519.PublicKey {
+	var named []ed25519.PublicKey
 	for _, listed := range l.Keys {
-		if _, ok := listed.signer(); !ok && listed.signs() {
+		if key, ok := listed.publicKey(); ok && slices.Contains(roles, listed.Role) {
+			named = append(named, key)
+		}
+	}
+	return named
+}
+
+// checkKeys refuses a known key that is not Ed25519 or holds two roles, and a list with no timestamp key.
+func (l KeyList) checkKeys() error {
+	held := map[string]Role{}
+	for _, listed := range l.Keys {
+		if !slices.Contains(knownRoles, listed.Role) {
+			continue
+		}
+		key, ok := listed.publicKey()
+		if !ok {
 			return fmt.Errorf("update: refused the key list, its %s key %q is not an Ed25519 Multikey", listed.Role,
 				listed.Multikey)
 		}
+		if role, twice := held[string(key)]; twice {
+			return fmt.Errorf("update: refused the key list, it names one key as its %s key and its %s key", role,
+				listed.Role)
+		}
+		held[string(key)] = listed.Role
+	}
+	if len(l.TimestampKeys()) == 0 {
+		return errNoTimestampKey
 	}
 	return nil
 }
 
-// signs reports whether the listed key may sign an index.
-func (k ListedKey) signs() bool {
-	return k.Role == RoleRelease || k.Role == RoleStandby
-}
-
-// signer returns the Ed25519 key of a listed key that may sign an index.
-func (k ListedKey) signer() (ed25519.PublicKey, bool) {
-	if !k.signs() {
-		return nil, false
-	}
+// publicKey returns the Ed25519 key a listed key names.
+func (k ListedKey) publicKey() (ed25519.PublicKey, bool) {
 	key, err := signature.ParseMultikey(k.Multikey)
-	signer, ok := key.(ed25519.PublicKey)
-	return signer, err == nil && ok
+	public, ok := key.(ed25519.PublicKey)
+	return public, err == nil && ok
 }
 
 // verifyKeyList returns nil once a trusted root signed body in sigs, refusing a root line that does not hold.

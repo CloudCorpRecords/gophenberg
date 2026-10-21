@@ -26,6 +26,8 @@ const (
 	RoleRelease Role = "release"
 	// RoleStandby signs them in place of a release key that leaked.
 	RoleStandby Role = "standby"
+	// RoleTimestamp signs the timestamp file that keeps the indexes fresh.
+	RoleTimestamp Role = "timestamp"
 )
 
 // ListedKey is one key the key list names, with what it may sign.

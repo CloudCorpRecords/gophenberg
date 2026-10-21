@@ -20,10 +20,11 @@ import (
 // now is the moment every test reads the files at.
 var now = time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
 
-// keys holds the keys one test signs with: two roots, a stranger root, a release key, a standby and a stranger.
+// keys holds the keys one test signs with: two roots, a stranger root, a release key, a standby, a timestamp key
+// and a stranger.
 type keys struct {
-	root1, root2, strangerRoot *ecdsa.PrivateKey
-	release, standby, stranger ed25519.PrivateKey
+	root1, root2, strangerRoot            *ecdsa.PrivateKey
+	release, standby, timestamp, stranger ed25519.PrivateKey
 }
 
 // newKeys returns fresh keys for one test.
@@ -31,7 +32,7 @@ func newKeys(t *testing.T) keys {
 	t.Helper()
 	return keys{
 		root1: newRoot(t), root2: newRoot(t), strangerRoot: newRoot(t),
-		release: newSigner(t), standby: newSigner(t), stranger: newSigner(t),
+		release: newSigner(t), standby: newSigner(t), timestamp: newSigner(t), stranger: newSigner(t),
 	}
 }
 
@@ -70,7 +71,7 @@ func (k keys) trusted() []*ecdsa.PublicKey {
 	return []*ecdsa.PublicKey{&k.root1.PublicKey, &k.root2.PublicKey}
 }
 
-// keyList returns a key list naming the release key and the standby, valid for a year from now.
+// keyList returns a key list naming the release key, the standby and the timestamp key, valid for a year from now.
 func (k keys) keyList(t *testing.T) update.KeyList {
 	t.Helper()
 	return update.KeyList{
@@ -78,6 +79,7 @@ func (k keys) keyList(t *testing.T) update.KeyList {
 		Keys: []update.ListedKey{
 			{Role: update.RoleRelease, Multikey: multikey(t, k.release.Public())},
 			{Role: update.RoleStandby, Multikey: multikey(t, k.standby.Public())},
+			{Role: update.RoleTimestamp, Multikey: multikey(t, k.timestamp.Public())},
 		},
 	}
 }
