@@ -18,6 +18,7 @@ const sqliteAddress = "sqlite:/srv/site/site.db"
 // badSQLiteSettings holds, for each setting only a SQLite site reads, one value a SQLite site refuses.
 var badSQLiteSettings = map[string]string{
 	"GOPHENBERG_SQLITE_SYNCHRONOUS":       "off",
+	"GOPHENBERG_SQLITE_BUSY_POLL":         "0",
 	"GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT": "0",
 }
 
