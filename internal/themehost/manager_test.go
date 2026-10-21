@@ -510,43 +510,6 @@ func TestTheManagerServesTheRendererWhenTheStoredThemeIsGone(t *testing.T) {
 	}
 }
 
-func TestCheckChoiceRefusesASiteTheRendererServesInPlaceOfTheThemeItChose(t *testing.T) {
-	t.Parallel()
-
-	settings := newSettings()
-	settings.values[themehost.ActiveKey] = "vanished"
-	manager := managerOver(t, settings, "")
-	if err := manager.Boot(t.Context()); err != nil {
-		t.Fatalf("Boot() = %v, want the server to stay up", err)
-	}
-
-	err := manager.CheckChoice(t.Context())
-
-	if err == nil || err.Error() != "themehost: the site chose the theme vanished, which does not serve the public site" {
-		t.Errorf("CheckChoice() = %v, want the theme the site chose named", err)
-	}
-}
-
-func TestCheckChoicePassesASiteServedThroughTheThemeItChose(t *testing.T) {
-	t.Parallel()
-
-	stored := newSettings()
-	stored.values[themehost.ActiveKey] = "aurora"
-	for name, manager := range map[string]*themehost.Manager{
-		"the stored choice": managerOver(t, stored, "", "aurora"),
-		"an operator pin":   managerOver(t, newSettings(), "aurora", "aurora"),
-		"no theme chosen":   managerOver(t, newSettings(), "", "aurora"),
-	} {
-		if err := manager.Boot(t.Context()); err != nil {
-			t.Fatalf("Boot() of %s = %v, want nil", name, err)
-		}
-
-		if err := manager.CheckChoice(t.Context()); err != nil {
-			t.Errorf("CheckChoice() of %s = %v, want nil", name, err)
-		}
-	}
-}
-
 func TestTheManagerRefusesABootPinNamingAThemeThatIsGone(t *testing.T) {
 	t.Parallel()
 

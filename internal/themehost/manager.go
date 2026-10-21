@@ -150,17 +150,22 @@ func (m *Manager) Boot(ctx context.Context) error {
 	return nil
 }
 
-// CheckChoice refuses a public site not served through the theme the site chose, as when the stored one will not load.
+// CheckChoice waits for the chosen theme to serve the public site, refusing one it does not hold or that never serves.
 func (m *Manager) CheckChoice(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	chosen, err := m.active(ctx)
-	if err != nil {
+	if err != nil || chosen == "" {
 		return err
 	}
-	if serving, _ := m.holder.Serving(); serving != chosen {
+	held := m.holder.held()
+	if held == nil || held.Name() != chosen {
 		return fmt.Errorf("themehost: the site chose the theme %s, which does not serve the public site", chosen)
+	}
+	if err := m.await(ctx, held); err != nil {
+		return fmt.Errorf("themehost: the site chose the theme %s, which did not start serving the public site: %w",
+			chosen, err)
 	}
 	return nil
 }
@@ -244,16 +249,21 @@ func (m *Manager) start(ctx context.Context, name string) (*Supervisor, error) {
 	if loaded == nil {
 		return nil, nil
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	defer context.AfterFunc(m.lifetime, cancel)()
 	supervisor := m.supervise(loaded)
-	if err := supervisor.Await(ctx); err != nil {
+	if err := m.await(ctx, supervisor); err != nil {
 		m.retire(supervisor)
 		return nil, refuseHolding("theme_start_failed", "the theme did not start", map[string]any{"name": name},
 			"themehost: %s did not start: %w", name, err)
 	}
 	return supervisor, nil
+}
+
+// await waits for a supervisor to serve, ending the wait when ctx ends or the manager closes.
+func (m *Manager) await(ctx context.Context, supervisor *Supervisor) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(m.lifetime, cancel)()
+	return supervisor.Await(ctx)
 }
 
 // supervise returns a supervisor already running the theme.

@@ -19,6 +19,15 @@ import (
 func managerRunning(t *testing.T, stub string, tune func(*themehost.SupervisorConfig)) *themehost.Manager {
 	t.Helper()
 
+	return managerRunningOver(t, newSettings(), stub, tune)
+}
+
+// managerRunningOver returns a manager over settings and a themes directory holding aurora running the named stub.
+func managerRunningOver(
+	t *testing.T, settings themehost.Settings, stub string, tune func(*themehost.SupervisorConfig),
+) *themehost.Manager {
+	t.Helper()
+
 	node := nodeBin(t)
 	themesDir := t.TempDir()
 	plantStub(t, themesDir, "aurora", stub)
@@ -33,7 +42,7 @@ func managerRunning(t *testing.T, stub string, tune func(*themehost.SupervisorCo
 	}
 	manager := themehost.NewManager(themehost.ManagerConfig{
 		Library:     themehost.NewLibrary(themesDir),
-		Settings:    newSettings(),
+		Settings:    settings,
 		Supervision: supervision,
 	})
 	t.Cleanup(manager.Close)
