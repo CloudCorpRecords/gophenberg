@@ -31,6 +31,7 @@ var ErrNoFile = errors.New("sqlite: the database file does not exist")
 // Settings are the values every connection of the site's SQLite handle runs with.
 type Settings struct {
 	BusyTimeout      time.Duration
+	BusyPoll         time.Duration
 	CacheSize        int
 	MaxConns         int
 	Synchronous      dbsqlite.Synchronous
@@ -48,6 +49,10 @@ func SettingsFrom(env gonsole.Env) (Settings, error) {
 	if err != nil {
 		return Settings{}, err
 	}
+	busyPoll, err := busyPollFrom(env, busyTimeout)
+	if err != nil {
+		return Settings{}, err
+	}
 	cacheSize, err := env.Count("SQLITE_CACHE_SIZE", 2000, gonsole.AtMost(math.MaxInt32))
 	if err != nil {
 		return Settings{}, err
@@ -61,9 +66,22 @@ func SettingsFrom(env gonsole.Env) (Settings, error) {
 		return Settings{}, err
 	}
 	return Settings{
-		BusyTimeout: busyTimeout, CacheSize: cacheSize, MaxConns: maxConns,
+		BusyTimeout: busyTimeout, BusyPoll: busyPoll, CacheSize: cacheSize, MaxConns: maxConns,
 		Synchronous: synchronous, JournalSizeLimit: journalSizeLimit,
 	}, nil
+}
+
+// busyPollFrom reads how often a waiting connection tries a lock again, up to busyTimeout, which caps the 10ms default.
+func busyPollFrom(env gonsole.Env, busyTimeout time.Duration) (time.Duration, error) {
+	busyPoll, err := env.Duration("SQLITE_BUSY_POLL", min(10*time.Millisecond, busyTimeout), gonsole.WholeMilliseconds())
+	if err != nil {
+		return 0, err
+	}
+	if busyPoll > busyTimeout {
+		return 0, fmt.Errorf("%s: must stand at or below the %v of %s, got %q",
+			env.Key("SQLITE_BUSY_POLL"), busyTimeout, env.Key("SQLITE_BUSY_TIMEOUT"), env.Value("SQLITE_BUSY_POLL"))
+	}
+	return busyPoll, nil
 }
 
 // parseSynchronous reads full or normal, in any case, as the Synchronous it names.
@@ -89,7 +107,7 @@ func parseJournalSizeLimit(value string) (*int64, error) {
 // Options returns the dbkit options of s with every Go function of the site registered.
 func (s Settings) Options() dbsqlite.Options {
 	return dbsqlite.Options{
-		BusyTimeout: s.BusyTimeout, CacheSize: s.CacheSize, MaxConns: s.MaxConns,
+		BusyTimeout: s.BusyTimeout, BusyPoll: s.BusyPoll, CacheSize: s.CacheSize, MaxConns: s.MaxConns,
 		Synchronous: s.Synchronous, JournalSizeLimit: s.JournalSizeLimit, Functions: functions,
 	}
 }

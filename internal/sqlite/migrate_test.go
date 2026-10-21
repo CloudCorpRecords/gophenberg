@@ -200,7 +200,7 @@ func TestMigrateReportsAFileAnotherWriterHoldsAsBusy(t *testing.T) {
 		t.Fatalf("BEGIN IMMEDIATE error = %v, want nil", err)
 	}
 	impatient := testSettings()
-	impatient.BusyTimeout = time.Millisecond
+	impatient.BusyTimeout, impatient.BusyPoll = time.Millisecond, time.Millisecond
 	other := open(t, "sqlite:"+mainFile(t, db), impatient)
 
 	err = sqlite.Migrate(t.Context(), other, testMigrate)

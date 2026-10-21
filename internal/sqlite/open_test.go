@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +22,22 @@ import (
 	"github.com/gopherium/gophenberg/internal/sqlite"
 )
 
-// testSettings returns the settings a test handle opens with, four connections and a five second busy timeout.
+const (
+	// heldTimeout is the busy timeout of a handle whose write waits behind a lock that is never let go.
+	heldTimeout = 300 * time.Millisecond
+	// slowPoll is a busy poll much longer than letGoAfter, so the next try comes well after the lock is free.
+	slowPoll = time.Second
+	// letGoAfter is how long another connection holds the write lock before it lets go.
+	letGoAfter = 300 * time.Millisecond
+	// waitMargin is how much longer than the wanted time a wait may take on a busy machine.
+	waitMargin = 2 * time.Second
+)
+
+// testSettings returns the settings a test handle opens with: four connections and a 5s busy timeout tried every 10ms.
 func testSettings() sqlite.Settings {
 	return sqlite.Settings{
-		BusyTimeout: 5 * time.Second, CacheSize: 2048, MaxConns: 4, Synchronous: dbsqlite.SynchronousFull,
+		BusyTimeout: 5 * time.Second, BusyPoll: 10 * time.Millisecond, CacheSize: 2048, MaxConns: 4,
+		Synchronous: dbsqlite.SynchronousFull,
 	}
 }
 
@@ -85,7 +98,10 @@ func TestSettingsFallBackToTheDocumentedDefaults(t *testing.T) {
 	}
 
 	got.MaxConns = 0
-	want := sqlite.Settings{BusyTimeout: 5 * time.Second, CacheSize: 2000, Synchronous: dbsqlite.SynchronousFull}
+	want := sqlite.Settings{
+		BusyTimeout: 5 * time.Second, BusyPoll: 10 * time.Millisecond, CacheSize: 2000,
+		Synchronous: dbsqlite.SynchronousFull,
+	}
 	if got != want {
 		t.Errorf("SettingsFrom() = %+v, want %+v", got, want)
 	}
@@ -97,6 +113,7 @@ func TestSettingsReadEveryValueFromTheEnvironment(t *testing.T) {
 	got, err := sqlite.SettingsFrom(environment(map[string]string{
 		"GOPHENBERG_DATABASE_MAX_CONNS":        "3",
 		"GOPHENBERG_SQLITE_BUSY_TIMEOUT":       "1500ms",
+		"GOPHENBERG_SQLITE_BUSY_POLL":          "25ms",
 		"GOPHENBERG_SQLITE_CACHE_SIZE":         "4096",
 		"GOPHENBERG_SQLITE_SYNCHRONOUS":        "normal",
 		"GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT": "3145728",
@@ -110,7 +127,8 @@ func TestSettingsReadEveryValueFromTheEnvironment(t *testing.T) {
 	}
 	got.JournalSizeLimit = nil
 	want := sqlite.Settings{
-		BusyTimeout: 1500 * time.Millisecond, CacheSize: 4096, MaxConns: 3, Synchronous: dbsqlite.SynchronousNormal,
+		BusyTimeout: 1500 * time.Millisecond, BusyPoll: 25 * time.Millisecond, CacheSize: 4096, MaxConns: 3,
+		Synchronous: dbsqlite.SynchronousNormal,
 	}
 	if got != want {
 		t.Errorf("SettingsFrom() = %+v, want %+v", got, want)
@@ -122,6 +140,7 @@ func TestSettingsTakeTheEdgeValues(t *testing.T) {
 
 	got, err := sqlite.SettingsFrom(environment(map[string]string{
 		"GOPHENBERG_SQLITE_BUSY_TIMEOUT":       "596h31m23.647s",
+		"GOPHENBERG_SQLITE_BUSY_POLL":          "596h31m23.647s",
 		"GOPHENBERG_SQLITE_CACHE_SIZE":         "2147483647",
 		"GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT": "1",
 	}))
@@ -135,10 +154,52 @@ func TestSettingsTakeTheEdgeValues(t *testing.T) {
 	got.JournalSizeLimit = nil
 	got.MaxConns = 0
 	want := sqlite.Settings{
-		BusyTimeout: math.MaxInt32 * time.Millisecond, CacheSize: math.MaxInt32, Synchronous: dbsqlite.SynchronousFull,
+		BusyTimeout: math.MaxInt32 * time.Millisecond, BusyPoll: math.MaxInt32 * time.Millisecond,
+		CacheSize: math.MaxInt32, Synchronous: dbsqlite.SynchronousFull,
 	}
 	if got != want {
 		t.Errorf("SettingsFrom() = %+v, want %+v", got, want)
+	}
+}
+
+func TestSettingsTakeABusyPollFromOneMillisecondUpToTheBusyTimeout(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want time.Duration
+	}{
+		{"1ms", map[string]string{"GOPHENBERG_SQLITE_BUSY_POLL": "1ms"}, time.Millisecond},
+		{"as long as the default busy timeout", map[string]string{"GOPHENBERG_SQLITE_BUSY_POLL": "5s"}, 5 * time.Second},
+		{"as long as a busy timeout set to 1500ms", map[string]string{
+			"GOPHENBERG_SQLITE_BUSY_TIMEOUT": "1500ms", "GOPHENBERG_SQLITE_BUSY_POLL": "1500ms",
+		}, 1500 * time.Millisecond},
+		{"unset under a busy timeout of 4ms", map[string]string{"GOPHENBERG_SQLITE_BUSY_TIMEOUT": "4ms"},
+			4 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := sqlite.SettingsFrom(environment(tc.env))
+
+			if err != nil || got.BusyPoll != tc.want {
+				t.Errorf("SettingsFrom(%v).BusyPoll = %v with error %v, want %v", tc.env, got.BusyPoll, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSettingsRefuseABusyPollAboveTheBusyTimeoutNamingBoth(t *testing.T) {
+	t.Parallel()
+
+	_, err := sqlite.SettingsFrom(environment(map[string]string{
+		"GOPHENBERG_SQLITE_BUSY_TIMEOUT": "1s", "GOPHENBERG_SQLITE_BUSY_POLL": "1001ms",
+	}))
+
+	want := `GOPHENBERG_SQLITE_BUSY_POLL: must stand at or below the 1s of GOPHENBERG_SQLITE_BUSY_TIMEOUT, got "1001ms"`
+	if err == nil || err.Error() != want {
+		t.Errorf("SettingsFrom() error = %v, want %q", err, want)
 	}
 }
 
@@ -166,6 +227,10 @@ func TestSettingsRefuseABadValueByItsName(t *testing.T) {
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "0s"},
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "1500us"},
 		{"GOPHENBERG_SQLITE_BUSY_TIMEOUT", "596h31m23.648s"},
+		{"GOPHENBERG_SQLITE_BUSY_POLL", "0s"},
+		{"GOPHENBERG_SQLITE_BUSY_POLL", "-10ms"},
+		{"GOPHENBERG_SQLITE_BUSY_POLL", "1500us"},
+		{"GOPHENBERG_SQLITE_BUSY_POLL", "5001ms"},
 		{"GOPHENBERG_SQLITE_CACHE_SIZE", "0"},
 		{"GOPHENBERG_SQLITE_CACHE_SIZE", "2147483648"},
 		{"GOPHENBERG_SQLITE_SYNCHRONOUS", "off"},
@@ -174,9 +239,35 @@ func TestSettingsRefuseABadValueByItsName(t *testing.T) {
 		{"GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT", "9223372036854775808"},
 	} {
 		_, err := sqlite.SettingsFrom(environment(map[string]string{bad.name: bad.value}))
-		if err == nil || !strings.Contains(err.Error(), bad.name) {
-			t.Errorf("SettingsFrom() with %s=%s error = %v, want one naming the setting", bad.name, bad.value, err)
+		if err == nil || !strings.Contains(err.Error(), bad.name) ||
+			!strings.Contains(err.Error(), strconv.Quote(bad.value)) {
+			t.Errorf("SettingsFrom() with %s=%s error = %v, want one naming the setting and quoting the value",
+				bad.name, bad.value, err)
 		}
+	}
+}
+
+func TestSettingsHandDbkitEachValueAsSet(t *testing.T) {
+	t.Parallel()
+
+	limit := int64(3145728)
+	settings := sqlite.Settings{
+		BusyTimeout: 1234 * time.Millisecond, BusyPoll: 25 * time.Millisecond, CacheSize: 3000, MaxConns: 3,
+		Synchronous: dbsqlite.SynchronousNormal, JournalSizeLimit: &limit,
+	}
+
+	got := settings.Options()
+
+	if got.Functions == nil {
+		t.Errorf("Options().Functions = nil, want the site's functions")
+	}
+	got.Functions = nil
+	want := dbsqlite.Options{
+		BusyTimeout: 1234 * time.Millisecond, BusyPoll: 25 * time.Millisecond, CacheSize: 3000, MaxConns: 3,
+		Synchronous: dbsqlite.SynchronousNormal, JournalSizeLimit: &limit,
+	}
+	if got != want {
+		t.Errorf("Options() = %+v, want %+v", got, want)
 	}
 }
 
@@ -186,7 +277,7 @@ func TestOpenRunsEveryFreshConnectionUnderTheSettingsAndTheRules(t *testing.T) {
 	address, _ := emptyFile(t)
 	limit := int64(3145728)
 	settings := sqlite.Settings{
-		BusyTimeout: 1234 * time.Millisecond, CacheSize: 3000, MaxConns: 3,
+		BusyTimeout: 1234 * time.Millisecond, BusyPoll: 10 * time.Millisecond, CacheSize: 3000, MaxConns: 3,
 		Synchronous: dbsqlite.SynchronousNormal, JournalSizeLimit: &limit,
 	}
 
@@ -194,7 +285,7 @@ func TestOpenRunsEveryFreshConnectionUnderTheSettingsAndTheRules(t *testing.T) {
 
 	conns := fullPool(t, db, settings.MaxConns)
 	for pragma, want := range map[string]string{
-		"busy_timeout": "1234", "cache_size": "-3000", "synchronous": "1", "journal_size_limit": "3145728",
+		"cache_size": "-3000", "synchronous": "1", "journal_size_limit": "3145728",
 		"foreign_keys": "1", "journal_mode": "wal", "temp_store": "2",
 	} {
 		for i, conn := range conns {
@@ -209,6 +300,65 @@ func TestOpenRunsEveryFreshConnectionUnderTheSettingsAndTheRules(t *testing.T) {
 	}
 	if got := db.Stats().MaxOpenConnections; got != settings.MaxConns {
 		t.Errorf("Stats().MaxOpenConnections = %d, want %d", got, settings.MaxConns)
+	}
+}
+
+// holderAndWaiter returns two connections of a handle on a new file under settings, the first holding the write lock.
+func holderAndWaiter(t *testing.T, settings sqlite.Settings) (holder, waiter *sql.Conn) {
+	t.Helper()
+	address, _ := emptyFile(t)
+	conns := fullPool(t, open(t, address, settings), 2)
+	if _, err := conns[0].ExecContext(t.Context(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatalf("BEGIN IMMEDIATE error = %v, want nil", err)
+	}
+	return conns[0], conns[1]
+}
+
+func TestOpenWaitsTheBusyTimeoutForALockAnotherConnectionHolds(t *testing.T) {
+	t.Parallel()
+
+	settings := testSettings()
+	settings.BusyTimeout = heldTimeout
+	_, waiter := holderAndWaiter(t, settings)
+
+	began := time.Now()
+	_, err := waiter.ExecContext(t.Context(), "BEGIN IMMEDIATE")
+	waited := time.Since(began)
+
+	if !errors.Is(dbsqlite.Classify(err), dbkit.ErrBusy) {
+		t.Errorf("BEGIN IMMEDIATE behind another writer error = %v, want dbkit.ErrBusy", err)
+	}
+	if waited < heldTimeout || waited > heldTimeout+waitMargin {
+		t.Errorf("BEGIN IMMEDIATE behind another writer answered after %v, want about the busy timeout %v",
+			waited, heldTimeout)
+	}
+}
+
+func TestOpenTriesALockAgainOnceEachBusyPoll(t *testing.T) {
+	t.Parallel()
+
+	settings := testSettings()
+	settings.BusyPoll = slowPoll
+	holder, waiter := holderAndWaiter(t, settings)
+	letGo := make(chan error, 1)
+	time.AfterFunc(letGoAfter, func() {
+		_, err := holder.ExecContext(t.Context(), "ROLLBACK")
+		letGo <- err
+	})
+
+	began := time.Now()
+	_, err := waiter.ExecContext(t.Context(), "BEGIN IMMEDIATE")
+	waited := time.Since(began)
+
+	if released := <-letGo; released != nil {
+		t.Fatalf("ROLLBACK of the other writer error = %v, want nil", released)
+	}
+	if err != nil {
+		t.Fatalf("BEGIN IMMEDIATE once the other writer let go error = %v, want nil", err)
+	}
+	if waited < slowPoll || waited > slowPoll+waitMargin {
+		t.Errorf("BEGIN IMMEDIATE behind a writer that let go after %v answered after %v, want about the busy poll %v",
+			letGoAfter, waited, slowPoll)
 	}
 }
 
