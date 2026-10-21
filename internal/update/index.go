@@ -21,11 +21,6 @@ const maxRollout = 100
 // errUnsigned refuses an index no release or standby key of the key list signed.
 var errUnsigned = errors.New("update: refused the index, no release or standby key the list names signed it")
 
-// releaseVersion is the part of a release record an index reads.
-type releaseVersion struct {
-	Version string `json:"version"`
-}
-
 // SignIndex returns the FAIR signature line of the exact bytes of an index under a release or standby key.
 func SignIndex(body []byte, key ed25519.PrivateKey) string {
 	digest, _ := signature.Digest(bytes.NewReader(body))
@@ -48,13 +43,6 @@ func (l KeyList) ReadIndex(body, sig []byte, channel string, now time.Time) (Ind
 		return Index{}, fmt.Errorf("update: refused the index of channel %q, the site asks for %q", index.Channel, channel)
 	}
 	return index, checkOffers(index.Offers)
-}
-
-// Version returns the version of the release an offer carries.
-func (o Offer) Version() string {
-	var held releaseVersion
-	_ = json.Unmarshal(o.Release, &held)
-	return held.Version
 }
 
 // signedByList reports whether one of the key list's signers signed body.

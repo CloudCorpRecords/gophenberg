@@ -15,8 +15,21 @@ import (
 	"github.com/gopherium/gophenberg/sdk"
 )
 
+// Main runs the gophenberg command line over the arguments and the standard streams of the process, answering its code.
+func Main(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, error)) int {
+	exits := &exitCodes{}
+	return exits.of(gonsole.Main(commandLine(getenv, plugins, exits, version.Stamp())))
+}
+
 // Program returns the gophenberg command line over getenv and the compiled plugins.
 func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, error)) gonsole.Program {
+	return commandLine(getenv, plugins, &exitCodes{}, version.Stamp())
+}
+
+// commandLine returns the command line of a binary of the build stamp given, keeping in exits the code a run asks for.
+func commandLine(
+	getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, error), exits *exitCodes, stamp string,
+) gonsole.Program {
 	roles := goncierge.New()
 	accountCommands := accountConfig(roles, getenv)
 	composed := &sitePool{}
@@ -28,20 +41,20 @@ func Program(getenv func(string) string, plugins func(sdk.Deps) ([]sdk.Plugin, e
 		Env:        settingsEnv(getenv),
 		Database:   "DATABASE_URL",
 		Open:       handleOpener(getenv),
-		Serve:      postgresOnly(getenv, "serve", serve(plugins)),
+		Serve:      postgresOnly(getenv, "serve", exits.keep(serve(plugins))),
 		Validate:   validate(accountCommands),
 		Migrations: migrations(getenv),
 		Seed:       postgresOnly(getenv, "seed", composed.seed),
-		Commands:   coreCommands(accountCommands),
+		Commands:   coreCommands(accountCommands, updateCommands(getenv, exits, stamp)...),
 		Plugins:    loadPlugins(plugins, roles, composed),
 		Authorize:  accounts.Authorize(accountCommands),
 		Record:     accounts.Record(accountCommands),
 	}
 }
 
-// coreCommands returns the commands the core offers beside the plugins' own.
-func coreCommands(cfg accounts.Config) []gonsole.Command {
-	return append(accounts.Commands(cfg), accounts.Records(cfg), aboutCommand(), updateCheckCommand())
+// coreCommands returns the commands the core offers beside the plugins' own, the update commands given last.
+func coreCommands(cfg accounts.Config, updates ...gonsole.Command) []gonsole.Command {
+	return append(append(accounts.Commands(cfg), accounts.Records(cfg), aboutCommand()), updates...)
 }
 
 // serve returns the command that serves the site over the compiled plugins.

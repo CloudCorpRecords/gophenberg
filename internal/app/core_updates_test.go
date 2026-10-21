@@ -1,0 +1,350 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package app
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cucumber/godog"
+	"github.com/gopherium/framework/gonsole/testkit"
+
+	"github.com/gopherium/gophenberg/internal/updater"
+	"github.com/gopherium/gophenberg/internal/version"
+)
+
+// coreUpdatesFeature is the feature the updates of the core from the command line answer to.
+const coreUpdatesFeature = "../../test/features/features/core-updates.feature"
+
+// installRootSetting is the setting naming the install root a server install keeps its builds in.
+const installRootSetting = "GOPHENBERG_INSTALL_ROOT"
+
+// siteStartLimit is how long a scenario lets the site serve before it stops it, whatever the boot guard did.
+const siteStartLimit = time.Minute
+
+// switchBackup is the backup an update that raised the minimum version took before its switch from 0.18.0.
+const switchBackup = "backups/0.18.0-20261020T120000Z.dump"
+
+// officialStamp is the build stamp of a binary the release workflow built, the only one that updates itself.
+const officialStamp = "official"
+
+// initializeCoreUpdates binds the steps of the core update scenarios to s.
+func initializeCoreUpdates(sc *godog.ScenarioContext, s *operatorScenario) {
+	sc.Given(`^an install root running this version as a custom build$`, s.runCustomBuild)
+	sc.Given(`^an install root running this version as an official build$`, s.runOfficialBuild)
+	sc.Given(`^an official build with no install root, like the Docker image$`, s.runOfficialWithoutRoot)
+	sc.Given(`^an update site offering version "([^"]*)" that keeps the minimum version of this binary$`,
+		s.offerUpdateKeepingMinimum)
+	sc.Given(`^the archive changed after it was released$`, s.changeArchive)
+	sc.Given(`^only a stranger signed the archive$`, s.signArchiveAsStranger)
+	sc.Given(`^version "([^"]*)" failed its start check after an update and went back$`, s.refuseVersion)
+	sc.Given(`^an install root where an update switched from (?:this version|"([^"]*)") to `+
+		`(?:this version|"([^"]*)")$`, s.switchBetween)
+	sc.Given(`^(?:this version|the new build) already tried to start (\d+) times$`, s.triedToStart)
+	sc.Given(`^the update raised the minimum version, with a backup taken before the switch$`, s.raiseMinimum)
+	sc.Given(`^the new build passed its check$`, s.passCheck)
+	sc.When(`^the site starts$`, s.startSite)
+	sc.When(`^the service manager runs "([^"]*)" with (MONITOR_[A-Z_]+) set to "([^"]*)"$`, s.runAfterFailure)
+	sc.Then(`^the command asks for a restart to start "([^"]*)"$`, s.asksForRestart)
+	sc.Then(`^the (current|previous) build is (?:still )?(?:this version|"([^"]*)")$`, s.linksTo)
+	sc.Then(`^the install root holds no download and no build of "([^"]*)"$`, s.holdsNoBuildOf)
+	sc.Then(`^the install root keeps a database backup named after this version$`, s.keepsBackup)
+	sc.Then(`^the error names the backup taken before the switch$`, s.namesBackup)
+	sc.Then(`^the update status says the update to this version is kept$`, s.statusKeepsUpdate)
+	sc.Then(`^the update status lists (?:this version|version "([^"]*)") as refused$`, s.statusRefuses)
+	sc.Then(`^the update status lists no refused version$`, s.statusRefusesNone)
+	sc.Then(`^the update status names the backup taken before the switch$`, s.statusNamesBackup)
+}
+
+// runOfficialBuild runs this version as an official build from a new install root, backing up with a stand-in pg_dump.
+func (s *operatorScenario) runOfficialBuild() error {
+	s.stamp = officialStamp
+	s.env["GOPHENBERG_PG_DUMP_BIN"] = standInDump(s.t)
+	return s.runFromInstallRoot()
+}
+
+// runOfficialWithoutRoot runs this version as an official build with no install root.
+func (s *operatorScenario) runOfficialWithoutRoot() {
+	s.stamp = officialStamp
+}
+
+// standInDump writes a pg_dump stand-in that names a PostgreSQL newer than any server and dumps a few bytes.
+func standInDump(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "pg_dump")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'pg_dump (PostgreSQL) 99.0'\n  exit 0\nfi\n" +
+		"printf 'a dump of the site database'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing the pg_dump stand-in: %v", err)
+	}
+	return bin
+}
+
+// refuseVersion records that offered failed its start check after an update from this version, which took it back.
+func (s *operatorScenario) refuseVersion(offered string) error {
+	return editState(s.env[installRootSetting], func(state *updater.State) {
+		*state = updater.State{
+			Step: updater.StepRolledBack, From: version.Version(), To: offered, Attempts: 1, Refused: []string{offered},
+		}
+	})
+}
+
+// passCheck records that the build the update switched to passed its start check.
+func (s *operatorScenario) passCheck() error {
+	return editState(s.env[installRootSetting], func(state *updater.State) { state.Step = updater.StepCommitted })
+}
+
+// asksForRestart fails unless the command asked for a restart to start the version given.
+func (s *operatorScenario) asksForRestart(release string) error {
+	return s.errorSays("restart Gophenberg to start " + release)
+}
+
+// updateStatus returns the document update:status -json answers, leaving the result of the step before it alone.
+func (s *operatorScenario) updateStatus() (updater.Status, error) {
+	answered := s.answer("", "update:status", "-json")
+	var status updater.Status
+	if err := json.Unmarshal([]byte(answered.Stdout), &status); err != nil {
+		return status, fmt.Errorf("update:status -json answered %q and %q, no JSON document: %w", answered.Stdout,
+			answered.Stderr, err)
+	}
+	return status, nil
+}
+
+// statusKeepsUpdate fails unless update:status says the update to this version passed its start check.
+func (s *operatorScenario) statusKeepsUpdate() error {
+	status, err := s.updateStatus()
+	if err != nil {
+		return err
+	}
+	if status.Update.Step != updater.StepCommitted || status.Update.To != version.Version() {
+		return fmt.Errorf("update:status says %+v, want the update to %s kept", status.Update, version.Version())
+	}
+	return nil
+}
+
+// statusRefuses fails unless update:status lists the version given, or this version for none, as refused.
+func (s *operatorScenario) statusRefuses(release string) error {
+	release = cmp.Or(release, version.Version())
+	status, err := s.updateStatus()
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(status.Update.Refused, release) {
+		return fmt.Errorf("update:status refuses %q, want %s among them", status.Update.Refused, release)
+	}
+	return nil
+}
+
+// statusRefusesNone fails unless update:status lists no refused version.
+func (s *operatorScenario) statusRefusesNone() error {
+	status, err := s.updateStatus()
+	if err != nil {
+		return err
+	}
+	if len(status.Update.Refused) != 0 {
+		return fmt.Errorf("update:status refuses %q, want none", status.Update.Refused)
+	}
+	return nil
+}
+
+// statusNamesBackup fails unless what update:status prints for people shows how to restore the backup by its full path.
+func (s *operatorScenario) statusNamesBackup() error {
+	want := "to bring the site back: restore the backup taken before the update, " +
+		filepath.Join(s.env[installRootSetting], switchBackup)
+	answered := s.answer("", "update:status")
+	if !strings.Contains(answered.Stdout, want) {
+		return fmt.Errorf("update:status printed %q and %q, want it to carry %q", answered.Stdout, answered.Stderr,
+			want)
+	}
+	return nil
+}
+
+// switchedInstall makes root an install root where an update switched from the build from to the build to.
+func switchedInstall(root, from, to string) error {
+	for _, name := range []string{from, to} {
+		if err := placeBuild(root, name); err != nil {
+			return err
+		}
+	}
+	layout := updater.Layout{Root: root}
+	return errors.Join(layout.Point(updater.Previous, from), layout.Point(updater.Current, to),
+		layout.WriteState(updater.State{Step: updater.StepSwitched, From: from, To: to}))
+}
+
+// editState rewrites the update state the install root at root holds through edit.
+func editState(root string, edit func(*updater.State)) error {
+	layout := updater.Layout{Root: root}
+	state, err := layout.ReadState()
+	if err != nil {
+		return err
+	}
+	edit(&state)
+	return layout.WriteState(state)
+}
+
+// switchBetween points the settings at a new install root switched from from to to, this version for none.
+func (s *operatorScenario) switchBetween(from, to string) error {
+	root := s.t.TempDir()
+	s.env[installRootSetting] = root
+	return switchedInstall(root, cmp.Or(from, version.Version()), cmp.Or(to, version.Version()))
+}
+
+// triedToStart records that the build the update switched to already tried to start the times given.
+func (s *operatorScenario) triedToStart(times int) error {
+	return editState(s.env[installRootSetting], func(state *updater.State) { state.Attempts = times })
+}
+
+// raiseMinimum records that the update raised the minimum version, with the backup it took before the switch.
+func (s *operatorScenario) raiseMinimum() error {
+	root := s.env[installRootSetting]
+	backup := filepath.Join(root, switchBackup)
+	if err := os.MkdirAll(filepath.Dir(backup), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(backup, []byte("a dump of the site database"), 0o600); err != nil {
+		return err
+	}
+	return editState(root, func(state *updater.State) { state.LongJump, state.Backup = true, switchBackup })
+}
+
+// startSite serves the site over the scenario's settings until the boot guard keeps the update or the start ends.
+func (s *operatorScenario) startSite() {
+	s.env["GOPHENBERG_ADDR"] = "127.0.0.1:0"
+	ctx, cancel := context.WithTimeout(s.t.Context(), siteStartLimit)
+	defer cancel()
+	exits := &exitCodes{}
+	stderr := &keptWatch{cancel: cancel}
+	var stdout strings.Builder
+	code := commandLine(testkit.Getenv(s.env), s.loaded, exits, s.stamp).Run(
+		ctx, []string{"serve"}, strings.NewReader(""), &stdout, stderr)
+	s.result = testkit.Result{Code: exits.of(code), Stdout: stdout.String(), Stderr: stderr.String()}
+}
+
+// keptWatch records what a run writes to its error stream and calls cancel once the boot guard kept the update.
+type keptWatch struct {
+	mu     sync.Mutex
+	text   strings.Builder
+	cancel context.CancelFunc
+}
+
+// Write records p and calls cancel when p says the boot guard kept the update.
+func (w *keptWatch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if strings.Contains(string(p), "kept the update after its start check") {
+		w.cancel()
+	}
+	return w.text.Write(p)
+}
+
+// String returns everything the run wrote to its error stream.
+func (w *keptWatch) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.text.String()
+}
+
+// namesBackup fails unless the error names the full path of the backup the update state names.
+func (s *operatorScenario) namesBackup() error {
+	root := s.env[installRootSetting]
+	state, err := updater.Layout{Root: root}.ReadState()
+	if err != nil || state.Backup == "" {
+		return fmt.Errorf("the update state names the backup %q (%v), want one", state.Backup, err)
+	}
+	return s.errorSays(filepath.Join(root, state.Backup))
+}
+
+// runCustomBuild runs this version from a new install root, failing unless this binary carries no build stamp.
+func (s *operatorScenario) runCustomBuild() error {
+	if version.Stamp() != "" {
+		return fmt.Errorf("this binary carries the build stamp %q, want none for a custom build", version.Stamp())
+	}
+	return s.runFromInstallRoot()
+}
+
+// runFromInstallRoot points the settings at a new install root whose current link names a build of this version.
+func (s *operatorScenario) runFromInstallRoot() error {
+	root := s.t.TempDir()
+	if err := placeBuild(root, version.Version()); err != nil {
+		return err
+	}
+	s.env[installRootSetting] = root
+	return os.Symlink(filepath.Join("versions", version.Version()), filepath.Join(root, "current"))
+}
+
+// placeBuild writes a stand-in gophenberg of the build called name into the versions folder of root.
+func placeBuild(root, name string) error {
+	folder := filepath.Join(root, "versions", name)
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(folder, "gophenberg"), []byte("#!/bin/sh\n"), 0o755)
+}
+
+// offerUpdateKeepingMinimum starts an update site offering version offered under the minimum version of this binary.
+func (s *operatorScenario) offerUpdateKeepingMinimum(offered string) {
+	s.offerRelease(offered, version.Minimum())
+}
+
+// runAfterFailure runs the command line as the rollback unit of the service manager does, with variable set to value.
+func (s *operatorScenario) runAfterFailure(line, variable, value string) {
+	s.env[variable] = value
+	s.runLine(line)
+}
+
+// linksTo fails unless the install root's link called link names the build called name, or this version for none.
+func (s *operatorScenario) linksTo(link, name string) error {
+	if name == "" {
+		name = version.Version()
+	}
+	want := filepath.Join("versions", name)
+	held, err := os.Readlink(filepath.Join(s.env[installRootSetting], link))
+	if err != nil || held != want {
+		return fmt.Errorf("the %s link names %q (%v), want %q", link, held, err, want)
+	}
+	return nil
+}
+
+// holdsNoBuildOf fails when the install root holds a download or a build folder of the version offered.
+func (s *operatorScenario) holdsNoBuildOf(offered string) error {
+	root := s.env[installRootSetting]
+	for _, path := range []string{
+		filepath.Join(root, "downloads", offered+".partial"), filepath.Join(root, "versions", offered),
+	} {
+		if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("the install root holds %s (%v), want nothing there", path, err)
+		}
+	}
+	return nil
+}
+
+// keepsBackup fails unless the install root keeps one database backup named after this version, holding bytes.
+func (s *operatorScenario) keepsBackup() error {
+	pattern := filepath.Join(s.env[installRootSetting], "backups", version.Version()+"-*.dump")
+	held, err := filepath.Glob(pattern)
+	if err != nil || len(held) != 1 {
+		return fmt.Errorf("the install root keeps the backups %q (%v), want one matching %s", held, err, pattern)
+	}
+	info, err := os.Stat(held[0])
+	if err != nil || info.Size() == 0 {
+		return fmt.Errorf("the backup %s holds no bytes (%v), want the database", held[0], err)
+	}
+	return nil
+}
+
+func TestCoreUpdates(t *testing.T) {
+	t.Parallel()
+
+	runOperatorFeature(t, coreUpdatesFeature, postgresOperators())
+}

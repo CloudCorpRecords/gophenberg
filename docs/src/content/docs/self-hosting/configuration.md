@@ -81,6 +81,15 @@ so it takes the default.
 | `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary |
 | `GOPHENBERG_UPDATE_TIMEOUT` | No | `30s` | How long a check has to fetch each file |
 | `GOPHENBERG_UPDATES_SCREEN_CHECK_AGE` | No | `1m` | How long after one check the admin waits before it runs another when asked |
+| `GOPHENBERG_INSTALL_ROOT` | No | | The install root of a server install, an absolute path that holds each build in `versions/` beside a `current` link naming the one that runs. `update:apply` updates only an install that sets it. Empty, as in the Docker image, means the site only tells you about updates, see [updating a server install](/self-hosting/updates-and-backups/#updating-a-server-install) |
+| `GOPHENBERG_UPDATE_DOWNLOAD_CAP_MB` | No | `200` | The most megabytes an update downloads for the release archive |
+| `GOPHENBERG_UPDATE_DOWNLOAD_TIMEOUT` | No | `10m` | How long an update has to download the release archive |
+| `GOPHENBERG_UPDATE_DISK_MARGIN_MB` | No | `64` | How many megabytes of free disk an update asks for beyond `GOPHENBERG_UPDATE_DOWNLOAD_CAP_MB` and, when it takes a backup, the size of the database, so the site still has room once the update is done. `0` asks for none |
+| `GOPHENBERG_UPDATE_BACKUPS_KEEP` | No | `3` | How many database backups the `backups` folder of the install root keeps |
+| `GOPHENBERG_PG_DUMP_BIN` | No | `pg_dump` | The `pg_dump` an update backs up the database with, a name found on the path or a full path. Its major version must be at least the server's |
+| `GOPHENBERG_UPDATE_ATTEMPTS` | No | `3` | How many times the build an update switched to may try to start. The next start goes back to the build before it, or stays down when the update raised the minimum version |
+| `GOPHENBERG_UPDATE_VERIFY_TIMEOUT` | No | `1m` | How long the first start of a new build has to check itself: the server listens, then `/admin/` and `/api/locale` answer 200 and `/` answers below 500 over loopback |
+| `GOPHENBERG_UPDATE_VERSIONS_KEEP` | No | `2` | How many of the newest builds the `versions` folder keeps once a new build passes its check. The builds the `current` and `previous` links name always stay |
 | `GOPHENBERG_FEED_TITLE` | No | `Gophenberg` | The RSS channel title |
 | `GOPHENBERG_FEED_ITEMS` | No | `20` | How many posts the RSS feed carries |
 

@@ -46,7 +46,10 @@ Available commands:
   account:records       list who applied which change, the newest first
   account:role          set one account's role
  update
+  update:apply          update this server install to a newer Gophenberg, then ask for a restart
   update:check          check the update site for a newer Gophenberg and keep what it found
+  update:rollback       take back the last update, pointing current at the build before it
+  update:status         show the builds of this server install, its last update and its backups
 
 Every command is described at https://docs.gophenberg.org/self-hosting/commands/
 ```
@@ -94,6 +97,8 @@ that flag wants. Flags can go before or after the arguments.
 | `0` | The command finished, printed a help page, or ended a dry run |
 | `1` | The command ran and failed |
 | `2` | The command line was misused, such as an unknown command, a missing argument or a missing flag |
+| `75` | `update:apply` or `update:rollback` pointed `current` at another build, so restart Gophenberg to start it |
+| `76` | `serve` started a new build that failed its start check after an update, see [the boot guard](/self-hosting/updates-and-backups/#the-boot-guard) |
 
 Every error goes to standard error, on a line that starts with
 `gophenberg:`. When the command itself was found, a misuse is followed
@@ -114,14 +119,17 @@ When `GOPHENBERG_DATABASE_URL` names a SQLite file, such as
 | `account:create-admin` | Works as on PostgreSQL. It migrates the file first, then asks for the password |
 | Every other `account:` command | Works as on PostgreSQL, on the accounts and the records kept in the file |
 | A plugin command that names a capability | Checks the account in `-as`, then runs, as on PostgreSQL |
+| `update:apply` | Exits with code 1 before it opens anything |
+| `update:rollback` and `update:status` | Work as on PostgreSQL, since they never open the database |
 
-`serve` and `seed -yes` stop and name what they need:
+`serve`, `seed -yes` and `update:apply` stop and name what they need:
 
 ```text
 gophenberg: serve: content and types do not run on SQLite yet, so this command needs GOPHENBERG_DATABASE_URL to name a PostgreSQL database
 ```
 
-`seed -yes` says `seed:` in place of `serve:`.
+`seed -yes` says `seed:` in place of `serve:`, and `update:apply`
+says `update:apply:`.
 
 `seed -yes` migrates the file before it stops, `account:create-admin`
 migrates it first, and every other account command and every plugin
@@ -504,9 +512,121 @@ found for the admin, as the site's own checks do. It prints one line
 naming the newer version and this one, or saying this is the newest
 version the update site offers. With `-json` it answers one document
 holding `checked_at`, `offer`, `failed_at` and `error`. It runs the
-migrations first and installs nothing.
+migrations first. It installs nothing: on a server install,
+[`update:apply`](#updateapply) installs the update when you run it.
 
 It refuses an update site whose files the Gophenberg keys did not
 sign, a file that expired, and a file older than the last one the
 site took, and exits with code 1 naming why. See
 [how a site hears of a new version](/self-hosting/updates-and-backups/#how-a-site-hears-of-a-new-version).
+
+### update:apply
+
+```text
+gophenberg update:apply [flags]
+```
+
+Updates a server install to a newer Gophenberg, then asks you to
+restart it. It works only where `GOPHENBERG_INSTALL_ROOT` names an
+install root, see
+[updating a server install](/self-hosting/updates-and-backups/#updating-a-server-install).
+Run it with the binary that `current` names, as the user Gophenberg
+runs as. The server keeps running the old build while it works.
+
+It checks the signed key list and index again, refuses what a check
+would refuse, then downloads the archive into `downloads/`, checks its
+checksum and its signature, unpacks it into `versions/<version>/`, backs
+up the database with `pg_dump` into `backups/`, and points `previous`
+at the build that runs and `current` at the new one. It ends with this
+line on standard error and exit code 75:
+
+```text
+gophenberg: restart Gophenberg to start 1.4.1
+```
+
+- `-to <version>` takes that version of the update site, newer than
+  the one that runs, in place of the newest one offered to this site.
+  It may take a version the rollout has not reached this site yet,
+  but never one the update site holds back from every site.
+- `-retry` takes the version in `-to` again, although it failed its
+  start check after an earlier update. Without it, `update:apply`
+  never takes that version again on its own.
+- `-skip-backup` switches with no backup. For a release that raised
+  the minimum version, `update:apply` takes the backup anyway, since
+  only the backup can take the site back then.
+- `-json` answers the state the update ends at, holding `step`,
+  `from`, `to`, `attempts`, `long_jump`, `backup` and `refused`.
+
+Before it changes anything it refuses, with exit code 1 and what to
+do: a custom build, an install with no install root such as the
+Docker image, a release with no archive for this platform, a release
+that needs a newer PostgreSQL, an active theme that does not load or
+that the release does not serve, a `current` link that does not name
+the build that runs, an update that still waits for its first start,
+an install root it cannot write to, a `pg_dump` older than the
+server, and too little free disk. A second `update:apply` while one
+runs stops with `another update runs`. If a step fails, it deletes
+what it wrote and leaves `current` as it was.
+
+It needs a PostgreSQL database. It does not run the migrations, the
+new build runs them when it starts.
+
+### update:rollback
+
+```text
+gophenberg update:rollback [flags]
+```
+
+Takes back the last update. It points `current` at the build before
+the update again, adds the version it left to the refused versions,
+so `update:apply` never takes it again on its own, and ends asking for
+a restart with exit code 75. It refuses when no update switched builds
+since the last rollback, and when the update raised the minimum
+version and its new build already started, since the older build
+cannot open the database the newer one may have migrated. Then it
+prints the steps that restore the backup taken before the update
+instead. It never opens the database, so it works when the database is
+what broke.
+
+`-after-failure` is the form the rollback unit of the service manager
+runs after a failed start. It reads `MONITOR_SERVICE_RESULT` and
+`MONITOR_EXIT_STATUS`, which systemd hands that unit, and takes the
+update back only when the state says the update switched builds and
+systemd says the starts hit the start limit, `start-limit-hit`, or the
+new build exited with code 76. It then exits with code 0, so the unit
+starts the service again. Otherwise it changes nothing and exits with
+code 1. It takes back each update once, so two failing builds never
+take turns. An update that raised the minimum version and already
+started stays down: it writes that the update failed, so
+`update:status` shows the steps that restore the backup, prints them
+and exits with code 1.
+
+`-json` answers the state the rollback ends at, as `update:apply`
+does.
+
+### update:status
+
+```text
+gophenberg update:status [flags]
+```
+
+Shows the server install: the install root, the builds `current` and
+`previous` name, where the last update stands, the refused versions
+and the backups kept, the newest first. After an update that raised
+the minimum version and failed its start check, it also prints the
+steps that restore the backup. For example:
+
+```text
+install root: /opt/gophenberg
+current build: 1.4.1
+previous build: 1.4.0
+last update: from 1.4.0 to 1.4.1, kept, since the new build passed its start check
+refused versions: none
+backups kept: /opt/gophenberg/backups/1.4.0-20261020T120000Z.dump
+```
+
+With `-json` it answers one document holding `root`, `current`,
+`previous`, `update`, `restore` and `backups`. `update` holds the same
+fields as the `-json` answer of `update:apply`. On an install with no
+install root it says that the install updates by hand. It never opens
+the database.

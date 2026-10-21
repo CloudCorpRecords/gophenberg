@@ -11,9 +11,7 @@ import (
 	"time"
 
 	"github.com/gopherium/framework/gonsole"
-	"github.com/gopherium/framework/pluginkit"
 
-	"github.com/gopherium/gophenberg/internal/definitions"
 	"github.com/gopherium/gophenberg/internal/mediahost"
 	"github.com/gopherium/gophenberg/internal/server"
 )
@@ -58,7 +56,7 @@ func TestServerConfigCarriesTheListSettingsTheEnvironmentNamed(t *testing.T) {
 
 	settings := timedConfig()
 
-	held := serverConfig(settings, site{}, pluginkit.NewHost(), definitions.Walked{}, testLogger(io.Discard))
+	held := configOver(settings, site{})
 
 	if !reflect.DeepEqual(held.Lists, settings.lists) {
 		t.Errorf("Lists = %+v, want %+v", held.Lists, settings.lists)

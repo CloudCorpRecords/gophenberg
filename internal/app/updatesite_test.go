@@ -3,14 +3,19 @@
 package app
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -20,13 +25,15 @@ import (
 	"github.com/gopherium/gophenberg/internal/update"
 )
 
-// updateSite is a loopback update site whose key list and stable index the test signs with keys it made.
+// updateSite is a loopback update site whose key list, stable index and archive the test signs with keys it made.
 type updateSite struct {
 	t        *testing.T
 	roots    map[string]*ecdsa.PrivateKey
 	release  ed25519.PrivateKey
 	stranger ed25519.PrivateKey
 	offered  string
+	minimum  string
+	archive  update.Artifact
 	mu       sync.Mutex
 	files    map[string][]byte
 	address  string
@@ -49,6 +56,63 @@ func newUpdateSite(t *testing.T) *updateSite {
 	t.Cleanup(server.Close)
 	site.address = server.URL
 	return site
+}
+
+// newOfferingSite starts an update site whose key list both roots signed and whose index offers offered under minimum.
+func newOfferingSite(t *testing.T, offered, minimum string) *updateSite {
+	t.Helper()
+	site := newUpdateSite(t)
+	site.offered, site.minimum = offered, minimum
+	site.publishArchive(site.release)
+	site.publishKeyList("the first root", "the second root")
+	site.publishIndex(site.release, unchanged)
+	return site
+}
+
+// archivePath is where the site serves the archive of the version it offers for this platform.
+func (s *updateSite) archivePath() string {
+	return "archives/gophenberg_" + s.offered + "_" + update.Platform() + ".tar.gz"
+}
+
+// publishArchive serves the official archive of the version the site offers, its record entry signed by key.
+func (s *updateSite) publishArchive(key ed25519.PrivateKey) {
+	s.t.Helper()
+	body := releaseArchive(s.t, s.offered)
+	s.put(s.archivePath(), body)
+	sum, _ := signature.Checksum(bytes.NewReader(body))
+	digest, _ := signature.Digest(bytes.NewReader(body))
+	s.archive = update.Artifact{
+		ID: update.Platform(), Platform: runtime.GOOS + "/" + runtime.GOARCH, ContentType: "application/gzip",
+		URL: s.address + "/" + s.archivePath(), Checksum: sum, Signature: signature.Sign(key, digest),
+	}
+}
+
+// releaseArchive returns the tar.gz of the official build of offered, whose stand-in gophenberg names it in about.
+func releaseArchive(t *testing.T, offered string) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	zipped := gzip.NewWriter(&body)
+	packed := tar.NewWriter(zipped)
+	for _, file := range []struct {
+		name string
+		mode int64
+		body string
+	}{
+		{"gophenberg", 0o755, fmt.Sprintf("#!/bin/sh\necho '{\"version\":%q,\"stamp\":\"official\"}'\n", offered)},
+		{"release.json", 0o644, fmt.Sprintf(`{"version":%q}`, offered)},
+	} {
+		header := &tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.body)), Typeflag: tar.TypeReg}
+		if err := packed.WriteHeader(header); err != nil {
+			t.Fatalf("packing %s: %v", file.name, err)
+		}
+		if _, err := packed.Write([]byte(file.body)); err != nil {
+			t.Fatalf("packing %s: %v", file.name, err)
+		}
+	}
+	if err := errors.Join(packed.Close(), zipped.Close()); err != nil {
+		t.Fatalf("closing the archive: %v", err)
+	}
+	return body.Bytes()
 }
 
 // newEd25519 returns a fresh Ed25519 signing key.
@@ -120,9 +184,11 @@ func (s *updateSite) publishIndex(key ed25519.PrivateKey, edit func(*update.Inde
 	index := update.Index{
 		Schema: 1, Channel: "stable", Serial: 2, Expires: time.Now().AddDate(0, 0, 30).UTC().Truncate(time.Second),
 		Offers: []update.Offer{{
-			Rollout: 100, MinimumVersion: s.offered, PostgreSQL: 15, Kits: []string{"0.9.0"},
-			Notes:   "https://example.com/releases/" + s.offered,
-			Release: json.RawMessage(fmt.Sprintf(`{"version":%q,"artifacts":{"package":[]}}`, s.offered)),
+			Rollout: 100, MinimumVersion: s.minimum, PostgreSQL: 15, Kits: []string{"0.9.0"},
+			Notes: "https://example.com/releases/" + s.offered,
+			Release: s.marshal(update.Release{
+				Version: s.offered, Artifacts: update.Artifacts{Package: []update.Artifact{s.archive}},
+			}),
 		}},
 	}
 	edit(&index)

@@ -40,6 +40,20 @@ func TestAThemeOnEitherServedKitIsAccepted(t *testing.T) {
 	}
 }
 
+func TestKitsServeReadsTheKitsAnotherReleaseServes(t *testing.T) {
+	t.Parallel()
+
+	kits := []string{"latest", "0.15.4", "0.16.0"}
+
+	for declared, want := range map[string]bool{
+		"0.15.1": true, "0.15.4": true, "0.16.0": true, "0.15.5": false, "0.14.0": false, "latest": false,
+	} {
+		if served := themehost.KitsServe(kits, declared); served != want {
+			t.Errorf("KitsServe(%v, %q) = %v, want %v", kits, declared, served, want)
+		}
+	}
+}
+
 func TestServedKitsCannotBeChangedByACaller(t *testing.T) {
 	t.Parallel()
 

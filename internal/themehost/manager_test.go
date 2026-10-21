@@ -133,9 +133,10 @@ func TestTheManagerReportsSettingsFailures(t *testing.T) {
 		"Install": func() error {
 			return manager.Install(t.Context(), "riverbed", bytes.NewReader(archive), int64(len(archive)))
 		},
-		"Deactivate": func() error { return manager.Deactivate(t.Context()) },
-		"Rollback":   func() error { _, err := manager.Rollback(t.Context()); return err },
-		"Previous":   func() error { _, _, err := manager.Previous(t.Context()); return err },
+		"Deactivate":  func() error { return manager.Deactivate(t.Context()) },
+		"Rollback":    func() error { _, err := manager.Rollback(t.Context()); return err },
+		"Previous":    func() error { _, _, err := manager.Previous(t.Context()); return err },
+		"CheckChoice": func() error { return manager.CheckChoice(t.Context()) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

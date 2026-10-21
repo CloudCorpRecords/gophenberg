@@ -23,6 +23,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/definitions"
 	"github.com/gopherium/gophenberg/internal/mediahost"
 	"github.com/gopherium/gophenberg/internal/server"
+	"github.com/gopherium/gophenberg/internal/updater"
 	"github.com/gopherium/gophenberg/internal/version"
 	"github.com/gopherium/gophenberg/internal/webui"
 	"github.com/gopherium/gophenberg/sdk"
@@ -37,7 +38,7 @@ func run(
 ) error {
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 
-	settings, err := loadRunConfig(getenv)
+	settings, guard, err := started(getenv, logger)
 	if err != nil {
 		return err
 	}
@@ -47,49 +48,86 @@ func run(
 		return err
 	}
 	defer built.close()
-	host := hostOf(built.registered)
-	if built.failed != nil {
-		return errors.Join(
-			fmt.Errorf("register plugins: %w", built.failed), stopPlugins(ctx, host, settings.serving.StopGrace))
-	}
-	if err := prepareDatabase(ctx, settings, built, logger); err != nil {
-		return errors.Join(err, stopPlugins(ctx, host, settings.serving.StopGrace))
+	b := boot{settings: settings, built: built, host: hostOf(built.registered), logger: logger}
+	if err := b.ready(ctx); err != nil {
+		return err
 	}
 
 	jobs := cronOf(settings.cron, built, logger, updateJobs(settings.updates, siteUpdatesOf(settings, built))...)
 
 	walked, err := declareTypes(ctx, built.registry, built.registered, logger)
 	if err != nil {
-		return errors.Join(fmt.Errorf("declare plugin types: %w", err), stopPlugins(ctx, host, settings.serving.StopGrace))
+		return errors.Join(fmt.Errorf("declare plugin types: %w", err), b.stopPlugins(ctx))
 	}
 
-	if err := host.Start(ctx, settings.serving.StopGrace); err != nil {
+	if err := b.host.Start(ctx, settings.serving.StopGrace); err != nil {
 		return fmt.Errorf("start plugins: %w", err)
 	}
 
 	themes, stopTheme, err := startTheme(ctx, settings, built.settings, logger)
 	if err != nil {
-		return errors.Join(err, stopPlugins(ctx, host, settings.serving.StopGrace))
+		return errors.Join(err, b.stopPlugins(ctx))
 	}
 	defer stopTheme()
 
-	cfg := serverConfig(settings, built, host, walked, logger)
+	cfg := b.serverConfig(walked)
 	cfg.Theme, cfg.Themes = themes.Holder(), themes
 	cfg.Cron, cfg.CronSecret, cfg.CronOnVisits = jobs.runs, settings.cron.secret, settings.cron.onVisits
-	if settings.mediaDir != "" {
-		cfg.Media = recoveredLibrary(ctx, mediaConfigFrom(settings, built.settings), built.saved, logger)
-		cfg.MediaStore = built.library
-		cfg.MediaFiles = os.DirFS(settings.mediaDir)
-	}
+	b.lendMedia(ctx, &cfg)
 
-	return gonsole.Serve(ctx, jobs.serverOf(settings, server.NewServer(cfg)), settings.serving,
-		jobs.stop(host, settings.serving.StopGrace), logger)
+	srv := jobs.serverOf(settings, server.NewServer(cfg))
+	return guard.Serve(ctx, srv, themes.CheckChoice, func(ctx context.Context) error {
+		return gonsole.Serve(ctx, srv, settings.serving, jobs.stop(b.host, settings.serving.StopGrace), logger)
+	})
 }
 
-// serverConfig returns the server settings over what compose built, the theme and the media left to the caller.
-func serverConfig(
-	settings runConfig, built site, host *pluginkit.Host, walked definitions.Walked, logger *slog.Logger,
-) server.Config {
+// started reads the server settings, then counts this start for the boot guard before the database opens.
+func started(getenv func(string) string, logger *slog.Logger) (runConfig, *updater.Guard, error) {
+	settings, err := loadRunConfig(getenv)
+	if err != nil {
+		return runConfig{}, nil, err
+	}
+	guard, err := updater.Start(settings.install, version.Version(), logger)
+	return settings, guard, err
+}
+
+// boot is one start of the site: its settings, what compose built, the host of its plugins and its logger.
+type boot struct {
+	settings runConfig
+	built    site
+	host     *pluginkit.Host
+	logger   *slog.Logger
+}
+
+// ready refuses plugins that failed to register, then checks the database role and migrates, stopping them on failure.
+func (b boot) ready(ctx context.Context) error {
+	if b.built.failed != nil {
+		return errors.Join(fmt.Errorf("register plugins: %w", b.built.failed), b.stopPlugins(ctx))
+	}
+	if err := prepareDatabase(ctx, b.settings, b.built, b.logger); err != nil {
+		return errors.Join(err, b.stopPlugins(ctx))
+	}
+	return nil
+}
+
+// stopPlugins stops the plugins of the start within their stop grace, whether or not ctx has ended.
+func (b boot) stopPlugins(ctx context.Context) error {
+	return stopPlugins(ctx, b.host, b.settings.serving.StopGrace)
+}
+
+// lendMedia lends cfg the media library, its store and its files while the settings name a media folder.
+func (b boot) lendMedia(ctx context.Context, cfg *server.Config) {
+	if b.settings.mediaDir == "" {
+		return
+	}
+	cfg.Media = recoveredLibrary(ctx, mediaConfigFrom(b.settings, b.built.settings), b.built.saved, b.logger)
+	cfg.MediaStore = b.built.library
+	cfg.MediaFiles = os.DirFS(b.settings.mediaDir)
+}
+
+// serverConfig returns the server settings over what compose built and the types walked, the theme and media aside.
+func (b boot) serverConfig(walked definitions.Walked) server.Config {
+	settings, built, host := b.settings, b.built, b.host
 	cfg := server.Config{
 		Users:             built.users,
 		Content:           built.content,
@@ -100,7 +138,7 @@ func serverConfig(
 		Version:           version.Version(),
 		TrustedProxies:    settings.trustedProxies,
 		PublicURL:         settings.publicURL,
-		Logger:            logger,
+		Logger:            b.logger,
 		SiteTitle:         settings.siteTitle,
 		Settings:          built.settings,
 		Readers:           built.readers,
@@ -165,6 +203,8 @@ type runConfig struct {
 	superuser superuserPolicy
 
 	updates updateSettings
+
+	install updater.Settings
 }
 
 // servingDefaults are the HTTP timeouts and shutdown graces a site runs under when its environment names none.
@@ -410,7 +450,7 @@ func loadRunConfig(getenv func(string) string) (runConfig, error) {
 	return settings, nil
 }
 
-// sectionsFrom reads the list, admin folder, cron, superuser and update settings into held.
+// sectionsFrom reads the list, admin folder, cron, superuser, update check and server install settings into held.
 func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	lists, err := listSettingsFrom(env)
 	if err != nil {
@@ -426,7 +466,10 @@ func sectionsFrom(env gonsole.Env, held *runConfig) error {
 	if held.superuser, err = superuserPolicyFrom(env); err != nil {
 		return err
 	}
-	held.updates, err = updateSettingsFrom(env)
+	if held.updates, err = updateSettingsFrom(env); err != nil {
+		return err
+	}
+	held.install, err = updater.SettingsFrom(env)
 	return err
 }
 

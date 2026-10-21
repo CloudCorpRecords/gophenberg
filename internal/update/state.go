@@ -63,20 +63,25 @@ type source struct {
 
 // Run checks the update site for the site, keeping its identity, the serials taken and the result in store.
 func Run(ctx context.Context, cfg Config, store Settings) (Result, error) {
-	id, err := siteID(ctx, store)
+	cfg, held, err := prepared(ctx, cfg, store)
 	if err != nil {
 		return Result{}, err
 	}
-	held, err := takenOf(ctx, store)
-	if err != nil {
-		return Result{}, err
-	}
-	cfg.Site.ID = id
-	src := sourceOf(cfg)
-	found, serials, checked := Check(ctx, cfg, held.of(src))
+	found, serials, checked := Check(ctx, cfg, held)
 	saving, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Client.Timeout)
 	defer cancel()
-	return record(saving, store, src, outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
+	return record(saving, store, sourceOf(cfg), outcome{found: found, serials: serials, err: checked, at: cfg.Now()})
+}
+
+// prepared returns cfg for the site whose identity store keeps, and the serials taken of what cfg reads.
+func prepared(ctx context.Context, cfg Config, store Settings) (Config, Serials, error) {
+	id, err := siteID(ctx, store)
+	if err != nil {
+		return cfg, Serials{}, err
+	}
+	held, err := takenOf(ctx, store)
+	cfg.Site.ID = id
+	return cfg, held.of(sourceOf(cfg)), err
 }
 
 // ResultOf returns what the checks stored in store, an empty result before the first check.
@@ -121,9 +126,26 @@ func (done outcome) over(held taken, stored Result, src source) (Result, map[str
 	return result, values
 }
 
+// raiseSerials stores serials as the ones taken from src in one update, keeping any later serial stored now.
+func raiseSerials(ctx context.Context, store Settings, src source, serials Serials) error {
+	err := store.Update(ctx, []string{serialsKey}, func(values map[string]string) (map[string]string, error) {
+		held, _ := stateFrom(values)
+		return map[string]string{serialsKey: written(held.with(src, held.of(src).latest(serials)))}, nil
+	})
+	if err != nil {
+		return fmt.Errorf("update: store the serials taken: %w", err)
+	}
+	return nil
+}
+
 // newerThan reports whether either serial comes after the matching one of other.
 func (s Serials) newerThan(other Serials) bool {
 	return s.Keys > other.Keys || s.Index > other.Index
+}
+
+// latest returns the later of each serial of s and the matching one of other.
+func (s Serials) latest(other Serials) Serials {
+	return Serials{Keys: max(s.Keys, other.Keys), Index: max(s.Index, other.Index)}
 }
 
 // sourceOf returns what a check under cfg reads.

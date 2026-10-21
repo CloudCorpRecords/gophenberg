@@ -6,7 +6,6 @@ package main
 import (
 	"os"
 
-	"github.com/gopherium/framework/gonsole"
 	"github.com/joho/godotenv"
 
 	"github.com/gopherium/gophenberg/internal/app"
@@ -15,5 +14,5 @@ import (
 // main runs the gophenberg command line over the compiled plugins.
 func main() {
 	_ = godotenv.Load()
-	os.Exit(gonsole.Main(app.Program(os.Getenv, registerPlugins)))
+	os.Exit(app.Main(os.Getenv, registerPlugins))
 }

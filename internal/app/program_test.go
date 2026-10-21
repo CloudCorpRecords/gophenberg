@@ -16,7 +16,7 @@ import (
 var listedCommands = []string{
 	"check", "help", "list", "migrate", "seed", "serve", "version",
 	"account:create-admin", "account:disable", "account:enable", "account:grant-role", "account:list",
-	"account:records", "account:role",
+	"account:records", "account:role", "update:apply", "update:check", "update:rollback", "update:status",
 }
 
 func TestProgramListsEveryCommandWhenNoneIsNamed(t *testing.T) {
@@ -51,7 +51,10 @@ func TestProgramListsEveryCommandWhenNoneIsNamed(t *testing.T) {
 		"  account:records       list who applied which change, the newest first",
 		"  account:role          set one account's role",
 		" update",
+		"  update:apply          update this server install to a newer Gophenberg, then ask for a restart",
 		"  update:check          check the update site for a newer Gophenberg and keep what it found",
+		"  update:rollback       take back the last update, pointing current at the build before it",
+		"  update:status         show the builds of this server install, its last update and its backups",
 		"",
 		"Every command is described at https://docs.gophenberg.org/self-hosting/commands/",
 		"",
