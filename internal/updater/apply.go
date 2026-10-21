@@ -261,7 +261,7 @@ func (r *run) dropArchive() {
 	_ = os.Remove(r.archive.Name())
 }
 
-// aboutJSON runs about -json of binary, running it again while another process still holds it open for writing.
+// aboutJSON returns what binary answers to about -json.
 func aboutJSON(ctx context.Context, binary string) ([]byte, error) {
 	for try := 1; ; try++ {
 		out, err := exec.CommandContext(ctx, binary, "about", "-json").Output()

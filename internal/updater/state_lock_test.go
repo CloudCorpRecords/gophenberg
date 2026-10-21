@@ -44,7 +44,7 @@ func waitsForTheLock(t *testing.T, layout updater.Layout, newer updater.State, c
 	waitsForTheLockOnceRead(t, layout, newer, read, command)
 }
 
-// waitsForTheLockOnceRead is waitsForTheLock for a command that reads the state before it waits, as read shows.
+// waitsForTheLockOnceRead runs command while t holds the state lock, writes newer once read is closed and lets go.
 func waitsForTheLockOnceRead(t *testing.T, layout updater.Layout, newer updater.State, read <-chan struct{},
 	command func(),
 ) {
