@@ -12,13 +12,21 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"syscall"
+	"time"
 
 	"github.com/gopherium/gophenberg/internal/update"
 	"github.com/gopherium/gophenberg/internal/version"
 )
 
-// serverLookup reads the PostgreSQL major of the server and the size in bytes of the site database.
-const serverLookup = "SELECT current_setting('server_version_num')::int / 10000, pg_database_size(current_database())"
+const (
+	// serverLookup reads the PostgreSQL major of the server and the size in bytes of the site database.
+	serverLookup = "SELECT current_setting('server_version_num')::int / 10000, pg_database_size(current_database())"
+	// busyTries is how many times a staged binary runs while the system answers that it is still open for writing.
+	busyTries = 20
+	// busyPause is the wait between two runs of a staged binary still open for writing.
+	busyPause = 50 * time.Millisecond
+)
 
 // stoppedSteps are the steps a job that stopped before its switch can have written last.
 var stoppedSteps = []Step{StepDownload, StepStage, StepBackup}
@@ -253,9 +261,20 @@ func (r *run) dropArchive() {
 	_ = os.Remove(r.archive.Name())
 }
 
+// aboutJSON runs about -json of binary, running it again while another process still holds it open for writing.
+func aboutJSON(ctx context.Context, binary string) ([]byte, error) {
+	for try := 1; ; try++ {
+		out, err := exec.CommandContext(ctx, binary, "about", "-json").Output()
+		if !errors.Is(err, syscall.ETXTBSY) || try == busyTries {
+			return out, err
+		}
+		time.Sleep(busyPause)
+	}
+}
+
 // checkBuild runs about -json of the staged binary, refusing one that is not the official build of release.
 func checkBuild(ctx context.Context, binary, release string) error {
-	out, err := exec.CommandContext(ctx, binary, "about", "-json").Output()
+	out, err := aboutJSON(ctx, binary)
 	if err != nil {
 		return fmt.Errorf("updater: refused the build of Gophenberg %s, its about -json failed: %w", release, err)
 	}

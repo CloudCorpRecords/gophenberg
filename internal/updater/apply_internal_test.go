@@ -5,12 +5,55 @@ package updater
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gopherium/gophenberg/internal/update"
 )
+
+// officialAbout is a staged binary that answers about -json as the official build of 0.21.0.
+const officialAbout = "#!/bin/sh\nprintf '{\"version\":\"0.21.0\",\"stamp\":\"official\"}'\n"
+
+// heldOpen writes the staged binary and keeps it open for writing until wait has passed.
+func heldOpen(t *testing.T, wait time.Duration) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "gophenberg")
+	if err := os.WriteFile(binary, []byte(officialAbout), 0o755); err != nil {
+		t.Fatalf("writing the staged binary: %v", err)
+	}
+	writer, err := os.OpenFile(binary, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatalf("opening the staged binary for writing: %v", err)
+	}
+	time.AfterFunc(wait, func() { _ = writer.Close() })
+	t.Cleanup(func() { _ = writer.Close() })
+	return binary
+}
+
+func TestCheckBuildWaitsForABinaryAnotherProcessStillHoldsOpenForWriting(t *testing.T) {
+	t.Parallel()
+
+	binary := heldOpen(t, 200*time.Millisecond)
+
+	if err := checkBuild(t.Context(), binary, "0.21.0"); err != nil {
+		t.Errorf("checkBuild() = %v, want the build checked once the writer let go of it", err)
+	}
+}
+
+func TestCheckBuildStopsWaitingForABinaryNoWriterLetsGoOf(t *testing.T) {
+	t.Parallel()
+
+	binary := heldOpen(t, time.Hour)
+
+	err := checkBuild(t.Context(), binary, "0.21.0")
+
+	if err == nil || !strings.Contains(err.Error(), "text file busy") {
+		t.Errorf("checkBuild() = %v, want the busy binary refused once the wait is over", err)
+	}
+}
 
 func TestPutBackKeepsASwitchThatTookEffectBeforeItsSaveFailed(t *testing.T) {
 	t.Parallel()
