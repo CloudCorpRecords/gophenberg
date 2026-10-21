@@ -340,14 +340,21 @@ func TestOpenTriesALockAgainOnceEachBusyPoll(t *testing.T) {
 	settings := testSettings()
 	settings.BusyPoll = slowPoll
 	holder, waiter := holderAndWaiter(t, settings)
+	trying := make(chan time.Time, 1)
+	answered := make(chan error, 1)
+	go func() {
+		trying <- time.Now()
+		_, err := waiter.ExecContext(t.Context(), "BEGIN IMMEDIATE")
+		answered <- err
+	}()
+
+	began := <-trying
 	letGo := make(chan error, 1)
 	time.AfterFunc(letGoAfter, func() {
 		_, err := holder.ExecContext(t.Context(), "ROLLBACK")
 		letGo <- err
 	})
-
-	began := time.Now()
-	_, err := waiter.ExecContext(t.Context(), "BEGIN IMMEDIATE")
+	err := <-answered
 	waited := time.Since(began)
 
 	if released := <-letGo; released != nil {
