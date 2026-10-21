@@ -133,7 +133,7 @@ func waitUntilOpen(t *testing.T, path string, runs []binaryRun) {
 	deadline := time.Now().Add(binaryRunLimit)
 	for {
 		maps.DeleteFunc(waiting, func(_ int, run binaryRun) bool {
-			return run.hasEnded() || hasOpen(run.cmd.Process.Pid, file)
+			return openOrEnded(t, run, file)
 		})
 		if len(waiting) == 0 {
 			return
@@ -146,14 +146,34 @@ func waitUntilOpen(t *testing.T, path string, runs []binaryRun) {
 	}
 }
 
+// openOrEnded reports whether run has the file open or has ended, failing t when its open files cannot be read.
+func openOrEnded(t *testing.T, run binaryRun, file string) bool {
+	t.Helper()
+	if run.hasEnded() {
+		return true
+	}
+	open, err := hasOpen(run.cmd.Process.Pid, file)
+	if err == nil {
+		return open
+	}
+	if run.hasEnded() {
+		return true
+	}
+	t.Fatalf("reading the open files of gophenberg process %d: %v", run.cmd.Process.Pid, err)
+	return false
+}
+
 // hasOpen reports whether the process pid has the file at path open, as its /proc folder lists it.
-func hasOpen(pid int, path string) bool {
+func hasOpen(pid int, path string) (bool, error) {
 	fds := filepath.Join("/proc", strconv.Itoa(pid), "fd")
-	entries, _ := os.ReadDir(fds)
+	entries, err := os.ReadDir(fds)
+	if err != nil {
+		return false, err
+	}
 	return slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
 		target, err := os.Readlink(filepath.Join(fds, entry.Name()))
 		return err == nil && target == path
-	})
+	}), nil
 }
 
 // cronJobCount returns how many cron jobs the SQLite file behind db holds.
