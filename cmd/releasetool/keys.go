@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,23 +25,30 @@ import (
 // keyListValidity is how long a key list stays valid when -valid names no other span.
 const keyListValidity = 8760 * time.Hour
 
-// keys writes a key list naming the release key and the standby, for a root to sign.
+// listedRoles are the roles keys writes, in the order it lists them.
+var listedRoles = []update.Role{update.RoleRelease, update.RoleStandby, update.RoleTimestamp}
+
+// keys writes a key list naming the release key, the standby and the timestamp key, for a root to sign.
 func keys(args []string, stdout, stderr io.Writer) error {
 	flags := newFlagSet("keys", stderr)
-	release := flags.String("release", "", "the Multikey of the release key")
-	standby := flags.String("standby", "", "the Multikey of the standby")
+	named := map[update.Role]*string{
+		update.RoleRelease:   flags.String("release", "", "the Multikey of the release key"),
+		update.RoleStandby:   flags.String("standby", "", "the Multikey of the standby"),
+		update.RoleTimestamp: flags.String("timestamp", "", "the Multikey of the timestamp key"),
+	}
 	serial := flags.Int64("serial", 0, "the serial, the Unix time of the run when left out")
 	valid := flags.Duration("valid", keyListValidity, "how long the key list stays valid")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if *release == "" || *standby == "" {
-		return usageError{"keys needs -release and -standby, the Multikeys of the release key and the standby"}
+	if slices.ContainsFunc(listedRoles, func(role update.Role) bool { return *named[role] == "" }) {
+		return usageError{"keys needs -release, -standby and -timestamp, the Multikeys of the release key, the standby " +
+			"and the timestamp key"}
 	}
 	if *valid <= 0 || flags.NArg() != 0 {
 		return usageError{"keys needs a -valid above zero and reads no file"}
 	}
-	listed, err := listedKeys(map[update.Role]string{update.RoleRelease: *release, update.RoleStandby: *standby})
+	listed, err := listedKeys(named)
 	if err != nil {
 		return err
 	}
@@ -50,15 +58,21 @@ func keys(args []string, stdout, stderr io.Writer) error {
 	})
 }
 
-// listedKeys returns the release key, then the standby, refusing a Multikey that is not an Ed25519 key.
-func listedKeys(named map[update.Role]string) ([]update.ListedKey, error) {
-	listed := make([]update.ListedKey, 0, len(named))
-	for _, role := range []update.Role{update.RoleRelease, update.RoleStandby} {
-		key, err := signature.ParseMultikey(named[role])
-		if _, isEd25519 := key.(ed25519.PublicKey); err != nil || !isEd25519 {
-			return nil, fmt.Errorf("refused -%s %q, which is not the Multikey of an Ed25519 key", role, named[role])
+// listedKeys returns the keys of each listed role in order, refusing one that is not Ed25519 or holds two roles.
+func listedKeys(named map[update.Role]*string) ([]update.ListedKey, error) {
+	listed := make([]update.ListedKey, 0, len(listedRoles))
+	held := map[string]update.Role{}
+	for _, role := range listedRoles {
+		key, err := signature.ParseMultikey(*named[role])
+		public, isEd25519 := key.(ed25519.PublicKey)
+		if err != nil || !isEd25519 {
+			return nil, fmt.Errorf("refused -%s %q, which is not the Multikey of an Ed25519 key", role, *named[role])
 		}
-		listed = append(listed, update.ListedKey{Role: role, Multikey: named[role]})
+		if other, twice := held[string(public)]; twice {
+			return nil, fmt.Errorf("refused -%s, the same key as -%s", role, other)
+		}
+		held[string(public)] = role
+		listed = append(listed, update.ListedKey{Role: role, Multikey: *named[role]})
 	}
 	return listed, nil
 }

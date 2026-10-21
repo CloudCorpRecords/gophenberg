@@ -32,10 +32,11 @@ func signerMultikey(t *testing.T) string {
 	return text
 }
 
-// writtenKeyList runs keys for two fresh signers and writes its answer to keys.json in dir.
+// writtenKeyList runs keys for three fresh keys and writes its answer to keys.json in dir.
 func writtenKeyList(t *testing.T, dir string) string {
 	t.Helper()
-	got := runTool("keys", "-release", signerMultikey(t), "-standby", signerMultikey(t))
+	got := runTool("keys", "-release", signerMultikey(t), "-standby", signerMultikey(t), "-timestamp",
+		signerMultikey(t))
 	if got.code != 0 {
 		t.Fatalf("keys = %d, %q, want 0", got.code, got.stderr)
 	}
@@ -52,13 +53,13 @@ func readList(t *testing.T, path string, roots ...*ecdsa.PrivateKey) (update.Key
 	return update.ReadKeyList([]byte(readText(t, path)), []byte(readText(t, path+".sig")), public, time.Now())
 }
 
-func TestKeysWritesAKeyListOfTheReleaseKeyAndTheStandby(t *testing.T) {
+func TestKeysWritesAKeyListOfTheReleaseKeyTheStandbyAndTheTimestampKey(t *testing.T) {
 	t.Parallel()
 
-	release, standby := signerMultikey(t), signerMultikey(t)
+	release, standby, timestamp := signerMultikey(t), signerMultikey(t), signerMultikey(t)
 	before := time.Now()
 
-	got := runTool("keys", "-release", release, "-standby", standby)
+	got := runTool("keys", "-release", release, "-standby", standby, "-timestamp", timestamp)
 
 	after := time.Now()
 	var list update.KeyList
@@ -67,9 +68,10 @@ func TestKeysWritesAKeyListOfTheReleaseKeyAndTheStandby(t *testing.T) {
 	}
 	want := []update.ListedKey{
 		{Role: update.RoleRelease, Multikey: release}, {Role: update.RoleStandby, Multikey: standby},
+		{Role: update.RoleTimestamp, Multikey: timestamp},
 	}
 	if list.Schema != 1 || !slices.Equal(list.Keys, want) {
-		t.Errorf("keys wrote %+v, want schema 1 and the two keys in order", list)
+		t.Errorf("keys wrote %+v, want schema 1 and the three keys in order", list)
 	}
 	if list.Serial < before.Unix() || list.Serial > after.Unix() {
 		t.Errorf("keys wrote serial %d, want the Unix time of the run", list.Serial)
@@ -84,7 +86,8 @@ func TestKeysTakesASerialAndAValidity(t *testing.T) {
 	t.Parallel()
 
 	before := time.Now()
-	got := runTool("keys", "-release", signerMultikey(t), "-standby", signerMultikey(t), "-serial", "7", "-valid", "48h")
+	got := runTool("keys", "-release", signerMultikey(t), "-standby", signerMultikey(t), "-timestamp",
+		signerMultikey(t), "-serial", "7", "-valid", "48h")
 
 	var list update.KeyList
 	if err := json.Unmarshal([]byte(got.stdout), &list); got.code != 0 || err != nil {
@@ -99,18 +102,25 @@ func TestKeysTakesASerialAndAValidity(t *testing.T) {
 func TestKeysRefusesAMissingOrWrongKey(t *testing.T) {
 	t.Parallel()
 
-	release := signerMultikey(t)
+	release, standby, timestamp := signerMultikey(t), signerMultikey(t), signerMultikey(t)
+	keys := func(release, standby, timestamp string, more ...string) []string {
+		return append([]string{"-release", release, "-standby", standby, "-timestamp", timestamp}, more...)
+	}
 	for name, tc := range map[string]struct {
 		args []string
 		code int
 	}{
-		"no release key":           {args: []string{"-standby", release}, code: 2},
-		"no standby":               {args: []string{"-release", release}, code: 2},
-		"a validity of zero":       {args: []string{"-release", release, "-standby", release, "-valid", "0s"}, code: 2},
-		"a file to read":           {args: []string{"-release", release, "-standby", release, "keys.json"}, code: 2},
-		"a release key on P-256":   {args: []string{"-release", p256Multikey(t), "-standby", release}, code: 1},
-		"a standby that is no key": {args: []string{"-release", release, "-standby", "z6Mk"}, code: 1},
-		"a flag it does not know":  {args: []string{"-root", release}, code: 2},
+		"no release key":                       {args: []string{"-standby", standby, "-timestamp", timestamp}, code: 2},
+		"no standby":                           {args: []string{"-release", release, "-timestamp", timestamp}, code: 2},
+		"no timestamp key":                     {args: []string{"-release", release, "-standby", standby}, code: 2},
+		"a validity of zero":                   {args: keys(release, standby, timestamp, "-valid", "0s"), code: 2},
+		"a file to read":                       {args: keys(release, standby, timestamp, "keys.json"), code: 2},
+		"a release key on P-256":               {args: keys(p256Multikey(t), standby, timestamp), code: 1},
+		"a standby that is no key":             {args: keys(release, "z6Mk", timestamp), code: 1},
+		"a timestamp key on P-256":             {args: keys(release, standby, p256Multikey(t)), code: 1},
+		"the release key as the timestamp key": {args: keys(release, standby, release), code: 1},
+		"the release key as the standby":       {args: keys(release, release, timestamp), code: 1},
+		"a flag it does not know":              {args: []string{"-root", release}, code: 2},
 	} {
 		if got := runTool(append([]string{"keys"}, tc.args...)...); got.code != tc.code {
 			t.Errorf("keys with %s = %d, %q, want %d", name, got.code, got.stderr, tc.code)
