@@ -11,8 +11,12 @@ import (
 	"errors"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,8 +28,10 @@ import (
 const (
 	// binaryRunLimit is how long one run of the built binary may take before the test stops it.
 	binaryRunLimit = 30 * time.Second
-	// newFileHold is how long another connection keeps the write lock of a new file after two runs started on it.
+	// newFileHold is how long another connection keeps the write lock of a new file on a system without /proc.
 	newFileHold = 500 * time.Millisecond
+	// openPoll is how often the test looks again whether each run has the database file open.
+	openPoll = time.Millisecond
 )
 
 // binaryRun is one run of the built binary that started and that the test has not waited for yet.
@@ -34,6 +40,8 @@ type binaryRun struct {
 	cancel context.CancelFunc
 	stdout *bytes.Buffer
 	stderr *bytes.Buffer
+	waited chan error
+	ended  chan struct{}
 }
 
 // startBinary starts the built binary with args and stdin under env in a folder of its own, stopped at binaryRunLimit.
@@ -41,7 +49,7 @@ func startBinary(t *testing.T, binary string, env []string, stdin io.Reader, arg
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
 	run := binaryRun{cmd: exec.CommandContext(ctx, binary, args...), cancel: cancel, stdout: &bytes.Buffer{},
-		stderr: &bytes.Buffer{}}
+		stderr: &bytes.Buffer{}, waited: make(chan error, 1), ended: make(chan struct{})}
 	run.cmd.Dir = t.TempDir()
 	run.cmd.Env = env
 	run.cmd.Stdin = stdin
@@ -51,7 +59,21 @@ func startBinary(t *testing.T, binary string, env []string, stdin io.Reader, arg
 		cancel()
 		t.Fatalf("gophenberg %q: %v", args, err)
 	}
+	go func() {
+		run.waited <- run.cmd.Wait()
+		close(run.ended)
+	}()
 	return run
+}
+
+// hasEnded reports whether the run has ended, without waiting for it.
+func (r binaryRun) hasEnded() bool {
+	select {
+	case <-r.ended:
+		return true
+	default:
+		return false
+	}
 }
 
 // wait waits for the run to end and returns its answer.
@@ -59,7 +81,7 @@ func (r binaryRun) wait(t *testing.T) testkit.Result {
 	t.Helper()
 	defer r.cancel()
 	var exitErr *exec.ExitError
-	if err := r.cmd.Wait(); err != nil && !errors.As(err, &exitErr) {
+	if err := <-r.waited; err != nil && !errors.As(err, &exitErr) {
 		t.Fatalf("gophenberg %q: %v", r.cmd.Args[1:], err)
 	}
 	return testkit.Result{Code: r.cmd.ProcessState.ExitCode(), Stdout: r.stdout.String(), Stderr: r.stderr.String()}
@@ -91,6 +113,47 @@ func holdWriteLock(t *testing.T, path string) (letGo func()) {
 			t.Fatalf("ROLLBACK on the plain driver connection: %v", err)
 		}
 	}
+}
+
+// waitUntilOpen waits until each run has the file at path open or has ended, or for newFileHold without /proc.
+func waitUntilOpen(t *testing.T, path string, runs []binaryRun) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		time.Sleep(newFileHold)
+		return
+	}
+	file, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("resolving the SQLite file %s: %v", path, err)
+	}
+	waiting := make(map[int]binaryRun, len(runs))
+	for i, run := range runs {
+		waiting[i+1] = run
+	}
+	deadline := time.Now().Add(binaryRunLimit)
+	for {
+		maps.DeleteFunc(waiting, func(_ int, run binaryRun) bool {
+			return run.hasEnded() || hasOpen(run.cmd.Process.Pid, file)
+		})
+		if len(waiting) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("gophenberg runs %v of %d neither opened %s nor ended within %v",
+				slices.Sorted(maps.Keys(waiting)), len(runs), path, binaryRunLimit)
+		}
+		time.Sleep(openPoll)
+	}
+}
+
+// hasOpen reports whether the process pid has the file at path open, as its /proc folder lists it.
+func hasOpen(pid int, path string) bool {
+	fds := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+	entries, _ := os.ReadDir(fds)
+	return slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+		target, err := os.Readlink(filepath.Join(fds, entry.Name()))
+		return err == nil && target == path
+	})
 }
 
 // cronJobCount returns how many cron jobs the SQLite file behind db holds.
@@ -155,7 +218,7 @@ func TestSQLiteBinaryMigratesANewFileFromTwoRunsBehindAHeldWriteLock(t *testing.
 	letGo := holdWriteLock(t, path)
 
 	runs := []binaryRun{startBinary(t, binary, env, nil, "migrate"), startBinary(t, binary, env, nil, "migrate")}
-	time.Sleep(newFileHold)
+	waitUntilOpen(t, path, runs)
 	letGo()
 
 	for i, run := range runs {
