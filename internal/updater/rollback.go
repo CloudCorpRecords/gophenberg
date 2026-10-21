@@ -31,34 +31,30 @@ func (f Failure) failedStart() bool {
 
 // Rollback takes back the last update that switched builds, pointing current at the build before it.
 func Rollback(settings Settings) (State, error) {
-	layout, state, err := lastUpdate(settings)
-	if err != nil {
-		return State{}, err
-	}
-	if !slices.Contains(takenBackSteps, state.Step) {
-		return State{}, nothingToTakeBack("update:rollback", state)
-	}
-	return layout.takeBack(state)
+	return lastUpdate(settings, func(layout Layout, state State) (State, error) {
+		if !slices.Contains(takenBackSteps, state.Step) {
+			return State{}, nothingToTakeBack("update:rollback", state)
+		}
+		return layout.takeBack(state)
+	})
 }
 
 // RollbackAfterFailure takes back an update whose new build failed to start, once, as the rollback unit runs it.
 func RollbackAfterFailure(settings Settings, failure Failure) (State, error) {
-	layout, state, err := lastUpdate(settings)
-	if err != nil {
-		return State{}, err
-	}
-	if !slices.Contains(failedSteps, state.Step) {
-		return State{}, nothingToTakeBack("update:rollback -after-failure", state)
-	}
-	if !failure.failedStart() {
-		return State{}, fmt.Errorf("updater: the service manager says the service result is %q and the exit "+
-			"status is %q, not a start that failed its check or hit the start limit, so update:rollback "+
-			"-after-failure leaves the update alone", failure.ServiceResult, failure.ExitStatus)
-	}
-	if mayHaveMigrated(state) {
-		return State{}, layout.stayDown(state)
-	}
-	return layout.takeBack(state)
+	return lastUpdate(settings, func(layout Layout, state State) (State, error) {
+		if !slices.Contains(failedSteps, state.Step) {
+			return State{}, nothingToTakeBack("update:rollback -after-failure", state)
+		}
+		if !failure.failedStart() {
+			return State{}, fmt.Errorf("updater: the service manager says the service result is %q and the exit "+
+				"status is %q, not a start that failed its check or hit the start limit, so update:rollback "+
+				"-after-failure leaves the update alone", failure.ServiceResult, failure.ExitStatus)
+		}
+		if mayHaveMigrated(state) {
+			return State{}, layout.stayDown(state)
+		}
+		return layout.takeBack(state)
+	})
 }
 
 // mayHaveMigrated reports whether the build an update switched to raised the minimum version and has started once.
@@ -66,15 +62,19 @@ func mayHaveMigrated(state State) bool {
 	return state.LongJump && state.Attempts > 0
 }
 
-// lastUpdate returns the install root the settings name and the state of its last update, refusing an empty root.
-func lastUpdate(settings Settings) (Layout, State, error) {
+// lastUpdate runs undo on the install root and its last update under the state lock, refusing an empty install root.
+func lastUpdate(settings Settings, undo func(Layout, State) (State, error)) (State, error) {
 	if settings.Root == "" {
-		return Layout{}, State{}, fmt.Errorf("updater: %s is empty, so this install keeps no build to go back to, "+
+		return State{}, fmt.Errorf("updater: %s is empty, so this install keeps no build to go back to, "+
 			"go back by hand as %s shows", settings.names.Key("INSTALL_ROOT"), manualSteps)
 	}
 	layout := Layout{Root: settings.Root}
-	state, err := layout.ReadState()
-	return layout, state, err
+	state, unlock, err := layout.lockedState()
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
+	return undo(layout, state)
 }
 
 // nothingToTakeBack refuses the rollback command when the state names no update it takes back, saying where it stands.

@@ -566,6 +566,25 @@ func TestServeGoesBackWhenTheBuildFailsItsCheckInside(t *testing.T) {
 	f.wentBack(1)
 }
 
+func TestServeGoesBackWhenTheCheckInsideOutlastsTheVerifyTimeout(t *testing.T) {
+	t.Parallel()
+
+	f := newGuardFixture(t, switchedTo)
+	f.env["GOPHENBERG_UPDATE_VERIFY_TIMEOUT"] = "50ms"
+	site := newTestSite(nil)
+
+	err := served(t, f.started(), site, func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	wantCheckFailed(t, err, "failed its start check after the update from 0.20.0: context deadline exceeded")
+	if asked := site.paths(); len(asked) != 0 {
+		t.Errorf("the check asked for %v, want no page asked once the check inside ran out of time", asked)
+	}
+	f.wentBack(1)
+}
+
 func TestServeGoesBackWhenTheServerNeverListens(t *testing.T) {
 	t.Parallel()
 

@@ -22,11 +22,17 @@ func wantLink(t *testing.T, path, target string) {
 // denied makes the folder at path take mode until t ends, skipping t under root, which ignores the mode.
 func denied(t *testing.T, path string, mode os.FileMode) {
 	t.Helper()
-	if os.Geteuid() == 0 {
-		t.Skip("running as root, which reads and writes a folder whatever its mode says")
-	}
+	modeRestored(t, path)
 	if err := os.Chmod(path, mode); err != nil {
 		t.Fatalf("changing the mode of %s: %v", path, err)
+	}
+}
+
+// modeRestored puts the folder at path back to 0o755 once t ends, skipping t under root, which ignores any mode.
+func modeRestored(t *testing.T, path string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which reads and writes a folder whatever its mode says")
 	}
 	t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
 }

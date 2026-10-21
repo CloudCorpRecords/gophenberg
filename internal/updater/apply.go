@@ -44,11 +44,12 @@ type server struct {
 	size  int64
 }
 
-// run is one job under way: the job, its install root, the state found there, the update chosen and what it read.
+// run is one job under way: the job, its install root, the state found there and on disk, the update and what it read.
 type run struct {
 	job      Job
 	layout   Layout
 	held     State
+	onDisk   State
 	previous string
 	chosen   update.Chosen
 	artifact update.Artifact
@@ -125,7 +126,7 @@ func (r *run) readState() error {
 		return nil
 	}
 	held, err := r.layout.ReadState()
-	r.held = held
+	r.held, r.onDisk = held, held
 	return err
 }
 
@@ -164,14 +165,14 @@ func (r *run) backsUp() bool {
 	return r.chosen.Found.LongJump || !r.job.SkipBackup
 }
 
-// apply clears what an earlier job left when it stopped, then runs each step, putting the install root back on failure.
+// apply clears what a stopped job left, then runs each step and the switch, putting the install root back on failure.
 func (r *run) apply(ctx context.Context) (State, error) {
 	r.clearInterrupted()
 	r.previous, _ = r.layout.Named(Previous)
-	state := State{From: r.running(), To: r.to(), LongJump: r.chosen.Found.LongJump}
+	state := State{From: r.running(), To: r.to(), LongJump: r.chosen.Found.LongJump, Refused: r.held.Refused}
 	for _, s := range r.steps() {
-		state.Step, state.Refused = s.name, r.refusedAt(s.name)
-		err := r.layout.WriteState(state)
+		state.Step = s.name
+		err := r.write(state)
 		if err == nil {
 			err = s.run(ctx, &state)
 		}
@@ -179,24 +180,47 @@ func (r *run) apply(ctx context.Context) (State, error) {
 			return State{}, r.putBack(err)
 		}
 	}
+	state.Step, state.Refused = StepSwitched, lifting(r.held.Refused, r.to())
+	if err := r.switchBuilds(state); err != nil {
+		return State{}, r.putBack(err)
+	}
 	return state, nil
 }
 
-// steps returns the steps of the job in order, the backup only when the job takes one.
+// write writes state over the state file, refusing when another command wrote it after the job last read or wrote it.
+func (r *run) write(state State) error {
+	return r.whileUnchanged(func() error { return r.save(state) })
+}
+
+// save writes state over the state file as the job holds the state lock, keeping it as what the file now holds.
+func (r *run) save(state State) error {
+	err := r.layout.WriteState(state)
+	if err == nil {
+		r.onDisk = state
+	}
+	return err
+}
+
+// whileUnchanged runs change under the state lock once the state file still holds what the job last read or wrote.
+func (r *run) whileUnchanged(change func() error) error {
+	state, unlock, err := r.layout.lockedState()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if !sameState(state, r.onDisk) {
+		return errStateChanged
+	}
+	return change()
+}
+
+// steps returns the steps of the job before its switch in order, the backup only when the job takes one.
 func (r *run) steps() []step {
 	steps := []step{{name: StepDownload, run: r.download}, {name: StepStage, run: r.stage}}
 	if r.backsUp() {
 		steps = append(steps, step{name: StepBackup, run: r.backUp})
 	}
-	return append(steps, step{name: StepSwitched, run: r.switchBuilds})
-}
-
-// refusedAt returns the versions the state refuses at step, still the one the job takes until the switch.
-func (r *run) refusedAt(step Step) []string {
-	if step != StepSwitched {
-		return r.held.Refused
-	}
-	return lifting(r.held.Refused, r.to())
+	return steps
 }
 
 // download fetches the archive into the downloads folder and checks it, keeping it open for the stage.
@@ -247,22 +271,27 @@ func checkBuild(ctx context.Context, binary, release string) error {
 	return nil
 }
 
-// backUp takes the backup of the database the switch needs, naming it in state.
+// backUp takes the backup the switch needs, naming it in state and sparing the backup the state found names.
 func (r *run) backUp(ctx context.Context, state *State) error {
 	name := backupName(r.running(), r.job.Check.Now())
 	state.Backup = filepath.Join(backupsFolder, name)
 	return Backup{
 		PgDump: r.job.Settings.PgDump, DatabaseURL: r.job.DatabaseURL, Folder: r.layout.Backups(), Name: name,
-		Keep: r.job.Settings.BackupsKept,
+		Held: filepath.Base(r.held.Backup), Keep: r.job.Settings.BackupsKept,
 	}.Take(ctx)
 }
 
-// switchBuilds points previous at the running build and current at the new one, the state already saying switched.
-func (r *run) switchBuilds(_ context.Context, state *State) error {
-	if err := r.layout.Point(Previous, state.From); err != nil {
-		return err
-	}
-	return r.layout.Point(Current, state.To)
+// switchBuilds writes state, then points previous at the running build and current at the new one, in one lock hold.
+func (r *run) switchBuilds(state State) error {
+	return r.whileUnchanged(func() error {
+		if err := r.save(state); err != nil {
+			return err
+		}
+		if err := r.layout.Point(Previous, state.From); err != nil {
+			return err
+		}
+		return r.layout.Point(Current, state.To)
+	})
 }
 
 // putBack deletes what the job wrote, points previous back and writes back the state it found, unless current moved.
@@ -271,7 +300,10 @@ func (r *run) putBack(err error) error {
 		return fmt.Errorf("updater: current names Gophenberg %s, so restart Gophenberg to start it: %w", r.to(), err)
 	}
 	r.removeFiles(r.to())
-	return errors.Join(err, r.putPreviousBack(), r.layout.WriteState(r.held))
+	if errors.Is(err, errStateChanged) {
+		return errors.Join(err, r.putPreviousBack())
+	}
+	return errors.Join(err, r.putPreviousBack(), r.write(r.held))
 }
 
 // switched reports whether the current link already names the build the job switches to, so the switch stands.

@@ -72,16 +72,17 @@ func (e CheckError) Unwrap() error {
 	return e.err
 }
 
-// Start readies the start check of running, counting a start after a switch, failing past the attempts or once refused.
+// Start counts a start of running after a switch under the state lock, failing past the attempts or once refused.
 func Start(settings Settings, running string, logger *slog.Logger) (*Guard, error) {
 	g := &Guard{settings: settings, layout: Layout{Root: settings.Root}, logger: logger, running: running}
 	if settings.Root == "" {
 		return g, nil
 	}
-	state, err := g.layout.ReadState()
+	state, unlock, err := g.layout.lockedState()
 	if err != nil {
 		return nil, err
 	}
+	defer unlock()
 	g.state, g.settles = state, settledStep(state, running)
 	if g.settles == "" || state.Step != StepSwitched {
 		return g, nil
@@ -145,19 +146,50 @@ func listening(ctx context.Context, srv *http.Server) <-chan string {
 	return addresses
 }
 
-// check settles the update once the build passes its start check and fails a start after a switch that does not.
+// check runs the start check and settles the update with what it found, unless the serve ended first.
 func (g *Guard) check(ctx context.Context, addresses <-chan string, inside func(context.Context) error) error {
 	err := g.verify(ctx, addresses, inside)
-	switch {
-	case ctx.Err() != nil:
-		return nil
-	case err == nil:
-		return g.commit()
-	case g.state.Step == StepFailed:
-		g.logger.Warn("the start check failed and the update stays failed", "version", g.running, "reason", err)
+	if ctx.Err() != nil {
 		return nil
 	}
-	return g.fail(err)
+	return g.settle(err)
+}
+
+// settle settles the update with the state on disk under the state lock, leaving one another command took back.
+func (g *Guard) settle(checked error) error {
+	state, unlock, err := g.layout.lockedState()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if !g.pending(state) {
+		g.leftTakenBack(state, checked)
+		return nil
+	}
+	g.state = state
+	switch {
+	case checked == nil:
+		return g.commit()
+	case state.Step == StepFailed:
+		g.logger.Warn("the start check failed and the update stays failed", "version", g.running, "reason", checked)
+		return nil
+	}
+	return g.fail(checked)
+}
+
+// leftTakenBack logs that the guard left an update another command took back during its check, and why a check failed.
+func (g *Guard) leftTakenBack(state State, checked error) {
+	logged := []any{"version", g.running, "step", state.Step}
+	if checked != nil {
+		logged = append(logged, "reason", checked)
+	}
+	g.logger.Warn("another command took back the update while its start check ran, so the guard left it as it is",
+		logged...)
+}
+
+// pending reports whether state still names the update the guard checks, at the same step and to the same version.
+func (g *Guard) pending(state State) bool {
+	return state.Step == g.state.Step && state.To == g.state.To
 }
 
 // verify checks the build inside the process, then asks for each checked page once it listens, within the timeout.

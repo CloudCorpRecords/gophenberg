@@ -330,6 +330,54 @@ func TestTakeKeepsOnlyTheNewestBackups(t *testing.T) {
 	}
 }
 
+// placeBackups writes an older dump under each of names into the backups folder of backup, failing t when it cannot.
+func placeBackups(t *testing.T, backup updater.Backup, names ...string) {
+	t.Helper()
+	if err := os.MkdirAll(backup.Folder, 0o755); err != nil {
+		t.Fatalf("making the backups folder: %v", err)
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(backup.Folder, name), []byte("an older dump"), 0o600); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+	}
+}
+
+func TestTakeKeepsTheBackupItTookWhenTheClockWentBack(t *testing.T) {
+	t.Parallel()
+
+	backup := backupInto(t, pgDumpOf(t, 18), "postgres://db.example.com/site")
+	backup.Keep = 2
+	placeBackups(t, backup,
+		"0.19.0-20261024T000000Z.dump", "0.20.0-20261025T000000Z.dump", "0.20.0-20261030T000000Z.dump")
+
+	if err := backup.Take(t.Context()); err != nil {
+		t.Fatalf("Take() = %v, want nil", err)
+	}
+
+	want := []string{backup.Name, "0.20.0-20261030T000000Z.dump"}
+	if names := folderNames(t, backup.Folder); !slices.Equal(names, want) {
+		t.Errorf("the backups folder holds %v, want the backup just taken and the newest other %v", names, want)
+	}
+}
+
+func TestTakeKeepsTheBackupTheStateNamesPastTheNumberItKeeps(t *testing.T) {
+	t.Parallel()
+
+	backup := backupInto(t, pgDumpOf(t, 18), "postgres://db.example.com/site")
+	backup.Keep, backup.Held = 1, "0.19.0-20261001T000000Z.dump"
+	placeBackups(t, backup, backup.Held, "0.19.5-20261010T000000Z.dump")
+
+	if err := backup.Take(t.Context()); err != nil {
+		t.Fatalf("Take() = %v, want nil", err)
+	}
+
+	want := []string{backup.Held, backup.Name}
+	if names := folderNames(t, backup.Folder); !slices.Equal(names, want) {
+		t.Errorf("the backups folder holds %v, want the backup the state names and the one just taken %v", names, want)
+	}
+}
+
 func TestTakeRefusesAFailedDumpAndKeepsNoPartOfIt(t *testing.T) {
 	t.Parallel()
 
@@ -356,6 +404,20 @@ func TestTakeRefusesABackupsFolderItCannotWrite(t *testing.T) {
 	err := backup.Take(t.Context())
 
 	wantRefused(t, err, "updater: write the backup")
+}
+
+func TestTakeRefusesABackupsFolderItCannotSaveToDisk(t *testing.T) {
+	t.Parallel()
+
+	backup := backupInto(t, pgDumpOf(t, 18), "postgres://db.example.com/site")
+	if err := os.MkdirAll(backup.Folder, 0o755); err != nil {
+		t.Fatalf("making the backups folder: %v", err)
+	}
+	denied(t, backup.Folder, 0o300)
+
+	err := backup.Take(t.Context())
+
+	wantRefused(t, err, "updater: save the backup to disk: open "+backup.Folder+": permission denied")
 }
 
 func TestTakeRefusesABackupItCannotKeepUnderItsName(t *testing.T) {

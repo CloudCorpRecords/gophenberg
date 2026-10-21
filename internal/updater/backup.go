@@ -33,12 +33,13 @@ var dumpVersion = regexp.MustCompile(`\(PostgreSQL\) (\d+)`)
 // errNotURL refuses a database address a backup cannot hand pg_dump without its password.
 var errNotURL = errors.New("updater: the backup reads the database address only as a postgres:// URL")
 
-// Backup is one pg_dump of the site database into the backups folder, which keeps the newest few.
+// Backup is one pg_dump of the database into the backups folder, which keeps it, the one Held names and the newest.
 type Backup struct {
 	PgDump      string
 	DatabaseURL string
 	Folder      string
 	Name        string
+	Held        string
 	Keep        int
 }
 
@@ -74,7 +75,7 @@ func DumpMajor(ctx context.Context, bin string) (int, error) {
 	return major, nil
 }
 
-// Take runs pg_dump into a partial file, renames it to the name of the backup, then deletes the oldest backups.
+// Take runs pg_dump into a partial file, renames it to the name of the backup, saves the name to disk, then prunes.
 func (b Backup) Take(ctx context.Context) error {
 	reach, err := dumpTarget(b.DatabaseURL)
 	if err != nil {
@@ -88,6 +89,9 @@ func (b Backup) Take(ctx context.Context) error {
 	if err := os.Rename(b.partial(), filepath.Join(b.Folder, b.Name)); err != nil {
 		_ = os.Remove(b.partial())
 		return fmt.Errorf("updater: keep the backup: %w", err)
+	}
+	if err := syncFolder(b.Folder); err != nil {
+		return fmt.Errorf("updater: save the backup to disk: %w", err)
 	}
 	b.prune()
 	return nil
@@ -149,12 +153,19 @@ func postgresURL(parsed *url.URL) bool {
 	return parsed.Scheme == "postgres" || parsed.Scheme == "postgresql"
 }
 
-// prune deletes the backups of the folder past the newest few it keeps, leaving alone every file that is not a backup.
+// prune keeps the spared backups and the newest others up to Keep in all, leaving alone each file that is no backup.
 func (b Backup) prune() {
 	backups := datedBackups(b.Folder)
-	for _, old := range backups[min(b.Keep, len(backups)):] {
+	others := slices.DeleteFunc(slices.Clone(backups), b.spared)
+	room := max(b.Keep-(len(backups)-len(others)), 0)
+	for _, old := range others[min(room, len(others)):] {
 		_ = os.Remove(filepath.Join(b.Folder, old.name))
 	}
+}
+
+// spared reports whether old is a backup pruning never deletes: the one just taken or the one Held names.
+func (b Backup) spared(old dated) bool {
+	return old.name == b.Name || old.name == b.Held
 }
 
 // datedBackups returns each backup folder holds with the time it was taken at, the newest first.

@@ -16,8 +16,17 @@ import (
 	"github.com/gopherium/gophenberg/internal/updater"
 )
 
+// stateChanged is what update:apply says once another command wrote the update state while it ran.
+const stateChanged = "updater: another command wrote the update state while update:apply ran, so update:apply " +
+	"stopped and left that state as it is"
+
 // committed is the state an earlier update to 0.20.0 left once its first start passed its check.
 var committed = updater.State{Step: "committed", From: "0.19.0", To: running, Refused: []string{"0.19.5"}}
+
+// committedTakenBack is the state update:rollback leaves once it takes back the update committed names.
+var committedTakenBack = updater.State{
+	Step: updater.StepRolledBack, From: "0.19.0", To: running, Refused: []string{"0.19.5", running},
+}
 
 // applied runs the job and fails t unless it switched, returning the state it ended at.
 func applied(t *testing.T, job updater.Job) updater.State {
@@ -162,6 +171,109 @@ func TestApplyPointsPreviousBackWhenItCannotPointCurrent(t *testing.T) {
 			wantLink(t, previous, filepath.Join("versions", before))
 		})
 	}
+}
+
+func TestApplyKeepsTheBackupTheStateNamesWhenItPutsTheStateBack(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	f.env["GOPHENBERG_UPDATE_BACKUPS_KEEP"] = "1"
+	held := updater.State{
+		Step: updater.StepFailed, From: "0.19.0", To: running, Attempts: 4, LongJump: true,
+		Backup: "backups/0.19.0-20261001T000000Z.dump", Refused: []string{running},
+	}
+	writeState(t, f.layout, held)
+	if err := os.MkdirAll(f.layout.Backups(), 0o755); err != nil {
+		t.Fatalf("making the backups folder: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(f.layout.Root, held.Backup), []byte("an older dump"), 0o600); err != nil {
+		t.Fatalf("writing the backup the state names: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(f.layout.Root, "previous", "kept"), 0o755); err != nil {
+		t.Fatalf("making a folder called previous: %v", err)
+	}
+
+	_, err := f.job().Apply(t.Context())
+
+	wantRefused(t, err, "updater: point previous at 0.20.0")
+	f.wantPutBack(held)
+	if _, err := os.Stat(filepath.Join(f.layout.Root, held.Backup)); err != nil {
+		t.Errorf("the backup the state names is gone (%v), want it kept for the restore steps", err)
+	}
+}
+
+func TestApplyStopsWhenAnotherCommandWroteTheStateSinceItRead(t *testing.T) {
+	t.Parallel()
+
+	for name, meanwhile := range map[string]func(*jobFixture, *updater.Job){
+		"before the download": func(f *jobFixture, _ *updater.Job) {
+			f.site.onServe(func(string) {
+				if err := f.layout.WriteState(committedTakenBack); err != nil {
+					f.t.Errorf("writing the state another command writes: %v", err)
+				}
+			})
+		},
+		"before the switch": func(f *jobFixture, job *updater.Job) {
+			written := updater.Layout{Root: f.t.TempDir()}
+			writeState(f.t, written, committedTakenBack)
+			job.Settings.PgDump = scriptedDump(f.t, "pg_dump (PostgreSQL) 99.2", 0, stateCopy(f.t, written, f.layout)).bin
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newJobFixture(t)
+			writeState(t, f.layout, committed)
+			job := f.job()
+			meanwhile(f, &job)
+
+			_, err := job.Apply(t.Context())
+
+			wantRefused(t, err, stateChanged)
+			if strings.Count(fmt.Sprint(err), "another command wrote") != 1 {
+				t.Errorf("Apply() = %v, want the state that changed named once", err)
+			}
+			f.wantPutBack(committedTakenBack)
+		})
+	}
+}
+
+func TestApplyPointsNoLinkWhenItCannotWriteTheSwitchedState(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	writeState(t, f.layout, committed)
+	folder := filepath.Dir(f.layout.StateFile())
+	modeRestored(t, folder)
+	job := f.job()
+	job.Settings.PgDump = scriptedDump(t, "pg_dump (PostgreSQL) 99.2", 0, fmt.Sprintf("chmod 500 %q\n", folder)).bin
+
+	_, err := job.Apply(t.Context())
+
+	wantRefused(t, err, "updater: write the update state")
+	wantLink(t, filepath.Join(f.layout.Root, "current"), filepath.Join("versions", running))
+	wantMissing(t, filepath.Join(f.layout.Root, "previous"))
+	wantMissing(t, f.layout.Build(offered))
+	want := updater.State{Step: updater.StepBackup, From: running, To: offered, Refused: committed.Refused}
+	if state := readState(t, f.layout); !reflect.DeepEqual(state, want) {
+		t.Errorf("the state file holds %+v, want the backup step it wrote last %+v", state, want)
+	}
+}
+
+func TestApplyStopsWhenItCannotReadTheStateBeforeAStep(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	writeState(t, f.layout, committed)
+	job := f.job()
+	job.Settings.PgDump = scriptedDump(t, "pg_dump (PostgreSQL) 99.2", 0,
+		fmt.Sprintf("printf 'step: switched' > %q\n", f.layout.StateFile())).bin
+
+	_, err := job.Apply(t.Context())
+
+	wantRefused(t, err, "updater: read the update state "+f.layout.StateFile())
+	wantLink(t, filepath.Join(f.layout.Root, "current"), filepath.Join("versions", running))
+	wantMissing(t, f.layout.Build(offered))
 }
 
 func TestApplyCountsTheDatabaseInTheDiskItNeedsOnlyForABackup(t *testing.T) {

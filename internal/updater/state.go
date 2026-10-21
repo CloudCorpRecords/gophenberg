@@ -9,10 +9,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
+	"syscall"
 )
 
 // stateName is the file of the state folder that holds the state of the last update.
 const stateName = "update.json"
+
+// errStateChanged stops a job once another command wrote the state file after the job last read or wrote it.
+var errStateChanged = errors.New("updater: another command wrote the update state while update:apply ran, " +
+	"so update:apply stopped and left that state as it is")
 
 // Step names how far an update got, written to the state file before the step runs.
 type Step string
@@ -72,6 +78,38 @@ func (l Layout) ReadState() (State, error) {
 		return State{}, fmt.Errorf("updater: read the update state %s: %w", l.StateFile(), err)
 	}
 	return state, nil
+}
+
+// lockState takes the lock on the state folder, waiting while another command holds it, and returns what lets go of it.
+func (l Layout) lockState() (func(), error) {
+	folder, err := os.Open(filepath.Dir(l.StateFile()))
+	if errors.Is(err, fs.ErrNotExist) {
+		return func() {}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("updater: lock the update state: %w", err)
+	}
+	_ = syscall.Flock(int(folder.Fd()), syscall.LOCK_EX)
+	return func() { _ = folder.Close() }, nil
+}
+
+// lockedState takes the state lock, then reads the state, returning it with what lets go of the lock.
+func (l Layout) lockedState() (State, func(), error) {
+	unlock, err := l.lockState()
+	if err != nil {
+		return State{}, nil, err
+	}
+	state, err := l.ReadState()
+	if err != nil {
+		unlock()
+		return State{}, nil, err
+	}
+	return state, unlock, nil
+}
+
+// sameState reports whether a and b hold the same update, reading no list of refused versions as an empty one.
+func sameState(a, b State) bool {
+	return reflect.DeepEqual(a.WithEmptyLists(), b.WithEmptyLists())
 }
 
 // WriteState writes state into a new file renamed over the state file, so a sudden stop leaves one or the other.
