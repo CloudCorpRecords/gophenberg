@@ -126,9 +126,26 @@ func (done outcome) over(held taken, stored Result, src source) (Result, map[str
 	return result, values
 }
 
+// raiseSerials stores serials as the ones taken from src in one update, keeping any later serial stored now.
+func raiseSerials(ctx context.Context, store Settings, src source, serials Serials) error {
+	err := store.Update(ctx, []string{serialsKey}, func(values map[string]string) (map[string]string, error) {
+		held, _ := stateFrom(values)
+		return map[string]string{serialsKey: written(held.with(src, held.of(src).latest(serials)))}, nil
+	})
+	if err != nil {
+		return fmt.Errorf("update: store the serials taken: %w", err)
+	}
+	return nil
+}
+
 // newerThan reports whether either serial comes after the matching one of other.
 func (s Serials) newerThan(other Serials) bool {
 	return s.Keys > other.Keys || s.Index > other.Index
+}
+
+// latest returns the later of each serial of s and the matching one of other.
+func (s Serials) latest(other Serials) Serials {
+	return Serials{Keys: max(s.Keys, other.Keys), Index: max(s.Index, other.Index)}
 }
 
 // sourceOf returns what a check under cfg reads.

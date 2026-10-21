@@ -31,7 +31,7 @@ type Chosen struct {
 	Signers []ed25519.PublicKey
 }
 
-// Choose verifies the key list and the index again, then returns the offer named, or the newest the site takes.
+// Choose verifies the key list and the index again, keeps their serials, then returns the offer named or the newest.
 func Choose(ctx context.Context, cfg Config, store Settings, named string) (Chosen, error) {
 	defer cfg.Client.CloseIdleConnections()
 	cfg, taken, err := prepared(ctx, cfg, store)
@@ -40,6 +40,9 @@ func Choose(ctx context.Context, cfg Config, store Settings, named string) (Chos
 	}
 	files, err := cfg.verified(ctx, taken)
 	if err != nil {
+		return Chosen{}, err
+	}
+	if err := raiseSerials(ctx, store, sourceOf(cfg), files.serials()); err != nil {
 		return Chosen{}, err
 	}
 	offer, err := files.index.pick(cfg.Site, named)

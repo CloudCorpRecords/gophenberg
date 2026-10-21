@@ -55,7 +55,12 @@ func Check(ctx context.Context, cfg Config, taken Serials) (*Found, Serials, err
 	if err != nil {
 		return nil, taken, err
 	}
-	return files.index.UpdateFor(cfg.Site), Serials{Keys: files.list.Serial, Index: files.index.Serial}, nil
+	return files.index.UpdateFor(cfg.Site), files.serials(), nil
+}
+
+// serials returns the serials of the key list and the index.
+func (s signed) serials() Serials {
+	return Serials{Keys: s.list.Serial, Index: s.index.Serial}
 }
 
 // verified fetches and verifies the key list and the index, refusing serials older than the ones taken.

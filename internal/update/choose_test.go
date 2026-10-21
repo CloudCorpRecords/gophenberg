@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gopherium/gophenberg/internal/update"
@@ -160,6 +161,68 @@ func TestChooseRefusesAnIndexOlderThanTheOneACheckTook(t *testing.T) {
 	_, err := update.Choose(t.Context(), server.config(k), store, "")
 
 	wantRefused(t, err, "index of serial 8, older than serial 9 taken before")
+}
+
+func TestChooseRefusesAnOlderIndexOnceItSawANewerOneWithdrawTheVersion(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	for named, text := range map[string]string{
+		"":       "offers no version newer than the one this site runs",
+		"0.21.0": "refused Gophenberg 0.21.0, which the update site withdrew",
+	} {
+		withdrawn := offer("0.21.0", "0.21.0")
+		withdrawn.Withdrawn = true
+		newer := index(withdrawn)
+		newer.Serial = 10
+		server := newUpdateServer(t, k, "")
+		server.putIndex(k, newer)
+		store := newStore()
+		_, err := update.Choose(t.Context(), server.config(k), store, named)
+		wantRefused(t, err, text)
+		server.putIndex(k, index(offer("0.21.0", "0.21.0")))
+
+		_, err = update.Choose(t.Context(), server.config(k), store, named)
+
+		wantRefused(t, err, "index of serial 9, older than serial 10 taken before")
+	}
+}
+
+func TestChooseRaisesTheStoredSerialsWithoutLoweringAny(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	store := newStore()
+	store.meanwhile = func(m *memoryStore) {
+		m.values["update_serials"] = string(marshal(t, takenSerials{
+			Keys:  map[string]int64{server.site(): 6},
+			Index: map[string]int64{server.source("stable"): 3, server.source("beta"): 4},
+		}))
+	}
+
+	if _, err := update.Choose(t.Context(), server.config(k), store, ""); err != nil {
+		t.Fatalf("Choose() = %v, want nil", err)
+	}
+	for channel, want := range map[string]update.Serials{"stable": {Keys: 6, Index: 9}, "beta": {Keys: 6, Index: 4}} {
+		if got := storedSerials(t, store, server, channel); got != want {
+			t.Errorf("update_serials of %s = %+v, want %+v", channel, got, want)
+		}
+	}
+}
+
+func TestChooseStopsWhenItCannotStoreTheSerials(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	store := &memoryStore{values: map[string]string{"site_id": siteID}, saveFail: errPlanted}
+
+	_, err := update.Choose(t.Context(), server.config(k), store, "")
+
+	if !errors.Is(err, errPlanted) || !strings.Contains(err.Error(), "store the serials taken") {
+		t.Errorf("Choose() = %v, want the store's failure to keep the serials", err)
+	}
 }
 
 func TestChooseRefusesAnIndexNoListedKeySigned(t *testing.T) {
