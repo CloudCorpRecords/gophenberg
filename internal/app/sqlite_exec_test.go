@@ -6,12 +6,17 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,26 +25,159 @@ import (
 	"github.com/gopherium/framework/gonsole/testkit"
 )
 
-// binaryRunLimit is how long one run of the built binary may take before the test stops it.
-const binaryRunLimit = 30 * time.Second
+const (
+	// binaryRunLimit is how long one run of the built binary may take before the test stops it.
+	binaryRunLimit = 30 * time.Second
+	// newFileHold is how long another connection keeps the write lock of a new file on a system without /proc.
+	newFileHold = 500 * time.Millisecond
+	// openPoll is how often the test looks again whether each run has the database file open.
+	openPoll = time.Millisecond
+	// endGrace is how long a run whose open files cannot be read has to show it ended before the test stops.
+	endGrace = time.Second
+)
+
+// binaryRun is one run of the built binary that started and that the test has not waited for yet.
+type binaryRun struct {
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+	waited chan error
+	ended  chan struct{}
+}
+
+// startBinary starts the built binary with args and stdin under env in a folder of its own, stopped at binaryRunLimit.
+func startBinary(t *testing.T, binary string, env []string, stdin io.Reader, args ...string) binaryRun {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
+	run := binaryRun{cmd: exec.CommandContext(ctx, binary, args...), cancel: cancel, stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{}, waited: make(chan error, 1), ended: make(chan struct{})}
+	run.cmd.Dir = t.TempDir()
+	run.cmd.Env = env
+	run.cmd.Stdin = stdin
+	run.cmd.Stdout = run.stdout
+	run.cmd.Stderr = run.stderr
+	if err := run.cmd.Start(); err != nil {
+		cancel()
+		t.Fatalf("gophenberg %q: %v", args, err)
+	}
+	go func() {
+		run.waited <- run.cmd.Wait()
+		close(run.ended)
+	}()
+	return run
+}
+
+// hasEnded reports whether the run has ended, without waiting for it.
+func (r binaryRun) hasEnded() bool {
+	select {
+	case <-r.ended:
+		return true
+	default:
+		return false
+	}
+}
+
+// wait waits for the run to end and returns its answer.
+func (r binaryRun) wait(t *testing.T) testkit.Result {
+	t.Helper()
+	defer r.cancel()
+	var exitErr *exec.ExitError
+	if err := <-r.waited; err != nil && !errors.As(err, &exitErr) {
+		t.Fatalf("gophenberg %q: %v", r.cmd.Args[1:], err)
+	}
+	return testkit.Result{Code: r.cmd.ProcessState.ExitCode(), Stdout: r.stdout.String(), Stderr: r.stderr.String()}
+}
 
 // runBinary runs the built binary with args and stdin under env from a folder of its own and returns its answer.
 func runBinary(t *testing.T, binary string, env []string, stdin io.Reader, args ...string) testkit.Result {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
-	defer cancel()
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = t.TempDir()
-	cmd.Env = env
-	cmd.Stdin = stdin
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	var exitErr *exec.ExitError
-	if err := cmd.Run(); err != nil && !errors.As(err, &exitErr) {
-		t.Fatalf("gophenberg %q: %v", args, err)
+	return startBinary(t, binary, env, stdin, args...).wait(t)
+}
+
+// holdWriteLock holds the write lock of the SQLite file at path from a connection outside dbkit, until let go.
+func holdWriteLock(t *testing.T, path string) (letGo func()) {
+	t.Helper()
+	conn, err := openSQLiteFile(t, path).Driver().Open(path)
+	if err != nil {
+		t.Fatalf("opening a plain driver connection to the SQLite file: %v", err)
 	}
-	return testkit.Result{Code: cmd.ProcessState.ExitCode(), Stdout: stdout.String(), Stderr: stderr.String()}
+	t.Cleanup(func() { _ = conn.Close() })
+	plain, ok := conn.(driver.ExecerContext)
+	if !ok {
+		t.Fatalf("the SQLite driver connection %T runs no statement", conn)
+	}
+	if _, err := plain.ExecContext(t.Context(), "BEGIN IMMEDIATE", nil); err != nil {
+		t.Fatalf("BEGIN IMMEDIATE on the plain driver connection: %v", err)
+	}
+	return func() {
+		if _, err := plain.ExecContext(t.Context(), "ROLLBACK", nil); err != nil {
+			t.Fatalf("ROLLBACK on the plain driver connection: %v", err)
+		}
+	}
+}
+
+// waitUntilOpen waits until each run has the file at path open or has ended, or for newFileHold without /proc.
+func waitUntilOpen(t *testing.T, path string, runs []binaryRun) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		time.Sleep(newFileHold)
+		return
+	}
+	file, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("resolving the SQLite file %s: %v", path, err)
+	}
+	waiting := make(map[int]binaryRun, len(runs))
+	for i, run := range runs {
+		waiting[i+1] = run
+	}
+	deadline := time.Now().Add(binaryRunLimit)
+	for {
+		maps.DeleteFunc(waiting, func(_ int, run binaryRun) bool {
+			return openOrEnded(t, run, file)
+		})
+		if len(waiting) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("gophenberg runs %v of %d neither opened %s nor ended within %v",
+				slices.Sorted(maps.Keys(waiting)), len(runs), path, binaryRunLimit)
+		}
+		time.Sleep(openPoll)
+	}
+}
+
+// openOrEnded reports whether run has the file open or has ended, failing t when its open files cannot be read.
+func openOrEnded(t *testing.T, run binaryRun, file string) bool {
+	t.Helper()
+	if run.hasEnded() {
+		return true
+	}
+	open, err := hasOpen(run.cmd.Process.Pid, file)
+	if err == nil {
+		return open
+	}
+	select {
+	case <-run.ended:
+		return true
+	case <-time.After(endGrace):
+	}
+	t.Fatalf("reading the open files of gophenberg process %d: %v", run.cmd.Process.Pid, err)
+	return false
+}
+
+// hasOpen reports whether the process pid has the file at path open, as its /proc folder lists it.
+func hasOpen(pid int, path string) (bool, error) {
+	fds := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+	entries, err := os.ReadDir(fds)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+		target, err := os.Readlink(filepath.Join(fds, entry.Name()))
+		return err == nil && target == path
+	}), nil
 }
 
 // cronJobCount returns how many cron jobs the SQLite file behind db holds.
@@ -92,6 +230,34 @@ func TestSQLiteBinaryMigratesChecksAndNamesWhatItCannotRun(t *testing.T) {
 	if listed.Code != gonsole.ExitDone || listed.Stdout != "" {
 		t.Errorf("gophenberg account:list = %d, stdout %q, stderr %q, want 0 and no account listed",
 			listed.Code, listed.Stdout, listed.Stderr)
+	}
+}
+
+func TestSQLiteBinaryMigratesANewFileFromTwoRunsBehindAHeldWriteLock(t *testing.T) {
+	t.Parallel()
+
+	binary, env := testkit.CoverBinary(t, "GOPHENBERG_", "gophenberg")
+	path := emptySQLiteFile(t)
+	env = append(env, "GOPHENBERG_DATABASE_URL="+sqlitePrefix+path)
+	letGo := holdWriteLock(t, path)
+
+	runs := []binaryRun{startBinary(t, binary, env, nil, "migrate"), startBinary(t, binary, env, nil, "migrate")}
+	waitUntilOpen(t, path, runs)
+	letGo()
+
+	for i, run := range runs {
+		if got := run.wait(t); got.Code != gonsole.ExitDone || got.Stdout != migratedLines {
+			t.Errorf("gophenberg migrate run %d of 2 = %d, stdout %q, stderr %q, want 0 and %q",
+				i+1, got.Code, got.Stdout, got.Stderr, migratedLines)
+		}
+	}
+	lone := emptySQLiteFile(t)
+	if got := testkit.Run(t, Program(migratingSQLite(lone), noPlugins), "", "migrate"); got.Code != gonsole.ExitDone {
+		t.Fatalf("migrate of a second new file = %d with stderr %q, want 0", got.Code, got.Stderr)
+	}
+	want := appliedVersions(t, openSQLiteFile(t, lone))
+	if got := appliedVersions(t, openSQLiteFile(t, path)); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("the versions after two runs at once = %v, want the %v one run leaves on a new file", got, want)
 	}
 }
 

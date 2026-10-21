@@ -27,7 +27,10 @@ func TestMustSubPanicsOnAFolderOutsideTheTree(t *testing.T) {
 func TestTheBaselineRollsBackOverAStoredPostAndAppliesAgain(t *testing.T) {
 	t.Parallel()
 
-	settings := Settings{BusyTimeout: 5 * time.Second, CacheSize: 2048, MaxConns: 4, Synchronous: dbsqlite.SynchronousFull}
+	settings := Settings{
+		BusyTimeout: 5 * time.Second, BusyPoll: 10 * time.Millisecond, CacheSize: 2048, MaxConns: 4,
+		Synchronous: dbsqlite.SynchronousFull,
+	}
 	opts := MigrateOptions{LockWait: 5 * time.Second, LockPoll: 10 * time.Millisecond}
 	db := sqlitetest.Open(t, settings.Options())
 	if err := authkitsqlite.Migrate(t.Context(), db, authkitsqlite.MigrateOptions(opts)); err != nil {
