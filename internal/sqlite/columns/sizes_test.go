@@ -32,7 +32,8 @@ func thumb() columns.Sizes {
 func openTable(t *testing.T) *sql.DB {
 	t.Helper()
 	db := sqlitetest.Open(t, dbsqlite.Options{
-		BusyTimeout: 5 * time.Second, CacheSize: 2048, MaxConns: 4, Synchronous: dbsqlite.SynchronousFull,
+		BusyTimeout: 5 * time.Second, BusyPoll: 10 * time.Millisecond, CacheSize: 2048, MaxConns: 4,
+		Synchronous: dbsqlite.SynchronousFull,
 	})
 	statement := `CREATE TABLE images (sizes TEXT NOT NULL CHECK (json_valid(sizes)))`
 	if _, err := db.ExecContext(t.Context(), statement); err != nil {
