@@ -27,16 +27,17 @@ import (
 
 // updateSite is a loopback update site whose key list, stable index and archive the test signs with keys it made.
 type updateSite struct {
-	t        *testing.T
-	roots    map[string]*ecdsa.PrivateKey
-	release  ed25519.PrivateKey
-	stranger ed25519.PrivateKey
-	offered  string
-	minimum  string
-	archive  update.Artifact
-	mu       sync.Mutex
-	files    map[string][]byte
-	address  string
+	t         *testing.T
+	roots     map[string]*ecdsa.PrivateKey
+	release   ed25519.PrivateKey
+	timestamp ed25519.PrivateKey
+	stranger  ed25519.PrivateKey
+	offered   string
+	minimum   string
+	archive   update.Artifact
+	mu        sync.Mutex
+	files     map[string][]byte
+	address   string
 }
 
 // newUpdateSite starts an update site on loopback, closed when t ends, offering nothing yet.
@@ -51,6 +52,7 @@ func newUpdateSite(t *testing.T) *updateSite {
 		site.roots[name] = key
 	}
 	site.release = newEd25519(t)
+	site.timestamp = newEd25519(t)
 	site.stranger = newEd25519(t)
 	server := httptest.NewServer(http.HandlerFunc(site.serve))
 	t.Cleanup(server.Close)
@@ -159,12 +161,15 @@ func (s *updateSite) multikey(key any) string {
 	return text
 }
 
-// publishKeyList serves a key list naming the release key, signed by each root signers names.
+// publishKeyList serves a key list naming the release key and the timestamp key, signed by each root signers names.
 func (s *updateSite) publishKeyList(signers ...string) {
 	s.t.Helper()
 	body := s.marshal(update.KeyList{
 		Schema: 1, Serial: 1, Expires: time.Now().AddDate(1, 0, 0).UTC().Truncate(time.Second),
-		Keys: []update.ListedKey{{Role: update.RoleRelease, Multikey: s.multikey(s.release.Public())}},
+		Keys: []update.ListedKey{
+			{Role: update.RoleRelease, Multikey: s.multikey(s.release.Public())},
+			{Role: update.RoleTimestamp, Multikey: s.multikey(s.timestamp.Public())},
+		},
 	})
 	lines := make([]string, 0, len(signers))
 	for _, name := range signers {
