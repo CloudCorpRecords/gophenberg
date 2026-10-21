@@ -32,6 +32,8 @@ const (
 	newFileHold = 500 * time.Millisecond
 	// openPoll is how often the test looks again whether each run has the database file open.
 	openPoll = time.Millisecond
+	// endGrace is how long a run whose open files cannot be read has to show it ended before the test stops.
+	endGrace = time.Second
 )
 
 // binaryRun is one run of the built binary that started and that the test has not waited for yet.
@@ -156,8 +158,10 @@ func openOrEnded(t *testing.T, run binaryRun, file string) bool {
 	if err == nil {
 		return open
 	}
-	if run.hasEnded() {
+	select {
+	case <-run.ended:
 		return true
+	case <-time.After(endGrace):
 	}
 	t.Fatalf("reading the open files of gophenberg process %d: %v", run.cmd.Process.Pid, err)
 	return false
