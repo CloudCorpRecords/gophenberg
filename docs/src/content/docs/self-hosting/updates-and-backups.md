@@ -575,9 +575,11 @@ index again, then works in these steps, writing each one to
    `about -json` to check its version and that it is an official build.
 4. **Backup.** It backs up the database with `pg_dump` into `backups/`,
    in the custom format, the password passed in `PGPASSWORD` and never
-   on the command line. It keeps the newest
-   `GOPHENBERG_UPDATE_BACKUPS_KEEP` backups. `-skip-backup` skips this
-   step, except for a release that raised the minimum version.
+   on the command line. It keeps `GOPHENBERG_UPDATE_BACKUPS_KEEP`
+   backups: always the one it just took and the one the last update
+   names in `state/update.json`, then the newest others. With a setting
+   of 1 it can keep those two. `-skip-backup` skips this step, except
+   for a release that raised the minimum version.
 5. **Switch.** It points `previous` at the build that runs and
    `current` at the new one.
 
