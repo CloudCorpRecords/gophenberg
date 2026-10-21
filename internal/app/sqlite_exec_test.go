@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,26 +21,76 @@ import (
 	"github.com/gopherium/framework/gonsole/testkit"
 )
 
-// binaryRunLimit is how long one run of the built binary may take before the test stops it.
-const binaryRunLimit = 30 * time.Second
+const (
+	// binaryRunLimit is how long one run of the built binary may take before the test stops it.
+	binaryRunLimit = 30 * time.Second
+	// newFileHold is how long another connection keeps the write lock of a new file after two runs started on it.
+	newFileHold = 500 * time.Millisecond
+)
+
+// binaryRun is one run of the built binary that started and that the test has not waited for yet.
+type binaryRun struct {
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+// startBinary starts the built binary with args and stdin under env in a folder of its own, stopped at binaryRunLimit.
+func startBinary(t *testing.T, binary string, env []string, stdin io.Reader, args ...string) binaryRun {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
+	run := binaryRun{cmd: exec.CommandContext(ctx, binary, args...), cancel: cancel, stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{}}
+	run.cmd.Dir = t.TempDir()
+	run.cmd.Env = env
+	run.cmd.Stdin = stdin
+	run.cmd.Stdout = run.stdout
+	run.cmd.Stderr = run.stderr
+	if err := run.cmd.Start(); err != nil {
+		cancel()
+		t.Fatalf("gophenberg %q: %v", args, err)
+	}
+	return run
+}
+
+// wait waits for the run to end and returns its answer.
+func (r binaryRun) wait(t *testing.T) testkit.Result {
+	t.Helper()
+	defer r.cancel()
+	var exitErr *exec.ExitError
+	if err := r.cmd.Wait(); err != nil && !errors.As(err, &exitErr) {
+		t.Fatalf("gophenberg %q: %v", r.cmd.Args[1:], err)
+	}
+	return testkit.Result{Code: r.cmd.ProcessState.ExitCode(), Stdout: r.stdout.String(), Stderr: r.stderr.String()}
+}
 
 // runBinary runs the built binary with args and stdin under env from a folder of its own and returns its answer.
 func runBinary(t *testing.T, binary string, env []string, stdin io.Reader, args ...string) testkit.Result {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), binaryRunLimit)
-	defer cancel()
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = t.TempDir()
-	cmd.Env = env
-	cmd.Stdin = stdin
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	var exitErr *exec.ExitError
-	if err := cmd.Run(); err != nil && !errors.As(err, &exitErr) {
-		t.Fatalf("gophenberg %q: %v", args, err)
+	return startBinary(t, binary, env, stdin, args...).wait(t)
+}
+
+// holdWriteLock holds the write lock of the SQLite file at path from a connection outside dbkit, until let go.
+func holdWriteLock(t *testing.T, path string) (letGo func()) {
+	t.Helper()
+	conn, err := openSQLiteFile(t, path).Driver().Open(path)
+	if err != nil {
+		t.Fatalf("opening a plain driver connection to the SQLite file: %v", err)
 	}
-	return testkit.Result{Code: cmd.ProcessState.ExitCode(), Stdout: stdout.String(), Stderr: stderr.String()}
+	t.Cleanup(func() { _ = conn.Close() })
+	plain, ok := conn.(driver.ExecerContext)
+	if !ok {
+		t.Fatalf("the SQLite driver connection %T runs no statement", conn)
+	}
+	if _, err := plain.ExecContext(t.Context(), "BEGIN IMMEDIATE", nil); err != nil {
+		t.Fatalf("BEGIN IMMEDIATE on the plain driver connection: %v", err)
+	}
+	return func() {
+		if _, err := plain.ExecContext(t.Context(), "ROLLBACK", nil); err != nil {
+			t.Fatalf("ROLLBACK on the plain driver connection: %v", err)
+		}
+	}
 }
 
 // cronJobCount returns how many cron jobs the SQLite file behind db holds.
@@ -92,6 +143,34 @@ func TestSQLiteBinaryMigratesChecksAndNamesWhatItCannotRun(t *testing.T) {
 	if listed.Code != gonsole.ExitDone || listed.Stdout != "" {
 		t.Errorf("gophenberg account:list = %d, stdout %q, stderr %q, want 0 and no account listed",
 			listed.Code, listed.Stdout, listed.Stderr)
+	}
+}
+
+func TestSQLiteBinaryMigratesANewFileFromTwoRunsBehindAHeldWriteLock(t *testing.T) {
+	t.Parallel()
+
+	binary, env := testkit.CoverBinary(t, "GOPHENBERG_", "gophenberg")
+	path := emptySQLiteFile(t)
+	env = append(env, "GOPHENBERG_DATABASE_URL="+sqlitePrefix+path)
+	letGo := holdWriteLock(t, path)
+
+	runs := []binaryRun{startBinary(t, binary, env, nil, "migrate"), startBinary(t, binary, env, nil, "migrate")}
+	time.Sleep(newFileHold)
+	letGo()
+
+	for i, run := range runs {
+		if got := run.wait(t); got.Code != gonsole.ExitDone || got.Stdout != migratedLines {
+			t.Errorf("gophenberg migrate run %d of 2 = %d, stdout %q, stderr %q, want 0 and %q",
+				i+1, got.Code, got.Stdout, got.Stderr, migratedLines)
+		}
+	}
+	lone := emptySQLiteFile(t)
+	if got := testkit.Run(t, Program(migratingSQLite(lone), noPlugins), "", "migrate"); got.Code != gonsole.ExitDone {
+		t.Fatalf("migrate of a second new file = %d with stderr %q, want 0", got.Code, got.Stderr)
+	}
+	want := appliedVersions(t, openSQLiteFile(t, lone))
+	if got := appliedVersions(t, openSQLiteFile(t, path)); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("the versions after two runs at once = %v, want the %v one run leaves on a new file", got, want)
 	}
 }
 
