@@ -240,11 +240,8 @@ records nothing, and neither do `account:create-admin` and `seed`.
 It lists the latest 50, unless `-limit` or
 `GOPHENBERG_COMMAND_RECORDS_LIMIT` names another number. Storing one
 record may take up to `GOPHENBERG_COMMAND_RECORD_TIMEOUT`, 5 seconds
-unless set. On a SQLite database, a record that waits for another
-command's write can take up to `GOPHENBERG_SQLITE_BUSY_TIMEOUT`
-instead, when that setting is longer. When a record cannot be stored,
-the change stays applied, and the command exits with code 1 and says
-so.
+unless set. When a record cannot be stored, the change stays applied,
+and the command exits with code 1 and says so.
 
 ## Renamed commands
 
@@ -345,10 +342,6 @@ beside the file the link points at. A step waits for it up to
 `GOPHENBERG_SQLITE_MIGRATE_LOCK_WAIT`, 30 seconds unless set, then
 stops with an error. Never delete that file.
 
-On a new empty file, two `migrate` runs started at the same moment can
-still stop at once with `the database is busy`, before either reaches
-the lock. Nothing is written, so run `migrate` again.
-
 ### seed
 
 ```text
@@ -415,10 +408,7 @@ docker compose run --rm -T gophenberg \
 
 On a SQLite database it works the same way and creates the account in
 the file, but `serve` still cannot serve a site from that file, see
-[on a SQLite database](#on-a-sqlite-database). On a new empty file,
-two `account:create-admin` runs started at the same moment can stop
-with `the database is busy`, as two `migrate` runs can. The run that
-stops creates no account, so run it again.
+[on a SQLite database](#on-a-sqlite-database).
 
 ### account:disable
 

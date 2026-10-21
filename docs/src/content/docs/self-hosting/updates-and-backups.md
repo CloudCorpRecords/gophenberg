@@ -227,6 +227,14 @@ Some things work differently after this update:
   `seed -yes` still stop, and their error no longer names accounts. A
   plugin can read account names on SQLite too, see
   [reading account names](/extending/the-plugin-sdk/#reading-account-names).
+- On a SQLite file, two `migrate` runs started at the same moment on a
+  new file no longer stop with `the database is busy`. Opening the
+  file while another connection holds it locked now waits up to
+  `GOPHENBERG_SQLITE_BUSY_TIMEOUT`, as a write already did. Each wait
+  tries the lock again every `GOPHENBERG_SQLITE_BUSY_POLL`, a new
+  setting, 10ms unless set. A wait now ends as soon as its command
+  stops, such as on Ctrl-C. The release before this one waited out the
+  whole busy timeout.
 
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
