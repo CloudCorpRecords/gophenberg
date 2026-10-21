@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -38,12 +39,29 @@ func heldState(t *testing.T, layout updater.Layout) func() {
 // waitsForTheLock runs command while t holds the state lock, then writes newer and lets go, failing t on an early end.
 func waitsForTheLock(t *testing.T, layout updater.Layout, newer updater.State, command func()) {
 	t.Helper()
+	read := make(chan struct{})
+	close(read)
+	waitsForTheLockOnceRead(t, layout, newer, read, command)
+}
+
+// waitsForTheLockOnceRead is waitsForTheLock for a command that reads the state before it waits, as read shows.
+func waitsForTheLockOnceRead(t *testing.T, layout updater.Layout, newer updater.State, read <-chan struct{},
+	command func(),
+) {
+	t.Helper()
 	release := heldState(t, layout)
 	ended := make(chan struct{})
 	go func() {
 		defer close(ended)
 		command()
 	}()
+	select {
+	case <-ended:
+		t.Error("the command ended before it read the state, want it to read the state and wait for the lock")
+		release()
+		return
+	case <-read:
+	}
 	select {
 	case <-ended:
 		t.Error("the command ended while another command held the state lock, want it to wait for the lock")
@@ -215,10 +233,13 @@ func TestApplyWaitsForTheStateLockAndStopsOnceAnotherCommandWroteTheState(t *tes
 
 	f := newJobFixture(t)
 	writeState(t, f.layout, committed)
+	read := make(chan struct{})
+	var once sync.Once
+	f.site.onServe(func(string) { once.Do(func() { close(read) }) })
 	job := f.job()
 	var err error
 
-	waitsForTheLock(t, f.layout, committedTakenBack, func() { _, err = job.Apply(t.Context()) })
+	waitsForTheLockOnceRead(t, f.layout, committedTakenBack, read, func() { _, err = job.Apply(t.Context()) })
 
 	wantRefused(t, err, stateChanged)
 	f.wantPutBack(committedTakenBack)
