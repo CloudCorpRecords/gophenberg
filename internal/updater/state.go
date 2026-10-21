@@ -89,7 +89,15 @@ func (l Layout) lockState() (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("updater: lock the update state: %w", err)
 	}
-	_ = syscall.Flock(int(folder.Fd()), syscall.LOCK_EX)
+	return held(folder, syscall.Flock)
+}
+
+// held locks the open folder with flock, closing it when the lock fails, and returns what lets go of the lock.
+func held(folder *os.File, flock func(fd, how int) error) (func(), error) {
+	if err := flock(int(folder.Fd()), syscall.LOCK_EX); err != nil {
+		_ = folder.Close()
+		return nil, fmt.Errorf("updater: lock the update state: %w", err)
+	}
 	return func() { _ = folder.Close() }, nil
 }
 
