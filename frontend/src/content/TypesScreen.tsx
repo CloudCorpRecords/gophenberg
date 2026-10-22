@@ -1,677 +1,156 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { AlertDialog, Badge, Button, Dialog, InputControl, Stack, Text } from '@gophenberg/frontend-sdk'
-import { __, _x, sprintf } from '@wordpress/i18n'
-import { ErrorNotice, LoadingRows, Page, useToaster } from '@gopherium/godmin'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import { Button } from '@gophenberg/frontend-sdk'
+import { DataViews, filterSortAndPaginate } from '@gophenberg/frontend-sdk/dataviews'
+import type { Action, Field, View } from '@gophenberg/frontend-sdk/dataviews'
+import { ErrorNotice, ListEmpty, Page, offeredSize, offeredView, useListRun } from '@gopherium/godmin'
+import type { OfferedView } from '@gopherium/godmin'
+import { useListView } from '@gopherium/godmin/router'
+import type { ListView } from '@gopherium/godmin/router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { UseQueryResult } from '@tanstack/react-query'
+import { __, sprintf } from '@wordpress/i18n'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import { typesQueryKey } from './nav'
-import { pluralOf } from './typeText'
-import { createType, deleteType, listTypes, updateType } from './types'
-import type { ContentType, NewType, TypeEdit } from './types'
+import { useFocusOnList } from '../lists/focusOnList'
+import type { ListSettings } from '../settings/api'
+import { useListSettings } from '../settings/useListSettings'
+import { typesNavItem, typesQueryKey } from './nav'
+import { TYPE_COLUMNS, TYPE_PHONE_COLUMNS, TYPE_SORT, TYPE_VIEW_GUARD, typeFields } from './typeFields'
+import { useTypeActions } from './typeActions'
+import { AddTypeDialog } from './TypeModals'
+import { listTypes } from './types'
+import type { ContentType } from './types'
+
+/** The types a list holds before the registry answers. */
+const NO_TYPES: ContentType[] = []
 
 /**
- * Returns the address a type answers under, as the screen shows it.
- * @param registered - The type the address belongs to.
- * @returns The address, or the root marker.
+ * Holds the view of the types list in the address, sized by the settings once they are known.
+ * @param fields - The columns the list offers.
+ * @returns The list view, the view the columns can draw and the settings.
  */
-export function addressOf(registered: ContentType): string {
-	return registered.routeWord === '' ? '/' : `/${registered.routeWord}`
+function useTypesView(fields: Field<ContentType>[]) {
+	const settings = useListSettings().data
+	const list = useListView<View>({
+		fields: TYPE_COLUMNS,
+		phoneFields: TYPE_PHONE_COLUMNS,
+		titleField: 'title',
+		descriptionField: 'key',
+		sort: { ...TYPE_SORT },
+		perPage: settings?.list_page_size,
+	})
+	const offered = offeredView(list.view, fields, TYPE_VIEW_GUARD)
+	const view = {
+		...offered,
+		perPage: offeredSize(offered.perPage, settings?.list_page_sizes, settings?.list_page_size),
+	}
+	return { list, view, settings }
 }
 
 /**
- * Returns the key and route word a plural label suggests.
- * @param plural - The plural label the operator typed.
- * @returns The slug the label reduces to.
+ * Returns the read of the keys of the types on the page the list shows, from the registry the client holds now.
+ * @param view - The view the list draws.
+ * @param fields - The columns the list offers.
+ * @returns The read, the same for as long as the screen stays, answering for the latest view.
  */
-export function slugify(plural: string): string {
-	return plural
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
+function usePageKeys(view: View, fields: Field<ContentType>[]): () => Promise<string[]> {
+	const client = useQueryClient()
+	const shown = useRef(view)
+	useLayoutEffect(() => {
+		shown.current = view
+	})
+	return useCallback(async () => {
+		const types = await client.ensureQueryData({ queryKey: typesQueryKey, queryFn: listTypes })
+		return filterSortAndPaginate(types, shown.current, fields).data.map((type) => type.key)
+	}, [client, fields])
 }
 
 /**
- * Returns the sentence naming why a registry write was turned away.
- * @param cause - What the write failed with.
- * @returns The sentence to show.
+ * Renders the rows of the registry, searched, sorted and paged in the browser, or the failure of its read.
+ * @param props - The registry query, the list view, the view the columns draw, the columns, the settings and the row
+ *   actions.
+ * @returns The list, or the failure notice.
  */
-export function errorMessage(cause: unknown): string {
-	return cause instanceof Error ? cause.message : __('The registry could not be reached.', 'gophenberg')
+function TypesTable(props: {
+	types: UseQueryResult<ContentType[]>
+	list: ListView<View>
+	view: OfferedView<View>
+	fields: Field<ContentType>[]
+	settings: ListSettings | undefined
+	actions: Action<ContentType>[]
+}) {
+	const { types, list, view, fields } = props
+	if (types.isError) {
+		return <ErrorNotice>{__('The content types could not be loaded.', 'gophenberg')}</ErrorNotice>
+	}
+	const shown = filterSortAndPaginate(types.data ?? NO_TYPES, view, fields)
+	return (
+		<DataViews
+			data={shown.data}
+			paginationInfo={shown.paginationInfo}
+			config={{ perPageSizes: props.settings?.list_page_sizes ?? [] }}
+			empty={<ListEmpty icon={typesNavItem.icon} title={__('No content types found.', 'gophenberg')} />}
+			fields={fields}
+			actions={props.actions}
+			view={view}
+			onChangeView={list.onChangeView}
+			defaultLayouts={list.defaultLayouts}
+			selection={list.selection}
+			onChangeSelection={list.onChangeSelection}
+			isLoading={types.isFetching}
+			getItemId={(type) => type.key}
+			searchLabel={sprintf(__('Search %(type)s…', 'gophenberg'), {
+				type: __('Content Types', 'gophenberg').toLowerCase(),
+			})}
+		/>
+	)
 }
 
 /**
- * Renders the content type registry screen.
+ * Renders the header button adding a content type, and its dialog while it asks.
+ * @returns The button and the dialog.
+ */
+function AddType() {
+	const [asking, setAsking] = useState(false)
+	return (
+		<>
+			<Button variant="solid" size="compact" onClick={() => setAsking(true)}>
+				{__('Add Content Type', 'gophenberg')}
+			</Button>
+			{asking ? <AddTypeDialog onClose={() => setAsking(false)} /> : null}
+		</>
+	)
+}
+
+/**
+ * Renders the content type registry as a WordPress list.
  * @returns The registry screen element.
  */
 export function TypesScreen() {
-	const client = useQueryClient()
-	const toaster = useToaster()
-	const [notice, setNotice] = useState('')
 	const types = useQuery({ queryKey: typesQueryKey, queryFn: listTypes })
-
-	/**
-	 * Reports what a registry write did, and refreshes what the admin holds.
-	 * @param said - The sentence naming what was done.
-	 */
-	async function done(said: string) {
-		setNotice('')
-		toaster.show(said)
-		await client.invalidateQueries({ queryKey: typesQueryKey })
-	}
-
-	/**
-	 * Reports why the registry turned a write away.
-	 * @param cause - What the write failed with.
-	 */
-	function refused(cause: unknown) {
-		setNotice(errorMessage(cause))
-	}
-
+	const fields = useMemo(() => typeFields(), [])
+	const { list, view, settings } = useTypesView(fields)
+	const { run, region } = useListRun('content-types', list.onChangeSelection)
+	const onList = useFocusOnList(run, region)
+	const actions = useTypeActions(onList, usePageKeys(view, fields))
 	return (
 		<Page
 			title={__('Content Types', 'gophenberg')}
 			subtitle={__('Every kind of content this site holds.', 'gophenberg')}
-			actions={<AddType onDone={done} onRefused={refused} />}
+			actions={<AddType />}
+			list
+			listLabel={__('Content Types', 'gophenberg')}
+			listRef={region}
 		>
-			<Stack direction="column" gap="md">
-				{notice !== '' && <ErrorNotice>{notice}</ErrorNotice>}
-				<TypesBody
-					types={types.data ?? []}
-					loading={types.isPending}
-					failed={types.isError}
-					onDone={done}
-					onRefused={refused}
-				/>
-			</Stack>
-		</Page>
-	)
-}
-
-/** What a row reports back when a write finishes. */
-interface Reporter {
-	onDone: (said: string) => void | Promise<void>
-	onRefused: (cause: unknown) => void
-}
-
-/**
- * Renders the registry in whichever state it is in.
- * @param props - The types, whether the read is loading or failed, and the reporter.
- * @returns The registry body element.
- */
-function TypesBody(props: Reporter & { types: ContentType[]; loading: boolean; failed: boolean }) {
-	const landing = useRef<HTMLDivElement>(null)
-	if (props.failed) {
-		return <ErrorNotice>{__('The content types could not be loaded.', 'gophenberg')}</ErrorNotice>
-	}
-	if (props.loading) {
-		return <LoadingRows label={__('Loading content types.', 'gophenberg')} />
-	}
-	return (
-		<div
-			ref={landing}
-			className="godmin-table-scroll godmin-arrival"
-			role="region"
-			aria-label={__('Content Types', 'gophenberg')}
-			tabIndex={0}
-		>
-			<table className="godmin-table">
-				<thead>
-					<tr>
-						<th scope="col">{__('Type', 'gophenberg')}</th>
-						<th scope="col">{__('Address', 'gophenberg')}</th>
-						<th scope="col">{_x('Status', 'content type', 'gophenberg')}</th>
-						<th scope="col">{__('Actions', 'gophenberg')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{props.types.map((registered) => (
-						<TypeRow
-							key={registered.key}
-							registered={registered}
-							holder={props.types.find((listed) => listed.isDefault)}
-							landing={landing}
-							onDone={props.onDone}
-							onRefused={props.onRefused}
-						/>
-					))}
-				</tbody>
-			</table>
-		</div>
-	)
-}
-
-/**
- * Returns the plugin that declared the type, empty when the site made it.
- * @param registered - The type.
- * @returns The plugin's id, or an empty string.
- */
-function originOf(registered: ContentType): string {
-	return registered.origin ?? ''
-}
-
-/**
- * Renders the badges naming what stands out about a type.
- * @param props - The type.
- * @returns The badges element.
- */
-function TypeBadges(props: { registered: ContentType }) {
-	const { registered } = props
-	const origin = originOf(registered)
-	return (
-		<Stack direction="row" gap="xs">
-			{registered.isDefault && <Badge>{__('Default', 'gophenberg')}</Badge>}
-			{registered.hierarchical && <Badge>{__('Nests', 'gophenberg')}</Badge>}
-			{!registered.active && <Badge intent="none">{__('Closed', 'gophenberg')}</Badge>}
-			{origin !== '' && <Badge>{sprintf(__('From %(plugin)s', 'gophenberg'), { plugin: origin })}</Badge>}
-		</Stack>
-	)
-}
-
-/** The table a row's controls hand the focus to once their row has left it. */
-type Landing = RefObject<HTMLDivElement | null>
-
-/**
- * Renders the controls a type offers, holding back the ones its owner keeps.
- * @param props - The type, the root holder, the table the focus lands on, the reporter, and what each control does.
- * @returns The controls element.
- */
-function TypeActions(
-	props: Reporter & {
-		registered: ContentType
-		holder?: ContentType
-		landing: Landing
-		onEdit: (asked: TypeEdit) => void
-	},
-) {
-	const { registered } = props
-	const shapeable = originOf(registered) === ''
-	const demotable = shapeable && !registered.isDefault
-	return (
-		<Stack direction="row" gap="xs" wrap="wrap" className="gophenberg-types__actions">
-			{shapeable && (
-				<>
-					<DescribeType registered={registered} onDone={props.onDone} onRefused={props.onRefused} />
-					<ChangeAddress registered={registered} onDone={props.onDone} onRefused={props.onRefused} />
-					<NestingControl registered={registered} onEdit={props.onEdit} />
-				</>
-			)}
-			{demotable && (
-				<HandOverRoot
-					registered={registered}
-					holder={props.holder}
-					onHandOver={() => props.onEdit({ isDefault: true })}
-				/>
-			)}
-			{!registered.isDefault && registered.active && (
-				<Button variant="outline" onClick={() => props.onEdit({ active: false })}>
-					{__('Deactivate', 'gophenberg')}
-				</Button>
-			)}
-			{!registered.active && (
-				<Button variant="outline" onClick={() => props.onEdit({ active: true })}>
-					{__('Activate', 'gophenberg')}
-				</Button>
-			)}
-			{demotable && <DeleteType registered={registered} landing={props.landing} onDone={props.onDone} />}
-		</Stack>
-	)
-}
-
-/**
- * Renders the control deleting a type for good and the question it asks first.
- * @param props - The type, the table the focus lands on once the type has gone, and what reports the delete.
- * @returns The control and its confirm.
- */
-function DeleteType(props: Pick<Reporter, 'onDone'> & { registered: ContentType; landing: Landing }) {
-	const name = useToaster().name
-	const [open, setOpen] = useState(false)
-	const deleted = useRef(false)
-	const { registered } = props
-	const change = (next: boolean) => {
-		if (next) {
-			deleted.current = false
-		}
-		setOpen(next)
-	}
-	const confirm = async () => {
-		try {
-			await deleteType(registered.key)
-		} catch (cause) {
-			return { close: false, error: errorMessage(cause) }
-		}
-		deleted.current = true
-		setOpen(false)
-		await props.onDone(sprintf(__('%(type)s removed.', 'gophenberg'), { type: pluralOf(registered) }))
-	}
-	return (
-		<AlertDialog.Root open={open} onOpenChange={change} onConfirm={confirm}>
-			<AlertDialog.Trigger render={<Button variant="outline" />}>{__('Delete', 'gophenberg')}</AlertDialog.Trigger>
-			<AlertDialog.Popup
-				intent="irreversible"
-				title={sprintf(__('Delete "%(type)s"?', 'gophenberg'), { type: name(pluralOf(registered)) })}
-				description={__('This cannot be undone.', 'gophenberg')}
-				confirmButtonText={__('Delete', 'gophenberg')}
-				cancelButtonText={__('Cancel', 'gophenberg')}
-				finalFocus={() => (deleted.current ? props.landing.current : true)}
+			<TypesTable
+				types={types}
+				list={list}
+				view={view}
+				fields={fields}
+				settings={settings}
+				actions={actions}
 			/>
-		</AlertDialog.Root>
-	)
-}
-
-/**
- * Renders the control letting a type's items nest, or stopping them.
- * @param props - The type and what to do with the flag.
- * @returns The control element.
- */
-function NestingControl(props: { registered: ContentType; onEdit: (asked: TypeEdit) => void }) {
-	const nests = props.registered.hierarchical
-	return (
-		<Button variant="outline" onClick={() => props.onEdit({ hierarchical: !nests })}>
-			{nests ? __('Stop nesting', 'gophenberg') : __('Let items nest', 'gophenberg')}
-		</Button>
-	)
-}
-
-/**
- * Returns whether a dialog is open, and counts its openings.
- * @returns Whether the dialog is open, what opens or closes it, what names the opening now, and what settles one.
- */
-function useOpenings() {
-	const [open, setOpen] = useState(false)
-	const openings = useRef(0)
-
-	/**
-	 * Opens or closes the dialog, counting each opening.
-	 * @param next - Whether the dialog opens.
-	 */
-	function change(next: boolean) {
-		if (next) {
-			openings.current += 1
-		}
-		setOpen(next)
-	}
-
-	/**
-	 * Returns the opening the dialog is in now.
-	 * @returns The count of openings so far.
-	 */
-	function current() {
-		return openings.current
-	}
-
-	/**
-	 * Closes the dialog for a settled write, unless a newer opening began since the write was sent.
-	 * @param opening - The opening the write was sent from.
-	 */
-	function settle(opening: number | undefined) {
-		if (opening === openings.current) {
-			setOpen(false)
-		}
-	}
-
-	return { open, change, current, settle }
-}
-
-/**
- * Returns the write editing a type, sent once every earlier write to that type has settled.
- * @param props - The type and the reporter.
- * @param dialog - The dialog the write is sent from, closed once the write settles in the opening it was sent from.
- * @returns The mutation sending the edit.
- */
-function useTypeEdit(props: Reporter & { registered: ContentType }, dialog?: ReturnType<typeof useOpenings>) {
-	return useMutation({
-		mutationFn: (asked: TypeEdit) => updateType(props.registered.key, asked),
-		scope: { id: `content-type/${props.registered.key}` },
-		onMutate: dialog?.current,
-		onSuccess: async (_stored, _asked, opening) => {
-			await props.onDone(sprintf(__('%(type)s updated.', 'gophenberg'), { type: pluralOf(props.registered) }))
-			dialog?.settle(opening)
-		},
-		onError: (cause, _asked, opening) => {
-			dialog?.settle(opening)
-			props.onRefused(cause)
-		},
-	})
-}
-
-/**
- * Returns a dialog editing one stored value of a type, keeping a draft the registry turned away for the next open.
- * @param props - The type and the reporter.
- * @param stored - The value the type holds now.
- * @returns Whether the dialog is open, what opens or closes it, the draft, and the write sending it.
- */
-function useTypeDraft(props: Reporter & { registered: ContentType }, stored: string) {
-	const dialog = useOpenings()
-	const [draft, setDraft] = useState(stored)
-	const save = useTypeEdit(props, dialog)
-
-	/**
-	 * Opens or closes the dialog at any time, keeping a turned away draft until a close.
-	 * @param next - Whether the dialog opens.
-	 */
-	function change(next: boolean) {
-		if (!next) {
-			save.reset()
-		} else if (!save.isError) {
-			setDraft(stored)
-		}
-		dialog.change(next)
-	}
-
-	return { open: dialog.open, change, draft, setDraft, save }
-}
-
-/**
- * Renders one registered type and what may be done to it.
- * @param props - The type, the root holder, the table the focus lands on once the row has gone, and the reporter.
- * @returns The row element.
- */
-function TypeRow(
-	props: Reporter & { registered: ContentType; holder?: ContentType; landing: Landing },
-): ReactNode {
-	const { registered } = props
-	const edit = useTypeEdit(props)
-	return (
-		<tr>
-			<td>
-				<Stack direction="column" gap="xs">
-					<Text>{pluralOf(registered)}</Text>
-					<Text variant="body-sm">{registered.key}</Text>
-				</Stack>
-			</td>
-			<td>{addressOf(registered)}</td>
-			<td>
-				<TypeBadges registered={registered} />
-			</td>
-			<td>
-				<TypeActions
-					registered={registered}
-					holder={props.holder}
-					landing={props.landing}
-					onDone={props.onDone}
-					onRefused={props.onRefused}
-					onEdit={edit.mutate}
-				/>
-			</td>
-		</tr>
-	)
-}
-
-/**
- * Renders the confirmation handing the root from one type to another.
- * @param props - The type taking the root, the type holding it, and what to do.
- * @returns The control and its dialog.
- */
-function HandOverRoot(props: {
-	registered: ContentType
-	holder?: ContentType
-	onHandOver: () => void
-}) {
-	const [open, setOpen] = useState(false)
-	const holder = props.holder
-	return (
-		<>
-			<Button variant="outline" onClick={() => setOpen(true)}>
-				{__('Make default', 'gophenberg')}
-			</Button>
-			<Dialog.Root open={open} onOpenChange={setOpen}>
-				<Dialog.Popup>
-					<Dialog.Header>
-						<Dialog.Title>
-							{sprintf(__('Hand the root to %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
-						</Dialog.Title>
-						<Dialog.CloseIconButton />
-					</Dialog.Header>
-					<Dialog.Content>
-						<Stack direction="column" gap="md">
-							<Text>
-								{sprintf(__('%(type)s will answer at the root.', 'gophenberg'), { type: pluralOf(props.registered) })}
-							</Text>
-							{holder !== undefined && (
-								<Text>
-									{sprintf(
-										__(
-											'%(name)s moves to /%(word)s. Every address of both types changes.',
-											'gophenberg',
-										),
-										{ name: pluralOf(holder), word: slugify(holder.pluralLabel) },
-									)}
-								</Text>
-							)}
-						</Stack>
-					</Dialog.Content>
-					<Dialog.Footer>
-						<Button variant="outline" onClick={() => setOpen(false)}>
-							{__('Keep it', 'gophenberg')}
-						</Button>
-						<Button
-							onClick={() => {
-								setOpen(false)
-								props.onHandOver()
-							}}
-						>
-							{__('Hand over the root', 'gophenberg')}
-						</Button>
-					</Dialog.Footer>
-				</Dialog.Popup>
-			</Dialog.Root>
-		</>
-	)
-}
-
-/**
- * Renders the dialog changing what a type's description says.
- * @param props - The type and the reporter.
- * @returns The control and its dialog.
- */
-function DescribeType(props: Reporter & { registered: ContentType }) {
-	const text = useTypeDraft(props, props.registered.description)
-	return (
-		<>
-			<Button variant="outline" onClick={() => text.change(true)}>
-				{__('Describe', 'gophenberg')}
-			</Button>
-			<Dialog.Root open={text.open} onOpenChange={text.change}>
-				<Dialog.Popup>
-					<Dialog.Header>
-						<Dialog.Title>
-							{sprintf(__('Describe %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
-						</Dialog.Title>
-						<Dialog.CloseIconButton />
-					</Dialog.Header>
-					<Dialog.Content>
-						<InputControl
-							label={__('Description', 'gophenberg')}
-							description={__('A descriptive summary of the content type.', 'gophenberg')}
-							autoComplete="off"
-							value={text.draft}
-							onValueChange={text.setDraft}
-						/>
-					</Dialog.Content>
-					<Dialog.Footer>
-						<Button variant="outline" onClick={() => text.change(false)}>
-							{__('Cancel', 'gophenberg')}
-						</Button>
-						<Button loading={text.save.isPending} onClick={() => text.save.mutate({ description: text.draft })}>
-							{__('Save', 'gophenberg')}
-						</Button>
-					</Dialog.Footer>
-				</Dialog.Popup>
-			</Dialog.Root>
-		</>
-	)
-}
-
-/**
- * Renders the confirmation a route word change passes through.
- * @param props - The type and the reporter.
- * @returns The control and its dialog.
- */
-function ChangeAddress(props: Reporter & { registered: ContentType }) {
-	const word = useTypeDraft(props, props.registered.routeWord)
-	return (
-		<>
-			<Button variant="outline" onClick={() => word.change(true)}>
-				{__('Change address', 'gophenberg')}
-			</Button>
-			<Dialog.Root open={word.open} onOpenChange={word.change}>
-				<Dialog.Popup>
-					<Dialog.Header>
-						<Dialog.Title>
-							{sprintf(__('Change the address of %(type)s', 'gophenberg'), { type: pluralOf(props.registered) })}
-						</Dialog.Title>
-						<Dialog.CloseIconButton />
-					</Dialog.Header>
-					<Dialog.Content>
-						<Stack direction="column" gap="md">
-							<Text>
-								{__(
-									'Every address of this type moves. Links kept elsewhere to the old addresses stop working.',
-									'gophenberg',
-								)}
-							</Text>
-							<InputControl
-								label={__('Route word', 'gophenberg')}
-								autoComplete="off"
-								value={word.draft}
-								onValueChange={word.setDraft}
-							/>
-						</Stack>
-					</Dialog.Content>
-					<Dialog.Footer>
-						<Button variant="outline" onClick={() => word.change(false)}>
-							{__('Keep it', 'gophenberg')}
-						</Button>
-						<Button loading={word.save.isPending} onClick={() => word.save.mutate({ routeWord: word.draft })}>
-							{__('Move every address', 'gophenberg')}
-						</Button>
-					</Dialog.Footer>
-				</Dialog.Popup>
-			</Dialog.Root>
-		</>
-	)
-}
-
-/** The fields of Add Content Type. */
-type TypeForm = Pick<NewType, 'singularLabel' | 'pluralLabel' | 'description'>
-
-/** The fields of Add Content Type with nothing typed. */
-const emptyForm: TypeForm = { singularLabel: '', pluralLabel: '', description: '' }
-
-/**
- * Returns whether the fields of Add Content Type still hold the type sent to be registered.
- * @param form - The fields as they are now.
- * @param sent - The type sent to be registered.
- * @returns Whether every field matches what was sent.
- */
-function stillHolds(form: TypeForm, sent: NewType): boolean {
-	return (
-		form.singularLabel === sent.singularLabel &&
-		form.pluralLabel === sent.pluralLabel &&
-		form.description === sent.description
-	)
-}
-
-/**
- * Renders the control registering a new content type.
- * @param props - The reporter.
- * @returns The control and its dialog.
- */
-function AddType(props: Reporter) {
-	const dialog = useOpenings()
-	const [form, setForm] = useState(emptyForm)
-	const add = useMutation({
-		mutationFn: createType,
-		onMutate: dialog.current,
-		onSuccess: (_stored, sent, opening) => {
-			dialog.settle(opening)
-			setForm((now) => (stillHolds(now, sent) ? emptyForm : now))
-			props.onDone(sprintf(__('%(type)s registered.', 'gophenberg'), { type: sent.pluralLabel }))
-		},
-		onError: (cause, _sent, opening) => {
-			dialog.settle(opening)
-			props.onRefused(cause)
-		},
-	})
-
-	/**
-	 * Opens or closes the dialog at any time, and resets the state its Register button shows.
-	 * @param next - Whether the dialog opens.
-	 */
-	function change(next: boolean) {
-		add.reset()
-		dialog.change(next)
-	}
-
-	/**
-	 * Returns what writes one field of the form.
-	 * @param field - The field to write.
-	 * @returns The handler taking the field's new value.
-	 */
-	function fill(field: keyof TypeForm) {
-		return (value: string) => setForm((now) => ({ ...now, [field]: value }))
-	}
-
-	return (
-		<>
-			<Button variant="solid" size="compact" onClick={() => change(true)}>
-				{__('Add Content Type', 'gophenberg')}
-			</Button>
-			<Dialog.Root open={dialog.open} onOpenChange={change}>
-				<Dialog.Popup>
-					<Dialog.Header>
-						<Dialog.Title>{__('Register a content type', 'gophenberg')}</Dialog.Title>
-						<Dialog.CloseIconButton />
-					</Dialog.Header>
-					<Dialog.Content>
-						<Stack direction="column" gap="md">
-							<InputControl
-								label={__('Singular name', 'gophenberg')}
-								autoComplete="off"
-								value={form.singularLabel}
-								onValueChange={fill('singularLabel')}
-							/>
-							<InputControl
-								label={__('Plural name', 'gophenberg')}
-								description={sprintf(
-									__('This type will answer under /%(word)s.', 'gophenberg'),
-									{ word: slugify(form.pluralLabel) || __('address', 'gophenberg') },
-								)}
-								autoComplete="off"
-								value={form.pluralLabel}
-								onValueChange={fill('pluralLabel')}
-							/>
-							<InputControl
-								label={__('Description', 'gophenberg')}
-								description={__('A descriptive summary of the content type.', 'gophenberg')}
-								autoComplete="off"
-								value={form.description}
-								onValueChange={fill('description')}
-							/>
-						</Stack>
-					</Dialog.Content>
-					<Dialog.Footer>
-						<Button variant="outline" onClick={() => change(false)}>
-							{__('Cancel', 'gophenberg')}
-						</Button>
-						<Button
-							loading={add.isPending}
-							onClick={() =>
-								add.mutate({
-									...form,
-									key: slugify(form.singularLabel),
-									routeWord: slugify(form.pluralLabel),
-								})
-							}
-						>
-							{__('Register', 'gophenberg')}
-						</Button>
-					</Dialog.Footer>
-				</Dialog.Popup>
-			</Dialog.Root>
-		</>
+		</Page>
 	)
 }

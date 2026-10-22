@@ -49,6 +49,7 @@ const typeSchema = z.object({
 	active: z.boolean(),
 	origin: z.string().optional(),
 	fields: z.array(fieldSchema),
+	created_at: z.string().optional(),
 })
 
 const typeListSchema = z.object({ items: z.array(typeSchema) })
@@ -88,6 +89,7 @@ export interface ContentType {
 	active: boolean
 	origin?: string
 	fields: ContentField[]
+	createdAt?: string
 }
 
 /** What registering a type needs. */
@@ -130,6 +132,7 @@ function toType(row: z.infer<typeof typeSchema>): ContentType {
 		active: row.active,
 		origin: row.origin,
 		fields: row.fields.map(toField),
+		createdAt: row.created_at,
 	}
 }
 
@@ -163,6 +166,23 @@ async function refuse(response: Response): Promise<never> {
 }
 
 /**
+ * Sends a write to the registry and returns the answer it accepted.
+ * @param url - The address of the write.
+ * @param init - The method and body of the write.
+ * @returns The answer, or throws the reason it was refused, or that the registry could not be reached.
+ */
+async function accepted(url: string, init: RequestInit): Promise<Response> {
+	const response = await fetch(url, init).catch(() => null)
+	if (response === null) {
+		throw new Error(__('The registry could not be reached.', 'gophenberg'))
+	}
+	if (!response.ok) {
+		await refuse(response)
+	}
+	return response
+}
+
+/**
  * Returns every registered content type, active or not.
  * @returns The registry in registration order.
  */
@@ -180,7 +200,7 @@ export async function listTypes(): Promise<ContentType[]> {
  * @returns The stored type.
  */
 export async function createType(asked: NewType): Promise<ContentType> {
-	const response = await fetch('/api/types', {
+	const response = await accepted('/api/types', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
@@ -191,9 +211,6 @@ export async function createType(asked: NewType): Promise<ContentType> {
 			route_word: asked.routeWord,
 		}),
 	})
-	if (!response.ok) {
-		await refuse(response)
-	}
 	return toType(typeSchema.parse(await response.json()))
 }
 
@@ -226,14 +243,11 @@ export async function updateType(key: string, edit: TypeEdit): Promise<ContentTy
 	if (edit.active !== undefined) {
 		body.active = edit.active
 	}
-	const response = await fetch(`/api/types/${encodeURIComponent(key)}`, {
+	const response = await accepted(`/api/types/${encodeURIComponent(key)}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(body),
 	})
-	if (!response.ok) {
-		await refuse(response)
-	}
 	return toType(typeSchema.parse(await response.json()))
 }
 
@@ -242,10 +256,7 @@ export async function updateType(key: string, edit: TypeEdit): Promise<ContentTy
  * @param key - The type to remove.
  */
 export async function deleteType(key: string): Promise<void> {
-	const response = await fetch(`/api/types/${encodeURIComponent(key)}`, { method: 'DELETE' })
-	if (!response.ok) {
-		await refuse(response)
-	}
+	await accepted(`/api/types/${encodeURIComponent(key)}`, { method: 'DELETE' })
 }
 
 /**

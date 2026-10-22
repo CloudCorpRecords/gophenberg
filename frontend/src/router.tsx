@@ -73,6 +73,7 @@ const adminRoute = createRoute({
 const contentTypesRoute = createRoute({
 	getParentRoute: () => adminRoute,
 	path: '/content-types',
+	validateSearch: listSearch,
 	staticData: { capability: MANAGE_TYPES },
 	component: lazyRouteComponent(() => import('./content/TypesScreen'), 'TypesScreen'),
 })

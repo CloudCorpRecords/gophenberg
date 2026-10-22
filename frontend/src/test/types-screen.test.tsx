@@ -1,249 +1,354 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { badgeClasses, buttonClasses } from '@gopherium/godmin/testing'
-import type { QueryClient } from '@tanstack/react-query'
-import { screen, waitFor, within } from '@testing-library/react'
+import { badgeClasses, buttonClasses, setViewport, stubLayout } from '@gopherium/godmin/testing'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
-import { beforeEach, expect, onTestFinished, test } from 'vitest'
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import '../index.css'
-import { errorMessage } from '../content/TypesScreen'
 import { catalogFor } from '../i18n/catalog'
-import { renderAt } from './render'
+import { gate } from './gate'
+import { renderAt, renderRoutedAt } from './render'
+import { siteSettings } from './siteSettings'
+import {
+	GUIDE_TYPE,
+	PAGE_TYPE,
+	POST_TYPE,
+	SPANISH,
+	findToast,
+	rowOf,
+	serveTypes,
+	typesList,
+	waitBusy,
+	warmTypesScreen,
+} from './typeFixtures'
 
-const POST_TYPE = {
-	key: 'post',
-	singular_label: 'Post',
-	plural_label: 'Posts',
-	description: 'Manage the posts on this site.',
-	route_word: '',
-	hierarchical: false,
-	revisions: true,
-	revision_cap: 100,
-	page_kind: 'single',
-	default: true,
-	active: true,
-	fields: [],
-}
-
-const PAGE_TYPE = {
-	...POST_TYPE,
-	key: 'page',
-	singular_label: 'Page',
-	plural_label: 'Pages',
-	description: 'Manage the pages on this site.',
-	route_word: 'pages',
-	hierarchical: true,
-	default: false,
-}
-
-/** How a Spanish and a French reader see the Pages row, with the sentences naming a built-in type by its kind. */
-const READERS = [
-	{
-		locale: 'es-ES',
-		region: 'Tipos de contenido',
-		pages: /Páginas/,
-		deactivate: 'Desactivar',
-		makeDefault: 'Establecer como predeterminado',
-		handOver: 'Ceder la raíz a Páginas',
-		updated: 'Tipo de contenido Páginas actualizado.',
-		answers: 'El tipo Páginas responderá en la raíz.',
-		moves: 'El tipo Entradas pasa a /posts. Cambian todas las direcciones de ambos tipos.',
-	},
-	{
-		locale: 'fr-FR',
-		region: 'Types de contenu',
-		pages: /Pages/,
-		deactivate: 'Désactiver',
-		makeDefault: 'Rendre par défaut',
-		handOver: 'Céder la racine à Pages',
-		updated: 'Type de contenu Pages mis à jour.',
-		answers: 'Le type Pages répondra à la racine.',
-		moves: 'Le type Articles passe à /posts. Toutes les adresses des deux types changent.',
-	},
-]
-
-/**
- * Returns a gate an answer waits behind, and what opens it.
- * @returns The gate and the call opening it.
- */
-function gate() {
-	let release: () => void = () => {}
-	const held = new Promise<void>((resolve) => {
-		release = resolve
-	})
-	return { held, release: () => release() }
-}
-
-/**
- * Returns how many writes wait their turn behind another write.
- * @param client - The query client the writes run on.
- * @returns The count of waiting writes.
- */
-function queued(client: QueryClient) {
-	return client.isMutating({ predicate: (write) => write.state.isPaused })
-}
-
-/**
- * Registers a guide behind a held answer, then closes Add Content Type and opens it again.
- * @returns The gate holding the answer, the query client, and the reopened dialog.
- */
-async function reopenWhileRegistering() {
-	const register = gate()
-	server.use(
-		http.post('/api/types', async () => {
-			await register.held
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
-		}),
-	)
-	const client = renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Manage the guides on this site.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Register' })).toHaveAttribute('aria-disabled', 'true'),
-	)
-	await userEvent.keyboard('{Escape}')
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
-	return { register, client, reopened }
-}
+warmTypesScreen()
 
 beforeEach(() => {
-	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, PAGE_TYPE] })))
+	serveTypes(POST_TYPE, PAGE_TYPE, GUIDE_TYPE)
 })
 
-test('lists every registered type with the address it answers under', async () => {
+/**
+ * Returns the names the list shows, in the order it shows them.
+ * @returns The names of the listed types.
+ */
+async function listedNames(): Promise<string[]> {
+	const region = await screen.findByRole('region', { name: 'Content Types' })
+	await waitFor(() => expect(region.querySelector('.dataviews-title-field')).not.toBeNull())
+	return [...region.querySelectorAll('.dataviews-title-field')].map((title) => title.textContent ?? '')
+}
+
+/**
+ * Records every type the registry is asked to register, answering each with the type as it was sent.
+ * @returns The bodies sent, filled as requests arrive.
+ */
+function recordRegistrations(): Record<string, unknown>[] {
+	const sent: Record<string, unknown>[] = []
+	server.use(
+		http.post('/api/types', async ({ request }) => {
+			const body = (await request.json()) as Record<string, unknown>
+			sent.push(body)
+			return HttpResponse.json({ ...GUIDE_TYPE, ...body }, { status: 201 })
+		}),
+	)
+	return sent
+}
+
+/**
+ * Opens Add Content Type from the list header.
+ * @returns The dialog.
+ */
+async function openAdd(): Promise<HTMLElement> {
+	await userEvent.click(await screen.findByRole('button', { name: 'Add Content Type' }))
+	return screen.findByRole('dialog', { name: 'Add Content Type' })
+}
+
+/**
+ * Types the two names of a new type in the open Add Content Type dialog.
+ * @param dialog - The dialog.
+ * @param singular - The singular name.
+ * @param plural - The plural name.
+ */
+async function nameNewType(dialog: HTMLElement, singular = 'Lesson', plural = 'Lessons') {
+	await userEvent.type(within(dialog).getByLabelText('Singular name'), singular)
+	await userEvent.type(within(dialog).getByLabelText('Plural name'), plural)
+}
+
+test('lists every registered type in a list region with the address it answers under', async () => {
 	renderAt('/content-types')
 
-	const table = await screen.findByRole('region', { name: 'Content Types' })
+	const pages = await rowOf('Pages')
 
-	expect(within(table).getByText('Posts')).toBeInTheDocument()
-	expect(within(table).getByText('Pages')).toBeInTheDocument()
-	expect(within(table).getByText('/pages')).toBeInTheDocument()
+	expect(pages.getByText('/pages')).toBeInTheDocument()
+	expect((await rowOf('Posts')).getByText('/', { exact: true })).toBeInTheDocument()
+	expect(screen.getByRole('region', { name: 'Content Types' })).toHaveAttribute('tabindex', '-1')
+})
+
+test('says under the title what the screen holds', async () => {
+	renderAt('/content-types')
+
+	expect(await screen.findByText('Every kind of content this site holds.')).toHaveClass('godmin-page__subtitle')
+})
+
+test('shows the key of each type under its name, as WordPress shows a description under a title', async () => {
+	renderAt('/content-types')
+
+	const pages = await rowOf('Pages')
+
+	expect(pages.getByText('page', { exact: true })).toBeInTheDocument()
+})
+
+test('shows the columns Description, Address and Status beside the type, Created left in View options', async () => {
+	renderAt('/content-types')
+	const list = await typesList()
+	await list.findByText('Pages', { exact: true })
+
+	const headers = list.getAllByRole('columnheader').map((header) => header.textContent)
+
+	expect(headers.filter(Boolean).slice(0, 4)).toEqual(['Type', 'Description', 'Address', 'Status'])
+	expect(list.queryByRole('columnheader', { name: 'Created' })).not.toBeInTheDocument()
+})
+
+test('shows the description each type holds in its own column', async () => {
+	renderAt('/content-types')
+
+	expect((await rowOf('Pages')).getByText('Manage the pages on this site.')).toBeInTheDocument()
+})
+
+test('draws an em dash a screen reader reads as No description for a type that holds none', async () => {
+	renderAt('/content-types')
+
+	const guides = await rowOf('Guides')
+
+	expect(guides.getByText('—')).toHaveAttribute('aria-hidden', 'true')
+	expect(guides.getByText('No description')).toBeInTheDocument()
+})
+
+test('opens sorted by creation, the newest type first, as WordPress lists open on their newest item', async () => {
+	renderAt('/content-types')
+
+	expect(await listedNames()).toEqual(['Guides', 'Pages', 'Posts'])
+})
+
+test('sorts by name when the address asks for it', async () => {
+	serveTypes(PAGE_TYPE, GUIDE_TYPE, POST_TYPE)
+	renderAt('/content-types?sort=title&order=asc')
+
+	expect(await listedNames()).toEqual(['Guides', 'Pages', 'Posts'])
+})
+
+test('sorts by address when the address asks for it', async () => {
+	renderAt('/content-types?sort=address&order=desc')
+
+	expect(await listedNames()).toEqual(['Pages', 'Guides', 'Posts'])
+})
+
+test('keeps the opening order for a sort the list does not offer, whatever the address holds', async () => {
+	renderAt('/content-types?sort=status&order=asc')
+
+	expect(await listedNames()).toEqual(['Guides', 'Pages', 'Posts'])
+})
+
+/**
+ * Shows the Created column through View options.
+ */
+async function showCreated() {
+	await userEvent.click(screen.getByRole('button', { name: 'View options' }))
+	const properties = (await screen.findByText('Properties')).closest('.dataviews-field-control') as HTMLElement
+	await userEvent.click(within(properties).getByRole('button', { name: 'Created' }))
+	await screen.findByRole('columnheader', { name: 'Created' })
+}
+
+test('dates a type by its creation once a reader shows the Created column', async () => {
+	renderAt('/content-types')
+	await rowOf('Pages')
+
+	await showCreated()
+
+	expect((await rowOf('Pages')).getByText('Aug 2, 2026 10:00 am')).toBeInTheDocument()
+})
+
+test('dates nothing on a type that carries no creation time', async () => {
+	const { created_at: _created, ...undated } = PAGE_TYPE
+	serveTypes(POST_TYPE, undated)
+	renderAt('/content-types')
+	await rowOf('Pages')
+
+	await showCreated()
+
+	expect((await rowOf('Pages')).queryByText(/2026/)).not.toBeInTheDocument()
+	expect((await rowOf('Posts')).getByText('Aug 1, 2026 10:00 am')).toBeInTheDocument()
+})
+
+test('searches the names of the types', async () => {
+	renderAt('/content-types?search=guide')
+
+	expect(await (await typesList()).findByText('Guides', { exact: true })).toBeInTheDocument()
+	expect((await typesList()).queryByText('Pages', { exact: true })).not.toBeInTheDocument()
+	expect((await typesList()).queryByText('Posts', { exact: true })).not.toBeInTheDocument()
+})
+
+test.each([
+	{ match: 'its key', search: 'handbook' },
+	{ match: 'its description', search: 'steps for new readers' },
+])('finds a type by $match', async ({ search }) => {
+	serveTypes(POST_TYPE, PAGE_TYPE, { ...GUIDE_TYPE, key: 'handbook', description: 'Steps for new readers.' })
+	renderAt(`/content-types?search=${encodeURIComponent(search)}`)
+
+	expect(await (await typesList()).findByText('Guides', { exact: true })).toBeInTheDocument()
+	expect((await typesList()).queryByText('Pages', { exact: true })).not.toBeInTheDocument()
+})
+
+test('finds a type by its singular name, which the list searches without showing it anywhere', async () => {
+	serveTypes(POST_TYPE, PAGE_TYPE, { ...GUIDE_TYPE, key: 'staff', singular_label: 'Person', plural_label: 'People' })
+	renderAt('/content-types?search=person')
+	const list = await typesList()
+
+	expect(await list.findByText('People', { exact: true })).toBeInTheDocument()
+	expect(list.queryByText('Pages', { exact: true })).not.toBeInTheDocument()
+	expect(list.queryByText('Person')).not.toBeInTheDocument()
+	await userEvent.click(screen.getByRole('button', { name: 'View options' }))
+	const properties = (await screen.findByText('Properties')).closest('.dataviews-field-control') as HTMLElement
+	expect(within(properties).queryByText('Singular name')).not.toBeInTheDocument()
+})
+
+test('names the search after the content types, as the posts list names its own', async () => {
+	renderAt('/content-types')
+
+	expect(await screen.findByRole('searchbox', { name: 'Search content types…' })).toBeInTheDocument()
+})
+
+test('writes the search a reader types into the address and narrows the list to it', async () => {
+	const { router } = renderRoutedAt('/content-types')
+	const list = await typesList()
+	await rowOf('Pages')
+
+	await userEvent.type(screen.getByRole('searchbox', { name: 'Search content types…' }), 'guide')
+
+	await waitFor(() => expect(router.state.location.search).toMatchObject({ search: 'guide' }))
+	await waitFor(() => expect(list.queryByText('Pages', { exact: true })).not.toBeInTheDocument())
+})
+
+test('says no content types are found when a search matches none', async () => {
+	renderAt('/content-types?search=nothing')
+
+	expect(await screen.findByText('No content types found.')).toBeInTheDocument()
+})
+
+test('filters the list by status from the address', async () => {
+	const nesting = encodeURIComponent('[{"field":"status","operator":"isAny","value":["nests"]}]')
+	renderAt(`/content-types?filters=${nesting}`)
+
+	expect(await (await typesList()).findByText('Pages', { exact: true })).toBeInTheDocument()
+	expect((await typesList()).queryByText('Posts', { exact: true })).not.toBeInTheDocument()
+	expect((await typesList()).queryByText('Guides', { exact: true })).not.toBeInTheDocument()
+})
+
+test.each([
+	{ status: 'default', shows: 'Posts' },
+	{ status: 'closed', shows: 'Guides' },
+])('narrows the list to the $status types', async ({ status, shows }) => {
+	serveTypes(POST_TYPE, PAGE_TYPE, { ...GUIDE_TYPE, active: false })
+	const narrowing = `[{"field":"status","operator":"isAny","value":["${status}"]}]`
+	renderAt(`/content-types?filters=${encodeURIComponent(narrowing)}`)
+
+	expect(await (await typesList()).findByText(shows, { exact: true })).toBeInTheDocument()
+	expect((await typesList()).getAllByRole('row')).toHaveLength(2)
 })
 
 test('marks which type answers at the root', async () => {
 	renderAt('/content-types')
 
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-	const posts = within(table).getByRole('row', { name: /Posts/ })
-
-	expect(within(posts).getByText('Default')).toBeInTheDocument()
+	expect((await rowOf('Posts')).getByText('Default')).toBeInTheDocument()
 })
 
-test('registers a type from the labels it was given', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.post('/api/types', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
-		}),
-	)
+test('marks a type that nests', async () => {
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
-	await userEvent.type(screen.getByLabelText('Description'), 'Manage the guides on this site.')
-	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
-
-	await waitFor(() =>
-		expect(sent[0]).toEqual({
-			key: 'guide',
-			singular_label: 'Guide',
-			plural_label: 'Guides',
-			description: 'Manage the guides on this site.',
-			route_word: 'guides',
-		}),
-	)
+	expect((await rowOf('Pages')).getByText('Nests')).toBeInTheDocument()
+	expect((await rowOf('Guides')).queryByText('Nests')).not.toBeInTheDocument()
 })
 
-test('registers a type with no description', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.post('/api/types', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
-		}),
-	)
+test('draws a closed type as an outline badge kept on one line, the WordPress badge of an inactive state', async () => {
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, active: false })
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
-	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
+	const badge = (await rowOf('Pages')).getByText('Closed')
 
-	await waitFor(() =>
-		expect(sent[0]).toEqual({
-			key: 'guide',
-			singular_label: 'Guide',
-			plural_label: 'Guides',
-			description: '',
-			route_word: 'guides',
-		}),
-	)
+	expect([...badge.classList]).toEqual([...badgeClasses('none'), 'gophenberg-status'])
+	expect(getComputedStyle(badge).whiteSpace).toBe('nowrap')
 })
 
-test('empties the description field once a type is registered', async () => {
-	server.use(http.post('/api/types', () => HttpResponse.json(PAGE_TYPE, { status: 201 })))
+test('keeps the Default badge on one line', async () => {
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
-	await userEvent.type(screen.getByLabelText('Description'), 'Manage the guides on this site.')
-	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
+	const badge = (await rowOf('Posts')).getByText('Default')
 
-	expect(await screen.findByLabelText('Description')).toHaveValue('')
+	expect([...badge.classList]).toEqual([...badgeClasses(undefined), 'gophenberg-status'])
 })
 
-test('ties the address hint to the plural name of a new type', async () => {
+test('names the plugin that declared a type', async () => {
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, origin: 'events' })
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-
-	expect(await screen.findByLabelText('Plural name')).toHaveAccessibleDescription(
-		'This type will answer under /address.',
-	)
-
-	await userEvent.type(screen.getByLabelText('Plural name'), 'Guides')
-
-	expect(screen.getByLabelText('Plural name')).toHaveAccessibleDescription('This type will answer under /guides.')
+	expect((await rowOf('Pages')).getByText('From events')).toBeInTheDocument()
 })
 
-test('explains the description field of a new type', async () => {
+test('draws no action button on a row, leaving every action to its menu', async () => {
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
+	const pages = await rowOf('Pages')
 
-	expect(await screen.findByLabelText('Description')).toHaveAccessibleDescription(
-		'A descriptive summary of the content type.',
-	)
+	expect(pages.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+		'Actions',
+	])
 })
 
-test('names the type in the title of the Describe dialog', async () => {
+test('pages the list by the size the settings name', async () => {
+	const paged = { ...siteSettings, list_page_size: 2, list_page_sizes: [2, 10] }
+	server.use(http.get('/api/settings', () => HttpResponse.json(paged)))
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
 
-	const posts = within(table).getByRole('row', { name: /Posts/ })
-	await userEvent.click(within(posts).getByRole('button', { name: 'Describe' }))
+	expect(await listedNames()).toEqual(['Guides', 'Pages'])
+	await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
 
-	expect(await screen.findByRole('dialog', { name: 'Describe Posts' })).toBeInTheDocument()
+	await waitFor(async () => expect(await listedNames()).toEqual(['Posts']))
+})
+
+test('lists every type on one page and offers no page sizes when the settings could not be read', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(http.get('/api/settings', () => HttpResponse.json({}, { status: 500 })))
+	renderAt('/content-types')
+	expect(await listedNames()).toEqual(['Guides', 'Pages', 'Posts'])
+
+	await userEvent.click(screen.getByRole('button', { name: 'View options' }))
+
+	expect(await screen.findByRole('combobox', { name: 'Sort by' })).toBeInTheDocument()
+	expect(screen.queryByRole('radiogroup', { name: 'Items per page' })).not.toBeInTheDocument()
+})
+
+test('shows the status beside the name on a phone', async () => {
+	setViewport({ matches: true })
+	renderAt('/content-types')
+
+	const list = within(await screen.findByRole('grid'))
+
+	expect(await list.findByText('Pages', { exact: true })).toBeInTheDocument()
+	expect(list.getByText('Nests')).toBeInTheDocument()
+	expect(list.queryByText('/pages')).not.toBeInTheDocument()
+	expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+})
+
+test('announces a registry it could not read', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(http.get('/api/types', () => HttpResponse.json({ error: 'nope' }, { status: 500 })))
+	renderAt('/content-types')
+
+	expect(await screen.findByText('The content types could not be loaded.')).toBeInTheDocument()
+	expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
 })
 
 test('names the built-in types in the words of WordPress es_ES for a Spanish reader', async () => {
@@ -251,343 +356,33 @@ test('names the built-in types in the words of WordPress es_ES for a Spanish rea
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
 	renderAt('/content-types')
 
-	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+	const list = await typesList(SPANISH)
 
-	expect(within(table).getByText('Entradas')).toBeInTheDocument()
-	expect(within(table).getByText('Páginas')).toBeInTheDocument()
-	expect(within(table).queryByText('Posts')).not.toBeInTheDocument()
+	expect(await list.findByText('Entradas', { exact: true })).toBeInTheDocument()
+	expect(list.getByText('Páginas', { exact: true })).toBeInTheDocument()
+	expect(list.queryByText('Posts', { exact: true })).not.toBeInTheDocument()
+	expect(screen.getByRole('searchbox', { name: 'Buscar tipos de contenido…' })).toBeInTheDocument()
 })
 
 test('names a type a plugin declared under a built-in key as the plugin named it to a Spanish reader', async () => {
 	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, origin: 'shop' }] })))
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, origin: 'shop' })
 	renderAt('/content-types')
 
-	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+	const list = await typesList(SPANISH)
 
-	expect(within(table).getByText('Entradas')).toBeInTheDocument()
-	expect(within(table).getByText('Pages')).toBeInTheDocument()
-	expect(within(table).queryByText('Páginas')).not.toBeInTheDocument()
+	expect(await list.findByText('Entradas', { exact: true })).toBeInTheDocument()
+	expect(list.getByText('Pages', { exact: true })).toBeInTheDocument()
+	expect(list.queryByText('Páginas', { exact: true })).not.toBeInTheDocument()
 })
 
-test('names a built-in type in the Describe title in Spanish and leaves the stored description to edit', async () => {
+test('says no content types are found in Spanish', async () => {
 	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
 	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Tipos de contenido' })
+	renderAt('/content-types?search=nothing')
 
-	const pages = within(table).getByRole('row', { name: /Páginas/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describir' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describir Páginas' })
-
-	expect(within(dialog).getByLabelText('Descripción')).toHaveValue('Manage the pages on this site.')
-})
-
-test('explains the description field of the Describe dialog', async () => {
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(dialog).getByLabelText('Description')).toHaveAccessibleDescription(
-		'A descriptive summary of the content type.',
-	)
-})
-
-test('describes a type', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, description: 'Every page this site keeps.' })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	const field = within(dialog).getByLabelText('Description')
-
-	expect(field).toHaveValue('Manage the pages on this site.')
-
-	await userEvent.clear(field)
-	await userEvent.type(field, 'Every page this site keeps.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ description: 'Every page this site keeps.' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-})
-
-test('changes no description when the dialog is cancelled', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.type(within(dialog).getByLabelText('Description'), ' Kept by the team.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Manage the pages on this site.')
-	expect(sent).toHaveLength(0)
-})
-
-test('wraps the actions of a type onto more lines and keeps every label whole', async () => {
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	expect(within(table).getByRole('columnheader', { name: 'Actions' })).not.toHaveClass('godmin-table__actions')
-	for (const name of [/Posts/, /Pages/]) {
-		const actions = within(within(table).getByRole('row', { name })).getByRole('button', { name: 'Describe' })
-			.parentElement as HTMLElement
-		expect(actions.closest('td')).not.toHaveClass('godmin-table__actions')
-		expect(actions).toHaveStyle({ flexWrap: 'wrap' })
-		expect(actions).toHaveClass('gophenberg-types__actions')
-		for (const button of within(actions).getAllByRole('button')) {
-			expect(getComputedStyle(button).whiteSpace).toBe('nowrap')
-		}
-	}
-})
-
-test('changes no description when the dialog is dismissed', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.type(within(dialog).getByLabelText('Description'), ' Kept by the team.')
-	await userEvent.keyboard('{Escape}')
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Manage the pages on this site.')
-	expect(sent).toHaveLength(0)
-})
-
-test('carries the reason the registry refused a type', async () => {
-	server.use(
-		http.post('/api/types', () =>
-			HttpResponse.json({ error: 'content: the route word is taken' }, { status: 422 }),
-		),
-	)
-	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
-
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	await userEvent.type(screen.getByLabelText('Singular name'), 'Page')
-	await userEvent.type(screen.getByLabelText('Plural name'), 'Pages')
-	await userEvent.click(screen.getByRole('button', { name: 'Register' }))
-
-	expect(await screen.findByText(/route word is taken/)).toBeInTheDocument()
-})
-
-test('states that every address moves before changing a route word', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, route_word: 'sections' })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog')
-
-	expect(within(dialog).getByText(/Every address of this type moves/i)).toBeInTheDocument()
-
-	await userEvent.clear(within(dialog).getByLabelText('Route word'))
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'sections')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ route_word: 'sections' }))
-})
-
-test('closes a type without removing it', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, active: false })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ active: false }))
-})
-
-test.each(READERS)('names a built-in type in the toast of an edit by its kind for a $locale reader', async (reader) => {
-	setLocaleData(await catalogFor(reader.locale), 'gophenberg')
-	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-	server.use(http.patch('/api/types/page', () => HttpResponse.json({ ...PAGE_TYPE, active: false })))
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: reader.region })
-
-	const pages = within(table).getByRole('row', { name: reader.pages })
-	await userEvent.click(within(pages).getByRole('button', { name: reader.deactivate }))
-
-	expect(await screen.findByText(reader.updated, { selector: '.godmin-toast' })).toBeInTheDocument()
-})
-
-test('names the plugin that declared a type and keeps its shape out of reach', async () => {
-	const recipe = {
-		...PAGE_TYPE,
-		key: 'recipe',
-		singular_label: 'Recipe',
-		plural_label: 'Recipes',
-		route_word: 'recipes',
-	}
-	server.use(
-		http.get('/api/types', () =>
-			HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, origin: 'events' }, recipe] }),
-		),
-	)
-	renderAt('/content-types')
-
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-	const declared = within(table).getByRole('row', { name: /Pages/ })
-	const site = within(table).getByRole('row', { name: /Recipes/ })
-
-	expect(within(declared).getByText('From events')).toBeInTheDocument()
-	for (const name of ['Describe', 'Change address', 'Make default', 'Delete']) {
-		expect(within(declared).queryByRole('button', { name })).not.toBeInTheDocument()
-		expect(within(site).getByRole('button', { name })).toBeInTheDocument()
-	}
-	expect(within(declared).queryByRole('button', { name: 'Stop nesting' })).not.toBeInTheDocument()
-	expect(within(declared).getByRole('button', { name: 'Deactivate' })).toBeInTheDocument()
-})
-
-test('stops a type nesting', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, hierarchical: false })
-		}),
-		http.get('/api/types', () =>
-			HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, hierarchical: sent.length === 0 }] }),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Stop nesting' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ hierarchical: false }))
-	expect(await within(pages).findByRole('button', { name: 'Let items nest' })).toBeInTheDocument()
-	expect(within(pages).queryByText('Nests')).not.toBeInTheDocument()
-})
-
-test('lets a flat type nest', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/post', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...POST_TYPE, hierarchical: true })
-		}),
-		http.get('/api/types', () =>
-			HttpResponse.json({ items: [{ ...POST_TYPE, hierarchical: sent.length > 0 }, PAGE_TYPE] }),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const posts = within(table).getByRole('row', { name: /Posts/ })
-	await userEvent.click(within(posts).getByRole('button', { name: 'Let items nest' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ hierarchical: true }))
-	expect(await within(posts).findByRole('button', { name: 'Stop nesting' })).toBeInTheDocument()
-	expect(within(posts).getByText('Nests')).toBeInTheDocument()
-})
-
-test('says how many items keep a type nesting', async () => {
-	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json(
-				{
-					error: 'content: items of the type still nest: 2 in page',
-					code: 'type_nesting_in_use',
-					meta: { type: 'page', items: 2 },
-				},
-				{ status: 422 },
-			),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Stop nesting' }))
-
-	expect(await screen.findByText(/2 of its items sit inside another/)).toBeInTheDocument()
-})
-
-test('keeps the default type from being deleted or closed', async () => {
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const posts = within(table).getByRole('row', { name: /Posts/ })
-
-	expect(within(posts).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-	expect(within(posts).queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
-})
-
-test('announces a registry it could not read', async () => {
-	server.use(http.get('/api/types', () => HttpResponse.json({ error: 'nope' }, { status: 500 })))
-	renderAt('/content-types')
-
-	expect(await screen.findByText('The content types could not be loaded.')).toBeInTheDocument()
-})
-
-test('reopens a type that was closed', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.get('/api/types', () =>
-			HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, active: false }] }),
-		),
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Activate' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ active: true }))
+	expect(await screen.findByText('No se han encontrado tipos de contenido.')).toBeInTheDocument()
 })
 
 test('draws Add Content Type as the compact solid button every list header holds', async () => {
@@ -598,849 +393,315 @@ test('draws Add Content Type as the compact solid button every list header holds
 	expect([...add.classList]).toEqual(buttonClasses('solid', 'compact'))
 })
 
-test('draws a closed type as an outline badge, the WordPress badge for an inactive state', async () => {
-	server.use(http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, active: false }] })))
+test('opens Add Content Type as a small dialog titled as WordPress titles Add Pattern, name focused', async () => {
+	stubLayout()
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
+	const dialog = await openAdd()
 
-	expect([...within(pages).getByText('Closed').classList]).toEqual(badgeClasses('none'))
+	expect(dialog).toHaveClass('has-size-small')
+	expect(within(dialog).getByRole('heading', { name: 'Add Content Type' })).toBeInTheDocument()
+	await waitFor(() => expect(within(dialog).getByLabelText('Singular name')).toHaveFocus())
 })
 
-test('carries the reason the registry refused an edit', async () => {
-	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json({ error: 'content: the type still holds content' }, { status: 422 }),
-		),
+test('spaces Add Content Type as WordPress spaces a create, Cancel as accent text before Add', async () => {
+	renderAt('/content-types')
+
+	const dialog = await openAdd()
+
+	const form = within(dialog).getByLabelText('Singular name').closest('form') as HTMLElement
+	expect(form).toHaveClass('godmin-modal-body', 'godmin-modal-body--create')
+	const [cancel, submit, ...rest] = within(form).getAllByRole('button')
+	expect([cancel.textContent, submit.textContent, rest]).toEqual(['Cancel', 'Add', []])
+	expect([...cancel.classList]).toEqual(buttonClasses('minimal'))
+	expect(submit).toHaveAttribute('type', 'submit')
+})
+
+test('keeps Add off until both names are typed, the description left optional', async () => {
+	renderAt('/content-types')
+	const dialog = await openAdd()
+	const add = within(dialog).getByRole('button', { name: 'Add' })
+
+	expect(add).toHaveAttribute('aria-disabled', 'true')
+	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Lesson')
+	expect(add).toHaveAttribute('aria-disabled', 'true')
+	await userEvent.type(within(dialog).getByLabelText('Plural name'), '  ')
+	expect(add).toHaveAttribute('aria-disabled', 'true')
+	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Lessons')
+	expect(add).not.toHaveAttribute('aria-disabled', 'true')
+})
+
+test('registers a type from the labels it was given', async () => {
+	const sent = recordRegistrations()
+	renderAt('/content-types')
+	const dialog = await openAdd()
+
+	await nameNewType(dialog, 'Guide', 'Guides')
+	await userEvent.type(within(dialog).getByLabelText('Description'), 'Manage the guides on this site.')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+
+	await waitFor(() =>
+		expect(sent).toEqual([
+			{
+				key: 'guide',
+				singular_label: 'Guide',
+				plural_label: 'Guides',
+				description: 'Manage the guides on this site.',
+				route_word: 'guides',
+			},
+		]),
 	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
-
-	expect(await screen.findByText(/still holds content/)).toBeInTheDocument()
 })
 
-test('reports a registry that could not be reached at all', async () => {
-	server.use(http.patch('/api/types/page', () => HttpResponse.error()))
+test('registers a type with no description from Enter in a field', async () => {
+	const sent = recordRegistrations()
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
+	await nameNewType(dialog)
+	await userEvent.keyboard('{Enter}')
 
-	expect(await screen.findByRole('alert')).toBeInTheDocument()
+	await waitFor(() => expect(sent).toHaveLength(1))
+	expect(sent[0]).toMatchObject({ key: 'lesson', plural_label: 'Lessons', description: '', route_word: 'lessons' })
 })
 
-test('changes no address when the confirmation is dismissed', async () => {
-	const sent: unknown[] = []
+test('names the new type in a toast, closes the dialog and lists the type', async () => {
+	let added = false
 	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog')
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'x')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
-
-	expect(sent).toHaveLength(0)
-})
-
-test('opens Change address on the stored address after a kept back edit', async () => {
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'x')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-
-	expect(within(reopened).getByLabelText('Route word')).toHaveValue('pages')
-})
-
-test('reopens Describe on the description a failed save carried', async () => {
-	server.use(http.patch('/api/types/page', () => HttpResponse.json({ error: 'content: down' }, { status: 500 })))
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Description'))
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Every page this site keeps.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	expect(await screen.findByRole('alert')).toBeInTheDocument()
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
-})
-
-test('reopens Change address on the route word a failed move carried', async () => {
-	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json({ error: 'content: route word taken' }, { status: 422 }),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Route word'))
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'sections')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	expect(await screen.findByText(/route word taken/)).toBeInTheDocument()
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-
-	expect(within(reopened).getByLabelText('Route word')).toHaveValue('sections')
-})
-
-test('starts Describe over on the stored description once a failed draft is kept back', async () => {
-	server.use(http.patch('/api/types/page', () => HttpResponse.json({ error: 'content: down' }, { status: 500 })))
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.type(within(dialog).getByLabelText('Description'), ' Kept by the team.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	expect(await screen.findByRole('alert')).toBeInTheDocument()
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const kept = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.click(within(kept).getByRole('button', { name: 'Cancel' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Manage the pages on this site.')
-})
-
-test('opens Describe on the stored description after another edit of the type failed', async () => {
-	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json({ error: 'content: the type still holds content' }, { status: 422 }),
-		),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.type(within(dialog).getByLabelText('Description'), ' Kept by the team.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
-	expect(await screen.findByText(/still holds content/)).toBeInTheDocument()
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Manage the pages on this site.')
-})
-
-test('opens Describe on the description the registry holds now', async () => {
-	let closed = false
-	server.use(
-		http.patch('/api/types/page', () => {
-			closed = true
-			return HttpResponse.json({ ...PAGE_TYPE, active: false })
+		http.post('/api/types', () => {
+			added = true
+			const lesson = { ...GUIDE_TYPE, key: 'lesson', singular_label: 'Lesson', plural_label: 'Lessons' }
+			return HttpResponse.json(lesson, { status: 201 })
 		}),
 		http.get('/api/types', () =>
 			HttpResponse.json({
-				items: [
-					POST_TYPE,
-					closed ? { ...PAGE_TYPE, active: false, description: 'Every page this site keeps.' } : PAGE_TYPE,
-				],
+				items: [POST_TYPE, PAGE_TYPE, ...(added ? [{ ...GUIDE_TYPE, key: 'lesson', plural_label: 'Lessons' }] : [])],
 			}),
 		),
 	)
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
-	expect(await within(pages).findByRole('button', { name: 'Activate' })).toBeInTheDocument()
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
+	await nameNewType(dialog)
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-	expect(within(dialog).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
+	expect(await screen.findByText('"Lessons" successfully created.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(await rowOf('Lessons')).toBeTruthy()
 })
 
-test('names the type a saved description updated', async () => {
+test('ties the address hint to the plural name of a new type', async () => {
+	renderAt('/content-types')
+	const dialog = await openAdd()
+
+	const plural = within(dialog).getByLabelText('Plural name')
+	expect(plural).toHaveAccessibleDescription('This type will answer under /address.')
+
+	await userEvent.type(plural, 'Guides')
+
+	expect(plural).toHaveAccessibleDescription('This type will answer under /guides.')
+})
+
+test('explains the description field of a new type', async () => {
+	renderAt('/content-types')
+	const dialog = await openAdd()
+
+	expect(within(dialog).getByLabelText('Description')).toHaveAccessibleDescription(
+		'A descriptive summary of the content type.',
+	)
+})
+
+test('keeps Add Content Type open on the reason the registry refused a type, the typed names kept', async () => {
 	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json({ ...PAGE_TYPE, description: 'Every page this site keeps.' }),
+		http.post('/api/types', () =>
+			HttpResponse.json({ error: 'content: the route word is taken', code: 'route_word_taken' }, { status: 422 }),
 		),
 	)
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+	await nameNewType(dialog, 'Page', 'Pages')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-	expect(await screen.findByText('Pages updated.')).toBeInTheDocument()
-})
-
-test('holds Describe open on the saved description until the list refresh answers', async () => {
-	const refresh = gate()
-	let refreshing = false
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-	server.use(
-		http.patch('/api/types/page', () =>
-			HttpResponse.json({ ...PAGE_TYPE, description: 'Every page this site keeps.' }),
-		),
-		http.get('/api/types', async () => {
-			refreshing = true
-			await refresh.held
-			return HttpResponse.json({
-				items: [POST_TYPE, { ...PAGE_TYPE, description: 'Every page this site keeps.' }],
-			})
+	expect(
+		await screen.findByText('Another content type already answers under this route word. Pick a different word.', {
+			selector: '.godmin-toast',
 		}),
-	)
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Description'))
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Every page this site keeps.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(refreshing).toBe(true))
-	const waiting = screen.getByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(waiting).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
-
-	refresh.release()
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
+	).toBeInTheDocument()
+	expect(screen.getByRole('dialog', { name: 'Add Content Type' })).toBe(dialog)
+	expect(within(dialog).getByLabelText('Plural name')).toHaveValue('Pages')
+	expect(within(dialog).getByRole('button', { name: 'Add' })).not.toHaveAttribute('aria-disabled', 'true')
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('holds Change address open on the saved route word until the list refresh answers', async () => {
-	const refresh = gate()
-	let refreshing = false
+test('says the registry could not be reached when the network drops a new type', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(http.post('/api/types', () => HttpResponse.error()))
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-	server.use(
-		http.patch('/api/types/page', () => HttpResponse.json({ ...PAGE_TYPE, route_word: 'sections' })),
-		http.get('/api/types', async () => {
-			refreshing = true
-			await refresh.held
-			return HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, route_word: 'sections' }] })
-		}),
-	)
+	const dialog = await openAdd()
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Route word'))
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'sections')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
-	await waitFor(() => expect(refreshing).toBe(true))
-	const waiting = screen.getByRole('dialog', { name: 'Change the address of Pages' })
+	await nameNewType(dialog)
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-	expect(within(waiting).getByLabelText('Route word')).toHaveValue('sections')
-
-	refresh.release()
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-
-	expect(within(reopened).getByLabelText('Route word')).toHaveValue('sections')
+	expect(await findToast('The registry could not be reached.')).toBeInTheDocument()
 })
 
-test('closes Describe on Cancel while its save runs', async () => {
-	const save = gate()
-	server.use(
-		http.patch('/api/types/page', async () => {
-			await save.held
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveAttribute('aria-disabled', 'true'),
-	)
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
-	save.release()
-
-	expect(await screen.findByText('Pages updated.')).toBeInTheDocument()
-})
-
-test('closes Change address on Keep it while its move runs', async () => {
-	const move = gate()
-	server.use(
-		http.patch('/api/types/page', async () => {
-			await move.held
-			return HttpResponse.json({ error: 'content: route word taken' }, { status: 422 })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Move every address' })).toHaveAttribute(
-			'aria-disabled',
-			'true',
-		),
-	)
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
-
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
-	move.release()
-
-	expect(await screen.findByText(/route word taken/)).toBeInTheDocument()
-})
-
-test('closes Add Content Type on Cancel while the type is registered', async () => {
+test('keeps Add busy with Cancel live while the type is registered', async () => {
 	const register = gate()
 	server.use(
 		http.post('/api/types', async () => {
 			await register.held
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
+			return HttpResponse.json(GUIDE_TYPE, { status: 201 })
 		}),
 	)
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Register' })).toHaveAttribute('aria-disabled', 'true'),
-	)
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+	await nameNewType(dialog)
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
+	const add = within(dialog).getByRole('button', { name: 'Add' })
+	await waitFor(() => expect(add.className).toMatch(/__is-loading\b/))
+	expect(within(dialog).getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-disabled', 'true')
 	register.release()
-
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
-})
-
-test('leaves a reopened Describe on its new draft when an earlier save is turned away', async () => {
-	const save = gate()
-	server.use(
-		http.patch('/api/types/page', async () => {
-			await save.held
-			return HttpResponse.json({ error: 'content: the registry is busy' }, { status: 422 })
-		}),
-	)
-	const client = renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Description'))
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Every page this site keeps.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveAttribute('aria-disabled', 'true'),
-	)
-	await userEvent.keyboard('{Escape}')
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Manage the pages on this site.')
-	expect(within(reopened).getByRole('button', { name: 'Save' })).not.toHaveAttribute('aria-disabled', 'true')
-
-	await userEvent.clear(within(reopened).getByLabelText('Description'))
-	await userEvent.type(within(reopened).getByLabelText('Description'), 'Pages the team keeps.')
-	save.release()
-	expect(await screen.findByText(/the registry is busy/)).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(screen.getByRole('dialog', { name: 'Describe Pages' })).toBeInTheDocument()
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('Pages the team keeps.')
 })
 
-test('leaves a reopened Change address on its new draft when an earlier move lands', async () => {
-	const move = gate()
-	let moved = false
-	server.use(
-		http.patch('/api/types/page', async () => {
-			await move.held
-			moved = true
-			return HttpResponse.json({ ...PAGE_TYPE, route_word: 'sections' })
-		}),
-		http.get('/api/types', () =>
-			HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, route_word: moved ? 'sections' : 'pages' }] }),
-		),
-	)
-	const client = renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Route word'))
-	await userEvent.type(within(dialog).getByLabelText('Route word'), 'sections')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Move every address' })).toHaveAttribute(
-			'aria-disabled',
-			'true',
-		),
-	)
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-
-	expect(within(reopened).getByRole('button', { name: 'Move every address' })).not.toHaveAttribute(
-		'aria-disabled',
-		'true',
-	)
-
-	await userEvent.clear(within(reopened).getByLabelText('Route word'))
-	await userEvent.type(within(reopened).getByLabelText('Route word'), 'chapters')
-	move.release()
-	expect(await screen.findByText('Pages updated.')).toBeInTheDocument()
-	expect(await within(pages).findByText('/sections')).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(screen.getByRole('dialog', { name: 'Change the address of Pages' })).toBeInTheDocument()
-	expect(within(reopened).getByLabelText('Route word')).toHaveValue('chapters')
-})
-
-test('sends a second Describe save only once the first save to the type has answered', async () => {
-	const first = gate()
-	const heard: string[] = []
-	let stored = PAGE_TYPE.description
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			const asked = (await request.json()) as { description: string }
-			heard.push(`sent ${asked.description}`)
-			if (heard.length === 1) {
-				await first.held
-			}
-			stored = asked.description
-			heard.push(`answered ${asked.description}`)
-			return HttpResponse.json({ ...PAGE_TYPE, description: stored })
-		}),
-		http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, description: stored }] })),
-	)
-	const client = renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.clear(within(dialog).getByLabelText('Description'))
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Every page this site keeps.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(heard).toEqual(['sent Every page this site keeps.']))
-	await userEvent.keyboard('{Escape}')
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.clear(within(reopened).getByLabelText('Description'))
-	await userEvent.type(within(reopened).getByLabelText('Description'), 'Pages the team keeps.')
-	await userEvent.click(within(reopened).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(heard.length > 1 || queued(client) > 0).toBe(true))
-	first.release()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(heard).toEqual([
-		'sent Every page this site keeps.',
-		'answered Every page this site keeps.',
-		'sent Pages the team keeps.',
-		'answered Pages the team keeps.',
-	])
-
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const settled = await screen.findByRole('dialog', { name: 'Describe Pages' })
-
-	expect(within(settled).getByLabelText('Description')).toHaveValue('Pages the team keeps.')
-})
-
-test('sends a one-click edit only once a Describe save to the same type has answered', async () => {
-	const first = gate()
-	const heard: string[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			const asked = JSON.stringify(await request.json())
-			heard.push(`sent ${asked}`)
-			if (heard.length === 1) {
-				await first.held
-			}
-			heard.push(`answered ${asked}`)
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-	)
-	const client = renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Describe' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Describe Pages' })
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-	await waitFor(() => expect(heard).toHaveLength(1))
-	await userEvent.keyboard('{Escape}')
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(within(pages).getByRole('button', { name: 'Stop nesting' }))
-	await waitFor(() => expect(heard.length > 1 || queued(client) > 0).toBe(true))
-	first.release()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(heard).toEqual([
-		'sent {"description":"Manage the pages on this site."}',
-		'answered {"description":"Manage the pages on this site."}',
-		'sent {"hierarchical":false}',
-		'answered {"hierarchical":false}',
-	])
-})
-
-test('sends an edit to one type while a save to another type runs', async () => {
-	const save = gate()
-	let nested = false
-	server.use(
-		http.patch('/api/types/page', async () => {
-			await save.held
-			return HttpResponse.json(PAGE_TYPE)
-		}),
-		http.patch('/api/types/post', () => {
-			nested = true
-			return HttpResponse.json({ ...POST_TYPE, hierarchical: true })
-		}),
-	)
-	const client = renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	const posts = within(table).getByRole('row', { name: /Posts/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Stop nesting' }))
-	await userEvent.click(within(posts).getByRole('button', { name: 'Let items nest' }))
-
-	await waitFor(() => expect(nested).toBe(true))
-
-	save.release()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-})
-
-test('leaves a reopened Add Content Type on its new fields when an earlier type is registered', async () => {
+test('closes Add Content Type on Cancel while the type is registered, naming it in a toast once done', async () => {
 	const register = gate()
 	server.use(
 		http.post('/api/types', async () => {
 			await register.held
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
+			return HttpResponse.json({ ...GUIDE_TYPE, key: 'lesson', plural_label: 'Lessons' }, { status: 201 })
 		}),
 	)
-	const client = renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
+	renderAt('/content-types')
+	const dialog = await openAdd()
+	await nameNewType(dialog)
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Register' })).toHaveAttribute('aria-disabled', 'true'),
-	)
-	await userEvent.keyboard('{Escape}')
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
-
-	expect(within(reopened).getByRole('button', { name: 'Register' })).not.toHaveAttribute('aria-disabled', 'true')
-
-	await userEvent.clear(within(reopened).getByLabelText('Singular name'))
-	await userEvent.type(within(reopened).getByLabelText('Singular name'), 'Lesson')
-	await userEvent.clear(within(reopened).getByLabelText('Plural name'))
-	await userEvent.type(within(reopened).getByLabelText('Plural name'), 'Lessons')
-	register.release()
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(screen.getByRole('dialog', { name: 'Register a content type' })).toBeInTheDocument()
-	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('Lesson')
-	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('Lessons')
-})
-
-test('opens Add Content Type empty once a type it was closed on is registered', async () => {
-	const register = gate()
-	server.use(
-		http.post('/api/types', async () => {
-			await register.held
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
-		}),
-	)
-	const client = renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
-
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.type(within(dialog).getByLabelText('Description'), 'Manage the guides on this site.')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Register' })).toHaveAttribute('aria-disabled', 'true'),
-	)
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 	register.release()
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const reopened = await screen.findByRole('dialog', { name: 'Register a content type' })
-
-	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('')
-	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('')
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('')
-})
-
-test('empties a reopened Add Content Type once the type it still holds is registered', async () => {
-	const { register, client, reopened } = await reopenWhileRegistering()
-
-	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('Guide')
-
-	register.release()
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(screen.getByRole('dialog', { name: 'Register a content type' })).toBeInTheDocument()
-	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('')
-	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('')
-	expect(within(reopened).getByLabelText('Description')).toHaveValue('')
+	expect(await screen.findByText('"Lessons" successfully created.', { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
 test.each([
-	{ label: 'Singular name', typed: 'book', kept: ['Guidebook', 'Guides', 'Manage the guides on this site.'] },
-	{ label: 'Plural name', typed: ' and notes', kept: ['Guide', 'Guides and notes', 'Manage the guides on this site.'] },
-	{
-		label: 'Description',
-		typed: ' Kept by the team.',
-		kept: ['Guide', 'Guides', 'Manage the guides on this site. Kept by the team.'],
-	},
-])('keeps a reopened Add Content Type on its draft once its $label changed and an earlier type is registered', async ({
-	label,
-	typed,
-	kept,
-}) => {
-	const { register, client, reopened } = await reopenWhileRegistering()
-	await userEvent.type(within(reopened).getByLabelText(label), typed)
-
-	register.release()
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
-	await waitFor(() => expect(client.isMutating()).toBe(0))
-
-	expect(screen.getByRole('dialog', { name: 'Register a content type' })).toBeInTheDocument()
-	expect(within(reopened).getByLabelText('Singular name')).toHaveValue(kept[0])
-	expect(within(reopened).getByLabelText('Plural name')).toHaveValue(kept[1])
-	expect(within(reopened).getByLabelText('Description')).toHaveValue(kept[2])
-})
-
-test('closes Add Content Type once the registry turns the type away', async () => {
+	{ outcome: 'is registered', status: 201 },
+	{ outcome: 'is refused', status: 422 },
+])('leaves a reopened Add Content Type open on its new names when an earlier type $outcome', async ({ status }) => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const register = gate()
+	let asked = 0
 	server.use(
-		http.post('/api/types', () =>
-			HttpResponse.json({ error: 'content: the route word is taken' }, { status: 422 }),
-		),
+		http.post('/api/types', async () => {
+			asked += 1
+			await register.held
+			return status === 201
+				? HttpResponse.json(GUIDE_TYPE, { status })
+				: HttpResponse.json({ error: 'content: the route word is taken' }, { status })
+		}),
 	)
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
-
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-
-	expect(await screen.findByText(/route word is taken/)).toBeInTheDocument()
+	const first = await openAdd()
+	await nameNewType(first)
+	await userEvent.click(within(first).getByRole('button', { name: 'Add' }))
+	await waitFor(() => expect(asked).toBe(1))
+	await userEvent.click(within(first).getByRole('button', { name: 'Cancel' }))
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	const reopened = await openAdd()
+	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('')
+	await nameNewType(reopened, 'Recipe', 'Recipes')
+	register.release()
+	await screen.findByText(/./, { selector: '.godmin-toast' })
+	await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+	expect(screen.getByRole('dialog', { name: 'Add Content Type' })).toBe(reopened)
+	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('Recipe')
+	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('Recipes')
+	expect(within(reopened).getByRole('button', { name: 'Add' })).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 test('names the type it registered when its plural name changes while it runs', async () => {
 	const register = gate()
 	server.use(
-		http.post('/api/types', async () => {
+		http.post('/api/types', async ({ request }) => {
+			const body = (await request.json()) as Record<string, unknown>
 			await register.held
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
+			return HttpResponse.json({ ...GUIDE_TYPE, ...body }, { status: 201 })
 		}),
 	)
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
+	await nameNewType(dialog, 'Guide', 'Guides')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+	await waitBusy(dialog, 'Add')
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
-	await userEvent.type(within(dialog).getByLabelText('Singular name'), 'Guide')
-	await userEvent.type(within(dialog).getByLabelText('Plural name'), 'Guides')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Register' }))
-	await waitFor(() =>
-		expect(within(dialog).getByRole('button', { name: 'Register' })).toHaveAttribute('aria-disabled', 'true'),
-	)
 	await userEvent.type(within(dialog).getByLabelText('Plural name'), ' and notes')
 	register.release()
 
-	expect(await screen.findByText('Guides registered.')).toBeInTheDocument()
+	expect(await screen.findByText('"Guides" successfully created.', { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
-test('closes Add Content Type when it is cancelled', async () => {
+test('registers nothing when Add Content Type is cancelled, and opens empty again', async () => {
+	const sent = recordRegistrations()
 	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
+	const dialog = await openAdd()
+	await nameNewType(dialog)
 
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Register a content type' })
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	const reopened = await openAdd()
+
+	expect(within(reopened).getByLabelText('Singular name')).toHaveValue('')
+	expect(within(reopened).getByLabelText('Plural name')).toHaveValue('')
+	expect(within(reopened).getByLabelText('Description')).toHaveValue('')
+	expect(sent).toEqual([])
 })
 
-test('closes a type and reports no error once the list refreshes', async () => {
-	let closed = false
-	server.use(
-		http.patch('/api/types/page', () => {
-			closed = true
-			return HttpResponse.json({ ...PAGE_TYPE, active: false })
-		}),
-		http.get('/api/types', () => HttpResponse.json({ items: [POST_TYPE, { ...PAGE_TYPE, active: !closed }] })),
-	)
+test('names Add Content Type and its button in the words of WordPress es_ES', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Deactivate' }))
+	await userEvent.click(await screen.findByRole('button', { name: 'Añadir tipo de contenido' }))
+	const dialog = await screen.findByRole('dialog', { name: 'Añadir tipo de contenido' })
 
-	expect(await within(pages).findByRole('button', { name: 'Activate' })).toBeInTheDocument()
-	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+	expect(within(dialog).getByRole('button', { name: 'Añadir' })).toBeInTheDocument()
+	expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
 })
 
-test('keeps remembered entries out of the route word field', async () => {
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Change address' }))
-	const dialog = await screen.findByRole('dialog', { name: 'Change the address of Pages' })
-
-	expect(within(dialog).getByLabelText('Route word')).toHaveAttribute('autocomplete', 'off')
-})
-
-test('registers nothing when the new type is cancelled', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.post('/api/types', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json(PAGE_TYPE, { status: 201 })
-		}),
-	)
-	renderAt('/content-types')
-	await screen.findByRole('region', { name: 'Content Types' })
-
-	await userEvent.click(screen.getByRole('button', { name: 'Add Content Type' }))
-	await userEvent.type(screen.getByLabelText('Singular name'), 'Guide')
-	await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-
-	expect(sent).toHaveLength(0)
-})
-
-test('names the error a registry write carried', () => {
-	expect(errorMessage(new Error('content: the route word is taken'))).toBe(
-		'content: the route word is taken',
-	)
-})
-
-test('names an unreachable registry when the failure carries no message', () => {
-	expect(errorMessage('nonsense')).toBe('The registry could not be reached.')
-})
-
-test('states what the root hand over moves before moving it', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, default: true, route_word: '' })
-		}),
-	)
-	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
-
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Make default' }))
-	const dialog = await screen.findByRole('dialog')
-
-	expect(within(dialog).getByText(/Pages will answer at the root/i)).toBeInTheDocument()
-	expect(within(dialog).getByText(/Posts moves/i)).toBeInTheDocument()
-
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over the root' }))
-
-	await waitFor(() => expect(sent[0]).toEqual({ default: true }))
-})
-
-test.each(READERS)(
-	'names the built-in types of the root hand over by kind for a $locale reader, the address from the stored name',
-	async (reader) => {
-		setLocaleData(await catalogFor(reader.locale), 'gophenberg')
-		onTestFinished(() => resetLocaleData({}, 'gophenberg'))
-		renderAt('/content-types')
-		const table = await screen.findByRole('region', { name: reader.region })
-
-		const pages = within(table).getByRole('row', { name: reader.pages })
-		await userEvent.click(within(pages).getByRole('button', { name: reader.makeDefault }))
-		const dialog = await screen.findByRole('dialog', { name: reader.handOver })
-
-		expect(within(dialog).getByText(reader.answers)).toBeInTheDocument()
-		expect(within(dialog).getByText(reader.moves)).toBeInTheDocument()
+test.each([
+	{
+		locale: 'es-ES',
+		add: 'Añadir tipo de contenido',
+		singular: 'Nombre en singular',
+		plural: 'Nombre en plural',
+		send: 'Añadir',
+		created: 'Se ha creado correctamente el tipo de contenido «Lessons».',
 	},
-)
-
-test('hands over nothing when the root confirmation is dismissed', async () => {
-	const sent: unknown[] = []
-	server.use(
-		http.patch('/api/types/page', async ({ request }) => {
-			sent.push(await request.json())
-			return HttpResponse.json({ ...PAGE_TYPE, default: true })
-		}),
-	)
+	{
+		locale: 'fr-FR',
+		add: 'Ajouter un type de contenu',
+		singular: 'Nom au singulier',
+		plural: 'Nom au pluriel',
+		send: 'Ajouter',
+		created: 'Type de contenu « Lessons » créé avec succès.',
+	},
+])('names a new type by its kind for a $locale reader, so no word agrees with its name', async (reader) => {
+	setLocaleData(await catalogFor(reader.locale), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	const lesson = { ...GUIDE_TYPE, key: 'lesson', singular_label: 'Lesson', plural_label: 'Lessons' }
+	server.use(http.post('/api/types', () => HttpResponse.json(lesson, { status: 201 })))
 	renderAt('/content-types')
-	const table = await screen.findByRole('region', { name: 'Content Types' })
+	await userEvent.click(await screen.findByRole('button', { name: reader.add }))
+	const dialog = await screen.findByRole('dialog', { name: reader.add })
 
-	const pages = within(table).getByRole('row', { name: /Pages/ })
-	await userEvent.click(within(pages).getByRole('button', { name: 'Make default' }))
-	const dialog = await screen.findByRole('dialog')
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+	await userEvent.type(within(dialog).getByLabelText(reader.singular), 'Lesson')
+	await userEvent.type(within(dialog).getByLabelText(reader.plural), 'Lessons')
+	await userEvent.click(within(dialog).getByRole('button', { name: reader.send }))
 
-	expect(sent).toHaveLength(0)
+	expect(await findToast(reader.created)).toBeInTheDocument()
 })
