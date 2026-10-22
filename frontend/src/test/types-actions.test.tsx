@@ -238,6 +238,20 @@ test('offers the description a refused save left unsaved when Describe opens aga
 	expect(within(again).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
 })
 
+test('keeps the description a refused save left unsaved through a Cancel', async () => {
+	refuseEdits(PAGE_TYPE)
+	renderAt('/content-types')
+	await describeAs('Pages', 'Every page this site keeps.')
+	await screen.findByText('content: the type still holds content', { selector: '.godmin-toast' })
+	const kept = await openRowDialog('Pages', 'Describe…')
+	await userEvent.click(within(kept).getByRole('button', { name: 'Cancel' }))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	const again = await openRowDialog('Pages', 'Describe…')
+
+	expect(within(again).getByLabelText('Description')).toHaveValue('Every page this site keeps.')
+})
+
 test('offers the description a refused save left unsaved only on the type it was typed for', async () => {
 	refuseEdits(PAGE_TYPE)
 	serveTypes(POST_TYPE, PAGE_TYPE, GUIDE_TYPE)
