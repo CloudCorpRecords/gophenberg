@@ -156,6 +156,20 @@ func (r *Runner) settle(ctx context.Context, lease Lease, outcome Outcome) error
 	return err
 }
 
+// NextRun returns when the job called name falls due next in store, the zero time while store holds no slot of it.
+func NextRun(ctx context.Context, store Store, name string) (time.Time, error) {
+	slots, err := store.Slots(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("cron: read the slots: %w", err)
+	}
+	for _, slot := range slots {
+		if slot.Name == name {
+			return slot.NextRun, nil
+		}
+	}
+	return time.Time{}, nil
+}
+
 // nextRun returns the first time after now on the rhythm that started at from.
 func nextRun(from time.Time, every time.Duration, now time.Time) time.Time {
 	next := from.Add(every)
