@@ -118,9 +118,10 @@ func (s *updateSite) publishKeyList() {
 	}
 	s.put(update.KeyListPath, body)
 	s.put(update.KeyListPath+update.SignatureSuffix, []byte(line+"\n"))
+	s.publishTimestamp()
 }
 
-// publish serves the stable index offering offers, signed by key.
+// publish serves the stable index offering offers, signed by key, then a fresh timestamp file naming it.
 func (s *updateSite) publish(key ed25519.PrivateKey, offers ...update.Offer) {
 	s.t.Helper()
 	body := marshalled(s.t, update.Index{
@@ -129,6 +130,18 @@ func (s *updateSite) publish(key ed25519.PrivateKey, offers ...update.Offer) {
 	})
 	s.put(update.IndexPath("stable"), body)
 	s.put(update.IndexPath("stable")+update.SignatureSuffix, []byte(update.SignIndex(body, key)+"\n"))
+	s.publishTimestamp()
+}
+
+// publishTimestamp serves a timestamp file valid for seven days naming the files served, signed by the timestamp key.
+func (s *updateSite) publishTimestamp() {
+	s.t.Helper()
+	body := marshalled(s.t, update.Timestamp{
+		Schema: 1, Expires: time.Now().AddDate(0, 0, 7).UTC().Truncate(time.Second), Keys: 1,
+		Indexes: map[string]int64{"stable": 1},
+	})
+	s.put(update.TimestampPath, body)
+	s.put(update.TimestampPath+update.SignatureSuffix, []byte(update.SignIndex(body, s.timestamp)+"\n"))
 }
 
 // archive serves body as the archive of 0.21.0 for this platform and returns its record entry, signed by key.
