@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gopherium/framework/gonsole"
 	"github.com/gopherium/framework/gonsole/testkit"
@@ -296,6 +297,26 @@ func TestStatusTextNamesNoBuildNoRefusedVersionAndNoBackupAsNone(t *testing.T) {
 		"refused versions: none\nbackups kept: none\n"
 	if got != want {
 		t.Errorf("statusText() of an empty install root = %q, want %q", got, want)
+	}
+}
+
+func TestStatusTextNamesWhenWhereAndWhyTheLastUpdateFailed(t *testing.T) {
+	t.Parallel()
+
+	failure := &updater.JobFailure{
+		At: time.Date(2026, 10, 22, 9, 12, 0, 0, time.UTC), From: "0.20.0", To: "0.21.0", Step: updater.StepDownload,
+		Error: "updater: refused it",
+	}
+
+	got := statusText(settingsEnv(testkit.Getenv(nil)), updater.Status{
+		Root: "/opt/gophenberg", Update: updater.State{Failure: failure},
+	})
+
+	want := "install root: /opt/gophenberg\ncurrent build: none\nprevious build: none\nlast update: none yet\n" +
+		"last failure: from 0.20.0 to 0.21.0, at the step download on 2026-10-22T09:12:00Z: updater: refused it\n" +
+		"refused versions: none\nbackups kept: none\n"
+	if got != want {
+		t.Errorf("statusText() after a failed update = %q, want %q", got, want)
 	}
 }
 

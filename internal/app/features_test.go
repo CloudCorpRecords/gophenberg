@@ -81,6 +81,12 @@ type operatorScenario struct {
 	notes   *noting
 	site    *updateSite
 	stamp   string
+	updates siteAnswer
+	served  *servedSite
+	started answered
+	told    answered
+	gate    string
+	release func()
 }
 
 // initializeOperatorCommands returns the binding of the operator command steps on engine, t holding their databases.

@@ -48,6 +48,24 @@ func timedConfig() runConfig {
 			PageSizes: []int{5, 15, 45}, PageSize: 15, PickerPageSize: 45, PageCap: 60,
 			ToastDuration: 2500 * time.Millisecond, ToastNameLength: 30, FormatLocale: "en-GB",
 		},
+
+		updates: updateSettings{
+			screenAge: 3 * time.Minute,
+			screen:    server.UpdatesScreen{ProgressInterval: 1500 * time.Millisecond, RestartWait: 7 * time.Minute},
+		},
+	}
+}
+
+func TestServerConfigCarriesTheUpdatesScreenSettingsTheEnvironmentNamed(t *testing.T) {
+	t.Parallel()
+
+	settings := timedConfig()
+
+	held := configOver(settings, site{})
+
+	if held.UpdatesScreen != settings.updates.screen || held.UpdatesCheckAge != settings.updates.screenAge {
+		t.Errorf("UpdatesScreen = %+v and UpdatesCheckAge = %v, want %+v and %v", held.UpdatesScreen,
+			held.UpdatesCheckAge, settings.updates.screen, settings.updates.screenAge)
 	}
 }
 

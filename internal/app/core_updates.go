@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gopherium/framework/gonsole"
 
@@ -219,18 +220,29 @@ func statusText(env gonsole.Env, status updater.Status) string {
 	for _, backup := range status.Backups {
 		backups = append(backups, filepath.Join(status.Root, backup))
 	}
-	lines := []string{
+	lines := append([]string{
 		"install root: " + status.Root,
 		"current build: " + cmp.Or(status.Current, "none"),
 		"previous build: " + cmp.Or(status.Previous, "none"),
 		"last update: " + lastUpdateText(status.Update),
-		"refused versions: " + cmp.Or(strings.Join(status.Update.Refused, ", "), "none"),
-		"backups kept: " + cmp.Or(strings.Join(backups, ", "), "none"),
-	}
+	}, failureLines(status.Update.Failure)...)
+	lines = append(lines,
+		"refused versions: "+cmp.Or(strings.Join(status.Update.Refused, ", "), "none"),
+		"backups kept: "+cmp.Or(strings.Join(backups, ", "), "none"),
+	)
 	if status.Restore != "" {
 		lines = append(lines, "to bring the site back: "+status.Restore)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// failureLines returns the line update:status prints of which job failed last, when, where and why, none for none.
+func failureLines(failure *updater.JobFailure) []string {
+	if failure == nil {
+		return nil
+	}
+	return []string{"last failure: from " + failure.From + " to " + failure.To + ", at the step " +
+		string(failure.Step) + " on " + failure.At.UTC().Format(time.RFC3339) + ": " + failure.Error}
 }
 
 // lastUpdateText returns what update:status says of the last update the state names.

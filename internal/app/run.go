@@ -29,13 +29,14 @@ import (
 	"github.com/gopherium/gophenberg/sdk"
 )
 
-// run starts the server and serves until ctx is cancelled or serving fails.
-func run(
-	ctx context.Context,
-	getenv func(string) string,
-	stderr io.Writer,
-	plugins func(sdk.Deps) ([]sdk.Plugin, error),
-) error {
+// binary is what a gophenberg binary is built with: the plugins compiled into it and its build stamp.
+type binary struct {
+	plugins func(sdk.Deps) ([]sdk.Plugin, error)
+	stamp   string
+}
+
+// serveSite starts the site of the binary given and serves it until ctx ends, serving fails or an update switched.
+func serveSite(ctx context.Context, getenv func(string) string, stderr io.Writer, compiled binary) error {
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 
 	settings, guard, err := started(getenv, logger)
@@ -43,17 +44,20 @@ func run(
 		return err
 	}
 
-	built, err := compose(composeOf(settings, getenv), plugins)
+	built, err := compose(composeOf(settings, getenv), compiled.plugins)
 	if err != nil {
 		return err
 	}
 	defer built.close()
-	b := boot{settings: settings, built: built, host: hostOf(built.registered), logger: logger}
+	b := boot{settings: settings, built: built, host: hostOf(built.registered), logger: logger, stamp: compiled.stamp}
+	serving, restart := context.WithCancelCause(ctx)
+	defer restart(nil)
+	b.admin = b.updatesFromAdmin(serving, restart, settingsEnv(getenv))
 	if err := b.ready(ctx); err != nil {
 		return err
 	}
 
-	jobs := cronOf(settings.cron, built, logger, updateJobs(settings.updates, siteUpdatesOf(settings, built))...)
+	jobs := cronOf(settings.cron, built, logger, updateJobs(settings.updates, b.updates())...)
 
 	walked, err := declareTypes(ctx, built.registry, built.registered, logger)
 	if err != nil {
@@ -76,9 +80,9 @@ func run(
 	b.lendMedia(ctx, &cfg)
 
 	srv := jobs.serverOf(settings, server.NewServer(cfg))
-	return guard.Serve(ctx, srv, themes.CheckChoice, func(ctx context.Context) error {
+	return b.admin.ended(guard.Serve(serving, srv, themes.CheckChoice, func(ctx context.Context) error {
 		return gonsole.Serve(ctx, srv, settings.serving, jobs.stop(b.host, settings.serving.StopGrace), logger)
-	})
+	}))
 }
 
 // started reads the server settings, then counts this start for the boot guard before the database opens.
@@ -91,12 +95,34 @@ func started(getenv func(string) string, logger *slog.Logger) (runConfig, *updat
 	return settings, guard, err
 }
 
-// boot is one start of the site: its settings, what compose built, the host of its plugins and its logger.
+// boot is one start of the site: its settings, what compose built, its plugins, logger, stamp and admin updates.
 type boot struct {
 	settings runConfig
 	built    site
 	host     *pluginkit.Host
 	logger   *slog.Logger
+	stamp    string
+	admin    *adminUpdates
+}
+
+// updates returns the checks for a newer Gophenberg, the install of the site and the updates administrators start.
+func (b boot) updates() siteUpdates {
+	updates := siteUpdatesOf(b.settings, b.built, b.stamp)
+	updates.admin = b.admin
+	return updates
+}
+
+// updatesFromAdmin returns what runs the updates administrators start on serving, ending it once one switched.
+func (b boot) updatesFromAdmin(
+	serving context.Context, restart context.CancelCauseFunc, env gonsole.Env,
+) *adminUpdates {
+	return &adminUpdates{
+		job: updater.Job{
+			Settings: b.settings.install, Check: b.settings.updates.config(0), Store: b.built.settings,
+			DB: b.built.pgHandle.DB, DatabaseURL: b.settings.databaseURL, Stamp: b.stamp,
+		},
+		env: env, serving: serving, restart: restart, logger: b.logger,
+	}
 }
 
 // ready refuses plugins that failed to register, then checks the database role and migrates, stopping them on failure.
@@ -151,8 +177,9 @@ func (b boot) serverConfig(walked definitions.Walked) server.Config {
 		Lists:                settings.lists,
 		Roles:                built.roles,
 		Avatars:              built.avatars,
-		Updates:              siteUpdatesOf(settings, built),
+		Updates:              b.updates(),
 		UpdatesCheckAge:      settings.updates.screenAge,
+		UpdatesScreen:        settings.updates.screen,
 	}
 	cfg.Web = webui.FS()
 	if settings.webDir != "" {
