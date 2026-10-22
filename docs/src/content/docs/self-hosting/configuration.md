@@ -321,7 +321,7 @@ connections to the file, as it caps a PostgreSQL pool.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GOPHENBERG_SQLITE_BUSY_TIMEOUT` | `5s` | How long a connection waits for a lock another one holds, in whole milliseconds, up to `596h31m23.647s` |
-| `GOPHENBERG_SQLITE_BUSY_POLL` | `10ms` | How often a connection that waits for a lock tries it again, in whole milliseconds, up to `GOPHENBERG_SQLITE_BUSY_TIMEOUT`. A busy timeout under 10ms lowers the default to match it. A longer poll tries less often, so a wait can go on up to one poll after the lock is free |
+| `GOPHENBERG_SQLITE_BUSY_POLL` | `10ms` | How often opening a new connection tries the lock again while another connection holds the file, in whole milliseconds, up to `GOPHENBERG_SQLITE_BUSY_TIMEOUT`. A busy timeout under 10ms lowers the default to match it. A longer poll tries less often, so opening a connection can wait up to one poll after the lock is free. Every other wait, such as a write behind another write, tries again on SQLite's own schedule, which slows down to one try every 100ms |
 | `GOPHENBERG_SQLITE_CACHE_SIZE` | `2000` | The page cache of each connection, in kibibytes, up to 2147483647. All the caches together may take this times `GOPHENBERG_DATABASE_MAX_CONNS` |
 | `GOPHENBERG_SQLITE_SYNCHRONOUS` | `full` | `full` writes the log to disk at every commit. `normal` writes it only at each checkpoint, which is faster, but a power cut can lose the last commits |
 | `GOPHENBERG_SQLITE_JOURNAL_SIZE_LIMIT` | | The size in bytes the write-ahead log is cut back to after a checkpoint. Unset sets no limit, so the log keeps the largest size it reached |

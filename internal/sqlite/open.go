@@ -71,7 +71,7 @@ func SettingsFrom(env gonsole.Env) (Settings, error) {
 	}, nil
 }
 
-// busyPollFrom reads how often a waiting connection tries a lock again, up to busyTimeout, which caps the 10ms default.
+// busyPollFrom reads how often opening a connection tries a lock again, up to busyTimeout, which caps the 10ms default.
 func busyPollFrom(env gonsole.Env, busyTimeout time.Duration) (time.Duration, error) {
 	busyPoll, err := env.Duration("SQLITE_BUSY_POLL", min(10*time.Millisecond, busyTimeout), gonsole.WholeMilliseconds())
 	if err != nil {
