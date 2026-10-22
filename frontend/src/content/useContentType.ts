@@ -19,6 +19,7 @@ const unknownType: ContentType = {
 	},
 	description: '',
 	routeWord: '',
+	derivedRouteWord: '',
 	hierarchical: false,
 	revisions: true,
 	revisionCap: 0,

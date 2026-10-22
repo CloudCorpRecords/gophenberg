@@ -406,6 +406,17 @@ test('moves every address once Move every address is pressed, closing at once an
 	expect(await screen.findByText('Address updated.', { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
+test('sends the route word without the spaces typed around it', async () => {
+	const sent = recordEdits(PAGE_TYPE)
+	renderAt('/content-types')
+	const dialog = await openRowDialog('Pages', 'Change address…')
+
+	await retype(dialog, 'Route word', '  sections  ')
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Move every address' }))
+
+	await waitFor(() => expect(sent).toEqual([{ route_word: 'sections' }]))
+})
+
 test('offers the route word a refused move left unsaved when Change address opens again', async () => {
 	server.use(
 		http.patch('/api/types/page', () =>
@@ -442,6 +453,20 @@ test('asks before handing the root over in a medium dialog headed Make default, 
 	await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus())
 	expect(within(dialog).getByRole('button', { name: 'Make default' })).toBeInTheDocument()
 	expect(sent).toEqual([])
+})
+
+test.each([
+	{ key: 'resume', plural: 'Résumés', word: 'resumes' },
+	{ key: 'model', plural: '3D Models', word: 'model' },
+])('names the word the server derives for $plural as where the root holder moves', async ({ key, plural, word }) => {
+	const holder = { ...GUIDE_TYPE, key, plural_label: plural, route_word: '', derived_route_word: word, default: true }
+	serveTypes({ ...POST_TYPE, default: false }, PAGE_TYPE, holder)
+	renderAt('/content-types')
+
+	const dialog = await openRowDialog('Pages', 'Make default…')
+
+	const question = `Pages will answer at the root. ${plural} moves to /${word}. Every address of both types changes.`
+	expect(within(dialog).getByText(question)).toBeInTheDocument()
 })
 
 test('asks only where the type will answer when no type holds the root', async () => {

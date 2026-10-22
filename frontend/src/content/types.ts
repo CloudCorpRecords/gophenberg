@@ -41,6 +41,7 @@ const typeSchema = z.object({
 	plural_label: z.string(),
 	description: z.string(),
 	route_word: z.string(),
+	derived_route_word: z.string().optional(),
 	hierarchical: z.boolean(),
 	revisions: z.boolean(),
 	revision_cap: z.number(),
@@ -81,6 +82,7 @@ export interface ContentType {
 	pluralLabel: string
 	description: string
 	routeWord: string
+	derivedRouteWord: string
 	hierarchical: boolean
 	revisions: boolean
 	revisionCap: number
@@ -124,6 +126,7 @@ function toType(row: z.infer<typeof typeSchema>): ContentType {
 		pluralLabel: row.plural_label,
 		description: row.description,
 		routeWord: row.route_word,
+		derivedRouteWord: row.derived_route_word ?? '',
 		hierarchical: row.hierarchical,
 		revisions: row.revisions,
 		revisionCap: row.revision_cap,

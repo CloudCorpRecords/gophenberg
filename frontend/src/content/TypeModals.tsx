@@ -102,7 +102,7 @@ export function AddressModal(props: TypeFormProps) {
 	const edit = useRowEdit(
 		props,
 		props.items[0].routeWord,
-		(routeWord) => ({ routeWord }),
+		(routeWord) => ({ routeWord: routeWord.trim() }),
 		__('Address updated.', 'gophenberg'),
 	)
 	return (
@@ -139,7 +139,7 @@ function rootQuestion(type: ContentType, holder: ContentType | undefined): strin
 	}
 	const moves = sprintf(__('%(name)s moves to /%(word)s. Every address of both types changes.', 'gophenberg'), {
 		name: pluralOf(holder),
-		word: slugifyKey(holder.pluralLabel),
+		word: holder.derivedRouteWord,
 	})
 	return `${answers} ${moves}`
 }
