@@ -24,12 +24,69 @@ func (s *operatorScenario) offerRelease(offered, minimum string) {
 
 // signKeyListAlone serves the key list signed by the one key name.
 func (s *operatorScenario) signKeyListAlone(name string) {
-	s.site.publishKeyList(name)
+	s.site.publishKeyList(unchanged, name)
+}
+
+// dropTimestampKey serves a key list, signed by both roots, that names no timestamp key.
+func (s *operatorScenario) dropTimestampKey() {
+	s.site.publishKeyList(func(list *update.KeyList) { list.Keys = list.Keys[:1] }, bothRoots...)
+}
+
+// listReleaseKeyAsTimestampKey serves a key list, signed by both roots, naming the release key as its timestamp key.
+func (s *operatorScenario) listReleaseKeyAsTimestampKey() {
+	s.site.publishKeyList(func(list *update.KeyList) { list.Keys[1].Multikey = list.Keys[0].Multikey }, bothRoots...)
 }
 
 // signIndexAsStranger serves the index signed by a key the key list does not name.
 func (s *operatorScenario) signIndexAsStranger() {
 	s.site.publishIndex(s.site.stranger, unchanged)
+}
+
+// signIndexAsTimestampKey serves the index signed by the timestamp key.
+func (s *operatorScenario) signIndexAsTimestampKey() {
+	s.site.publishIndex(s.site.timestamp, unchanged)
+}
+
+// signTimestampAsRelease serves the timestamp file signed by the release key.
+func (s *operatorScenario) signTimestampAsRelease() {
+	s.site.publishTimestamp(s.site.release, unchanged)
+}
+
+// expireTimestamp serves a timestamp file that expired a day ago.
+func (s *operatorScenario) expireTimestamp() {
+	s.site.publishTimestamp(s.site.timestamp, func(stamp *update.Timestamp) {
+		stamp.Expires = time.Now().AddDate(0, 0, -1)
+	})
+}
+
+// dropTimestamp serves no timestamp file and no signature of one.
+func (s *operatorScenario) dropTimestamp() {
+	s.site.drop(update.TimestampPath)
+	s.site.drop(update.TimestampPath + update.SignatureSuffix)
+}
+
+// nameNewerKeyList serves a timestamp file naming a key list one serial past the one served.
+func (s *operatorScenario) nameNewerKeyList() {
+	s.site.publishTimestamp(s.site.timestamp, func(stamp *update.Timestamp) { stamp.Keys++ })
+}
+
+// nameOtherIndex serves a timestamp file naming an index one serial past or before the one served.
+func (s *operatorScenario) nameOtherIndex(age string) {
+	step := map[string]int64{"a newer": 1, "an older": -1}[age]
+	s.site.publishTimestamp(s.site.timestamp, func(stamp *update.Timestamp) { stamp.Indexes["stable"] += step })
+}
+
+// nameNoChannel serves a timestamp file naming no index of the stable channel.
+func (s *operatorScenario) nameNoChannel() {
+	s.site.publishTimestamp(s.site.timestamp, func(stamp *update.Timestamp) { delete(stamp.Indexes, "stable") })
+}
+
+// ageIndex serves an index signed the days given ago that expires in the days given, with a fresh timestamp file.
+func (s *operatorScenario) ageIndex(signed, expires int) {
+	s.site.publishIndex(s.site.release, func(index *update.Index) {
+		index.Serial = time.Now().AddDate(0, 0, -signed).Unix()
+		index.Expires = time.Now().AddDate(0, 0, expires)
+	})
 }
 
 // changeArchive serves other bytes in place of the archive the release record names.
