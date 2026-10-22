@@ -158,7 +158,7 @@ Some things work differently after this update:
   the admin needs `access_admin`. The
   [versions of the plugin SDK](/extending/the-plugin-sdk/#versions)
   list every step to move a plugin. Building from source needs
-  Go 1.27.2.
+  Go 1.27.3.
 - On PostgreSQL, `GOPHENBERG_DATABASE_MAX_CONNS` now caps the site's
   one database pool. Left unset, the pool keeps the size it had, the
   larger of 4 and the number of CPUs. `GOPHENBERG_DATABASE_URL` takes
@@ -234,9 +234,10 @@ Some things work differently after this update:
 - On a SQLite file, two `migrate` runs started at the same moment on a
   new file no longer stop with `the database is busy`. Opening the
   file while another connection holds it locked now waits up to
-  `GOPHENBERG_SQLITE_BUSY_TIMEOUT`, as a write already did. Each wait
-  tries the lock again every `GOPHENBERG_SQLITE_BUSY_POLL`, a new
-  setting, 10ms unless set. A wait now ends as soon as its command
+  `GOPHENBERG_SQLITE_BUSY_TIMEOUT`, as a write already did, and tries
+  the lock again every `GOPHENBERG_SQLITE_BUSY_POLL`, a new setting,
+  10ms unless set. Every other wait tries the lock again on SQLite's
+  own schedule, as before. A wait now ends as soon as its command
   stops, such as on Ctrl-C. The release before this one waited out the
   whole busy timeout.
 
