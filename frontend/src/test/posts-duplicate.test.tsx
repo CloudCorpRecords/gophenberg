@@ -2,7 +2,7 @@
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { buttonClasses } from '@gopherium/godmin/testing'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
@@ -127,15 +127,26 @@ beforeEach(() => {
 })
 
 /**
+ * Opens a dialog from the actions menu of a listed post.
+ * @param menuItem - The words the menu item reads.
+ * @param heading - The words the dialog is named by.
+ * @param title - The title of the post, the first listed one unless a test names another.
+ * @returns The dialog.
+ */
+async function openRowDialog(menuItem: string, heading: string, title = PUBLISHED.title): Promise<HTMLElement> {
+	const row = within((await screen.findByRole('link', { name: title })).closest('tr') as HTMLElement)
+	await userEvent.click(row.getByRole('button', { name: 'Actions' }))
+	await userEvent.click(await screen.findByRole('menuitem', { name: menuItem }))
+	return screen.findByRole('dialog', { name: heading })
+}
+
+/**
  * Opens the duplicate dialog of a listed post.
  * @param title - The title of the post, the first listed one unless a test names another.
  * @returns The dialog.
  */
-async function openDuplicate(title = PUBLISHED.title): Promise<HTMLElement> {
-	const row = within((await screen.findByRole('link', { name: title })).closest('tr') as HTMLElement)
-	await userEvent.click(row.getByRole('button', { name: 'Actions' }))
-	await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate…' }))
-	return screen.findByRole('dialog', { name: 'Duplicate' })
+function openDuplicate(title = PUBLISHED.title): Promise<HTMLElement> {
+	return openRowDialog('Duplicate…', 'Duplicate', title)
 }
 
 test('duplicates in a medium dialog headed Duplicate, as WordPress sizes it, its Title field a copy', async () => {
@@ -421,6 +432,40 @@ test('closes the dialog on Cancel while the copy is made, the copy still named i
 	expect(await screen.findByText('"Welcome to Gophenberg (Copy)" successfully created.', { selector: '.godmin-toast' }))
 		.toBeInTheDocument()
 	expect(created).toHaveLength(1)
+})
+
+/**
+ * Sends a copy held until the returned gate opens, then cancels its dialog.
+ * @returns The gate the copy waits on.
+ */
+async function cancelHeldCopy(): Promise<ReturnType<typeof gate>> {
+	const answer = holdCopies()
+	renderAt('/content/post')
+	const dialog = await openDuplicate()
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	return answer
+}
+
+test.each([
+	{ form: 'Duplicate', menuItem: 'Duplicate…', label: 'Title' },
+	{ form: 'Rename', menuItem: 'Rename…', label: 'Name' },
+])('leaves a $form dialog opened after a cancelled copy open with its text once the copy ends', async (
+	{ form, menuItem, label },
+) => {
+	const answer = await cancelHeldCopy()
+	const opened = await openRowDialog(menuItem, form)
+	const field = within(opened).getByRole('textbox', { name: label })
+	await userEvent.clear(field)
+	await userEvent.type(field, 'A Third Welcome')
+
+	answer.release()
+
+	await screen.findByText('"Welcome to Gophenberg (Copy)" successfully created.', { selector: '.godmin-toast' })
+	await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+	expect(screen.getByRole('dialog', { name: form })).toBe(opened)
+	expect(within(opened).getByRole('textbox', { name: label })).toHaveValue('A Third Welcome')
 })
 
 test('closes the dialog on Cancel, making nothing', async () => {
