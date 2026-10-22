@@ -297,6 +297,39 @@ test('names the plugin that declared a type', async () => {
 	expect((await rowOf('Pages')).getByText('From events')).toBeInTheDocument()
 })
 
+test('names no plugin on a type the site made', async () => {
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, origin: 'events' })
+	renderAt('/content-types')
+
+	expect((await rowOf('Posts')).queryByText(/^From/)).not.toBeInTheDocument()
+})
+
+test.each([
+	{ operator: 'isAny', shown: ['Pages'] },
+	{ operator: 'isNone', shown: ['Guides', 'Posts'] },
+])('narrows the list by the plugin that declared a type with $operator', async ({ operator, shown }) => {
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, origin: 'events' }, GUIDE_TYPE)
+	const narrowing = `[{"field":"status","operator":"${operator}","value":["plugin:events"]}]`
+	renderAt(`/content-types?filters=${encodeURIComponent(narrowing)}`)
+
+	await waitFor(async () => expect((await listedNames()).toSorted()).toEqual(shown))
+})
+
+test.each([
+	{ served: 'a plugin type', origin: 'events', choices: ['Default', 'Nests', 'Closed', 'From events'] },
+	{ served: 'no plugin type', origin: undefined, choices: ['Default', 'Nests', 'Closed'] },
+])('offers the Status filter a choice for each mark the column draws with $served', async ({ origin, choices }) => {
+	serveTypes(POST_TYPE, { ...PAGE_TYPE, origin }, GUIDE_TYPE)
+	renderAt('/content-types')
+	await rowOf('Pages')
+
+	await userEvent.click(screen.getByRole('button', { name: 'Add filter' }))
+	await userEvent.click(await screen.findByRole('menuitem', { name: 'Status' }))
+
+	const listed = within(await screen.findByRole('listbox')).getAllByRole('option')
+	expect(listed.map((option) => option.textContent)).toEqual(choices)
+})
+
 test('draws no action button on a row, leaving every action to its menu', async () => {
 	renderAt('/content-types')
 

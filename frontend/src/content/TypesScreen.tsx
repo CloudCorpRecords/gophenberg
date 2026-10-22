@@ -16,7 +16,7 @@ import { useFocusOnList } from '../lists/focusOnList'
 import type { ListSettings } from '../settings/api'
 import { useListSettings } from '../settings/useListSettings'
 import { typesNavItem, typesQueryKey } from './nav'
-import { TYPE_COLUMNS, TYPE_PHONE_COLUMNS, TYPE_SORT, TYPE_VIEW_GUARD, typeFields } from './typeFields'
+import { TYPE_COLUMNS, TYPE_PHONE_COLUMNS, TYPE_SORT, TYPE_VIEW_GUARD, originsOf, typeFields } from './typeFields'
 import { useTypeActions } from './typeActions'
 import { AddTypeDialog } from './TypeModals'
 import { listTypes } from './types'
@@ -24,6 +24,16 @@ import type { ContentType } from './types'
 
 /** The types a list holds before the registry answers. */
 const NO_TYPES: ContentType[] = []
+
+/**
+ * Returns the columns of the types list, built again only when the plugins that declared a type change.
+ * @param types - The types the registry holds, none before it answers.
+ * @returns The columns.
+ */
+function useTypeFields(types: ContentType[] | undefined): Field<ContentType>[] {
+	const origins = JSON.stringify(originsOf(types ?? NO_TYPES))
+	return useMemo(() => typeFields(JSON.parse(origins) as string[]), [origins])
+}
 
 /**
  * Holds the view of the types list in the address, sized by the settings once they are known.
@@ -129,7 +139,7 @@ function AddType() {
  */
 export function TypesScreen() {
 	const types = useQuery({ queryKey: typesQueryKey, queryFn: listTypes })
-	const fields = useMemo(() => typeFields(), [])
+	const fields = useTypeFields(types.data)
 	const { list, view, settings } = useTypesView(fields)
 	const { run, region } = useListRun('content-types', list.onChangeSelection)
 	const onList = useFocusOnList(run, region)

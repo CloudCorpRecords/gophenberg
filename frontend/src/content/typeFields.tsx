@@ -51,6 +51,9 @@ function markLabels(): Record<string, string> {
 	}
 }
 
+/** The start of the filter value naming the plugin that declared a type. */
+const PLUGIN_MARK = 'plugin:'
+
 /**
  * Returns the address a type answers under, as the list shows it.
  * @param type - The type the address belongs to.
@@ -70,6 +73,34 @@ export function originOf(type: ContentType): string {
 }
 
 /**
+ * Returns the plugins that declared the types given, each once and in order.
+ * @param types - The types.
+ * @returns The plugins' ids.
+ */
+export function originsOf(types: readonly ContentType[]): string[] {
+	return [...new Set(types.map(originOf).filter((origin) => origin !== ''))].toSorted()
+}
+
+/**
+ * Returns the words naming the plugin that declared a type.
+ * @param plugin - The plugin's id.
+ * @returns The words.
+ */
+function fromPlugin(plugin: string): string {
+	return sprintf(__('From %(plugin)s', 'gophenberg'), { plugin })
+}
+
+/**
+ * Returns the filter values of the marks a type carries, the plugin that declared it last.
+ * @param type - The type.
+ * @returns The values.
+ */
+function statusOf(type: ContentType): string[] {
+	const marks = MARKS.filter((mark) => mark.holds(type)).map((mark) => mark.value)
+	return [...marks, ...originsOf([type]).map((plugin) => PLUGIN_MARK + plugin)]
+}
+
+/**
  * Renders the badges naming what stands out about a type, each kept on one line.
  * @param props - The row being rendered.
  * @returns The badges.
@@ -84,9 +115,7 @@ function StatusCell({ item }: { item: ContentType }) {
 					{labels[mark.value]}
 				</Badge>
 			))}
-			{origin === '' ? null : (
-				<Badge className="gophenberg-status">{sprintf(__('From %(plugin)s', 'gophenberg'), { plugin: origin })}</Badge>
-			)}
+			{origin === '' ? null : <Badge className="gophenberg-status">{fromPlugin(origin)}</Badge>}
 		</Stack>
 	)
 }
@@ -128,9 +157,10 @@ function CreatedCell({ item }: { item: ContentType }) {
 
 /**
  * Returns the columns of the types list, in the order the table draws them.
+ * @param origins - The plugins that declared a type, which the Status filter offers after the marks.
  * @returns The type, its key, its singular name kept for the search alone, description, address, status and creation.
  */
-export function typeFields(): Field<ContentType>[] {
+export function typeFields(origins: readonly string[]): Field<ContentType>[] {
 	return [
 		{
 			id: 'title',
@@ -162,9 +192,12 @@ export function typeFields(): Field<ContentType>[] {
 			id: 'status',
 			label: _x('Status', 'content type', 'gophenberg'),
 			type: 'array',
-			getValue: ({ item }) => MARKS.filter((mark) => mark.holds(item)).map((mark) => mark.value),
+			getValue: ({ item }) => statusOf(item),
 			render: StatusCell,
-			elements: Object.entries(markLabels()).map(([value, label]) => ({ value, label })),
+			elements: [
+				...Object.entries(markLabels()).map(([value, label]) => ({ value, label })),
+				...origins.map((plugin) => ({ value: PLUGIN_MARK + plugin, label: fromPlugin(plugin) })),
+			],
 			filterBy: { operators: ['isAny', 'isNone'] },
 			enableSorting: false,
 		},
