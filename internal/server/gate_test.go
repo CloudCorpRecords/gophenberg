@@ -104,6 +104,7 @@ var adminRoutes = []route{
 	{http.MethodPost, "/api/themes/rollback"},
 	{http.MethodGet, "/api/updates"},
 	{http.MethodPost, "/api/updates/check"},
+	{http.MethodPost, "/api/updates/apply"},
 }
 
 // memorySiteSettings answers the site wide settings from memory.

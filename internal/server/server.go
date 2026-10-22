@@ -102,6 +102,8 @@ type Config struct {
 	Updates UpdateChecks
 	// UpdatesCheckAge is how long after one check the update routes refuse to run another.
 	UpdatesCheckAge time.Duration
+	// UpdatesScreen is how often the Updates screen asks for progress and how long it waits, served with the settings.
+	UpdatesScreen UpdatesScreen
 }
 
 // rolesOf returns the roles the configuration hands over, or the core's alone when it hands none.
@@ -149,6 +151,7 @@ func NewServer(cfg Config) http.Handler {
 		logger:         loggerOf(cfg),
 		lists:          listsOf(cfg),
 		avatars:        cfg.Avatars,
+		updatesScreen:  cfg.UpdatesScreen,
 	}
 	s.addresses = content.NewResolver(cfg.Content, s.types)
 	headers := headersFor(cfg.Cache)
@@ -259,6 +262,7 @@ func (s *server) mountAdmin(r chi.Router, auth *authkit.Handlers, cfg Config) {
 		r.With(auth.RequireCapability(string(role.UpdateCore))).Group(func(r chi.Router) {
 			r.Get("/api/updates", s.handleUpdatesGet(cfg.Updates))
 			r.Post("/api/updates/check", s.handleUpdatesCheck(cfg.Updates, cfg.UpdatesCheckAge))
+			r.Post("/api/updates/apply", s.handleUpdatesApply(cfg.Updates))
 		})
 	}
 }
@@ -324,4 +328,5 @@ type server struct {
 	logger         *slog.Logger
 	lists          ListSettings
 	avatars        avatar.Options
+	updatesScreen  UpdatesScreen
 }
