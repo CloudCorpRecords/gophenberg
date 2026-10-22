@@ -4,6 +4,7 @@ import type { RenderModalProps } from '@gophenberg/frontend-sdk/dataviews'
 import { RenameBody, useToaster } from '@gopherium/godmin'
 import { __ } from '@wordpress/i18n'
 
+import { markLatest } from './unsavedText'
 import type { UnsavedText } from './unsavedText'
 
 /** What the rename modal of a list takes beside the props DataViews hands a modal. */
@@ -33,13 +34,16 @@ export function RenameModal<Item>(props: RenameModalProps<Item>) {
 	const save = (name: string) => {
 		closeModal?.()
 		unsaved.delete(id)
+		const stillLatest = markLatest(unsaved, id)
 		void rename(item, name).then(
 			async () => {
 				await refresh(item)
 				toaster.show(__('Name updated.', 'gophenberg'))
 			},
 			(failure: Error) => {
-				unsaved.set(id, name)
+				if (stillLatest()) {
+					unsaved.set(id, name)
+				}
 				toaster.show(failure.message)
 			},
 		)

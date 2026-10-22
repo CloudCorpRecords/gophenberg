@@ -360,6 +360,36 @@ test('opens on the stored name again once a later rename lands', async () => {
 	expect(within(again).getByRole('textbox', { name: 'Name' })).toHaveValue('Welcome to Gophenberg')
 })
 
+test('opens on the saved name when an earlier rename fails after a later one was sent', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const first = gate()
+	let title = PUBLISHED.title
+	let writes = 0
+	server.use(
+		http.get('/api/content', () => HttpResponse.json({ items: [{ ...PUBLISHED, title }], total: 1, per_page: 20 })),
+		http.patch(`/api/content/${PUBLISHED.id}`, async ({ request }) => {
+			writes += 1
+			if (writes === 1) {
+				await first.held
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			title = ((await request.json()) as { title: string }).title
+			return HttpResponse.json({ ...PUBLISHED, title })
+		}),
+	)
+	renderAt('/content/post')
+	await renameTo(await openRename(), 'A Failed Welcome')
+	await waitFor(() => expect(writes).toBe(1))
+	await renameTo(await openRename(), 'A Saved Welcome')
+
+	first.release()
+
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	await screen.findByText('Name updated.', { selector: '.godmin-toast' })
+	const again = await openRename('A Saved Welcome')
+	expect(within(again).getByRole('textbox', { name: 'Name' })).toHaveValue('A Saved Welcome')
+})
+
 test.each([
 	{ refusal: 'a write the server refused with no reason', at: 'patch', status: 500, body: {} },
 	{
