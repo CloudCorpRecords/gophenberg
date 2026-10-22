@@ -120,6 +120,7 @@ test('seeds a hostile post and fits every screen to a phone', async ({ page }) =
 		'/admin/content/post?status=trash',
 		'/admin/content/page',
 		'/admin/content/category',
+		'/admin/content-types',
 		'/admin/users',
 		'/admin/users/new',
 	]
@@ -156,6 +157,33 @@ test('fits the posts table to its card at 1280 beside a long title, the listed f
 	await page.getByRole('button', { name: 'View options' }).click()
 	await expect(page.locator('.dataviews-field-control').getByRole('button', { name: 'Featured' })).toBeVisible()
 	await page.request.delete(`/api/content/${id}?force=true`)
+})
+
+test('fits the content types table to its card at 1280, every row action in one menu', async ({ page }) => {
+	await page.setViewportSize(LAPTOP)
+
+	await page.goto('/admin/content-types')
+	const table = page.locator('.dataviews-view-table')
+	await expect(table.locator('.dataviews-title-field', { hasText: 'Pages' })).toBeVisible()
+
+	const scroll = await table.evaluate((element) => {
+		const scroller = element.closest('.dataviews-layout__container') as HTMLElement
+		return scroller.scrollWidth - scroller.clientWidth
+	})
+	expect(scroll).toBeLessThanOrEqual(0)
+	await expect(table.locator('.dataviews-view-table__actions-column--stuck')).toHaveCount(0)
+	const badges = table.locator('.gophenberg-status')
+	for (const badge of await badges.all()) {
+		const kept = await badge.evaluate((element) => {
+			const cell = element.closest('td') as HTMLElement
+			return {
+				oneLine: getComputedStyle(element).whiteSpace === 'nowrap',
+				insideCell: element.getBoundingClientRect().right <= cell.getBoundingClientRect().right,
+			}
+		})
+		expect(kept).toEqual({ oneLine: true, insideCell: true })
+	}
+	expect(await badges.count()).toBeGreaterThan(0)
 })
 
 for (const { reads, condition, name } of LONG_NAMES) {
