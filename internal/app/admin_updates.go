@@ -86,13 +86,23 @@ func refusedStart(err error) error {
 // finish runs the rest of the update planned on the serve run's context, ending the run once it switched builds.
 func (a *adminUpdates) finish(planned *updater.Planned) {
 	defer a.free()
-	state, err := planned.Apply(a.serving)
-	if err != nil {
+	a.settle(planned.Apply(a.serving))
+}
+
+// settle ends the serve run to start the new build once the switch stands, logging a failure before it otherwise.
+func (a *adminUpdates) settle(state updater.State, err error) {
+	var stands updater.SwitchedError
+	switch {
+	case errors.As(err, &stands):
+		a.logger.Warn("switched builds but a step after failed, so the server stops to start the new one", "to",
+			stands.Release, "error", err)
+		a.restart(restartError{release: stands.Release})
+	case err != nil:
 		a.logger.Warn("the update an administrator started failed", "error", err)
-		return
+	default:
+		a.logger.Info("switched builds, so the server stops to start the new one", "from", state.From, "to", state.To)
+		a.restart(restartError{release: state.To})
 	}
-	a.logger.Info("switched builds, so the server stops to start the new one", "from", state.From, "to", state.To)
-	a.restart(restartError{release: state.To})
 }
 
 // ended waits for the update under way, then returns served with the restart an update that switched asks for.

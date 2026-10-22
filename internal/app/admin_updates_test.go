@@ -85,6 +85,31 @@ func TestAdminUpdatesEndTheServeRunOnlyOnceTheUpdateUnderWayEnded(t *testing.T) 
 	})
 }
 
+func TestAdminUpdatesRestartOnlyOnceTheSwitchStands(t *testing.T) {
+	t.Parallel()
+
+	stands := updater.SwitchedError{Release: "99.0.0", Err: errSettings}
+	for name, tc := range map[string]struct {
+		state   updater.State
+		err     error
+		restart string
+	}{
+		"a switch that ended":                       {state: updater.State{To: "99.0.0"}, restart: "99.0.0"},
+		"a switch that stands though a step failed": {err: stands, restart: "99.0.0"},
+		"a failure before the switch":               {err: errSettings},
+	} {
+		updates := idleUpdates(t)
+
+		updates.settle(tc.state, tc.err)
+
+		var restart restartError
+		asked := errors.As(context.Cause(updates.serving), &restart)
+		if asked != (tc.restart != "") || restart.release != tc.restart {
+			t.Errorf("settle() after %s asked the restart %q (%t), want %q", name, restart.release, asked, tc.restart)
+		}
+	}
+}
+
 func TestAdminUpdatesEndTheServeRunWithTheRestartAnUpdateAsked(t *testing.T) {
 	t.Parallel()
 
