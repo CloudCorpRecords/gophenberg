@@ -239,7 +239,9 @@ Some things work differently after this update:
   10ms unless set. Every other wait tries the lock again on SQLite's
   own schedule, as before. A wait now ends as soon as its command
   stops, such as on Ctrl-C. The release before this one waited out the
-  whole busy timeout.
+  whole busy timeout. Two steps still run to the end, so they can wait
+  up to the busy timeout after Ctrl-C: storing the record of a change
+  an account command applied, and saving what `update:check` found.
 
 Updating from further back also runs the migrations of every release
 you skip, so read each of their notes. Coming from five releases back
