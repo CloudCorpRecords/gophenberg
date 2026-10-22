@@ -11,6 +11,7 @@ import (
 
 	"github.com/gopherium/framework/gonsole/testkit"
 
+	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/internal/updater"
 )
@@ -109,6 +110,9 @@ func TestRefusedStartMarksWhatTheChecksRefusedAndLeavesTheRest(t *testing.T) {
 
 	if err := refusedStart(checked); !errors.Is(err, server.ErrUpdateRefused) || err.Error() != checked.Error() {
 		t.Errorf("refusedStart(%v) = %v, want it marked as refused with the same reason", checked, err)
+	}
+	if held, _ := content.DetailsOf(refusedStart(checked)); held["reason"] != checked.Error() {
+		t.Errorf("refusedStart(%v) holds %v, want the reason the admin is shown", checked, held)
 	}
 	for _, unmarked := range []error{runs, failed} {
 		if err := refusedStart(unmarked); err != unmarked {

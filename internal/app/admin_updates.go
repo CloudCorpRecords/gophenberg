@@ -79,7 +79,8 @@ func refusedStart(err error) error {
 	if !errors.Is(err, updater.ErrRefused) {
 		return err
 	}
-	return content.Refuse(server.ErrUpdateRefused, string(updater.ReasonOf(err)), err.Error(), nil)
+	return content.Refuse(server.ErrUpdateRefused, string(updater.ReasonOf(err)), err.Error(),
+		content.Details{"reason": err.Error()})
 }
 
 // finish runs the rest of the update planned on the serve run's context, ending the run once it switched builds.
