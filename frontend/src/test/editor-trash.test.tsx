@@ -161,13 +161,20 @@ test('offers to trash the post from the document tab', async () => {
 	expect(await screen.findByRole('button', { name: 'Move to trash' })).toBeInTheDocument()
 })
 
-test('draws Move to trash as an outline button of the default size, as WordPress draws its trash button', async () => {
+test('draws Move to trash as the red secondary button of the default size, as WordPress draws it', async () => {
 	renderAt(EDITOR_PATH)
 
 	const trigger = await screen.findByRole('button', { name: 'Move to trash' })
 
-	expect(trigger.className).toMatch(/__is-outline\b/)
-	expect(trigger.className).not.toMatch(/__is-(compact|small)\b/)
+	expect(trigger).toHaveClass(
+		'components-button',
+		'is-secondary',
+		'is-destructive',
+		'is-next-40px-default-size',
+		'gophenberg-editor__trash',
+	)
+	expect(trigger).not.toHaveClass('is-busy')
+	expect(trigger).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 test('places Move to trash 16 pixels under the document panels, as the WordPress sidebar does', async () => {
@@ -288,24 +295,66 @@ test('keeps the post when Enter is pressed with the focus where the confirm put 
 	expect(trashed).toEqual([])
 })
 
-test('shows the trash running on the confirm button and holds both buttons until it settles', async () => {
+/**
+ * Holds the answer to the trash of the post until the returned gate opens.
+ * @returns The gate the answer waits on.
+ */
+function holdTrash(): ReturnType<typeof gate> {
 	const answer = gate()
 	server.use(
 		http.delete(`/api/content/${storedPost.id}`, async () => {
 			await answer.held
+			trashed.push(storedPost.id)
 			return HttpResponse.json({ ...storedPost, status: 'trash' })
 		}),
 	)
+	return answer
+}
+
+test('closes the confirm at once and shows the trash running on Move to trash, as WordPress does', async () => {
+	const answer = holdTrash()
 	renderAt(EDITOR_PATH)
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
+	const trigger = await screen.findByRole('button', { name: 'Move to trash' })
+	await userEvent.click(trigger)
 	const dialog = await screen.findByRole('dialog', { name: QUESTION })
 
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
 
-	const confirm = within(dialog).getByRole('button', { name: 'Move to trash' })
-	await waitFor(() => expect(confirm.className).toMatch(/__is-loading\b/))
-	expect(confirm).toHaveAttribute('aria-disabled', 'true')
-	expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveAttribute('aria-disabled', 'true')
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(trigger).toHaveClass('is-busy')
+	expect(trigger).toHaveAttribute('aria-disabled', 'true')
+	expect(trashed).toEqual([])
+	answer.release()
+	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
+})
+
+test('asks nothing more when Move to trash is pressed while the trash runs', async () => {
+	const answer = holdTrash()
+	renderAt(EDITOR_PATH)
+	const trigger = await screen.findByRole('button', { name: 'Move to trash' })
+	await userEvent.click(trigger)
+	await userEvent.click(within(await screen.findByRole('dialog', { name: QUESTION })).getByRole('button', {
+		name: 'Move to trash',
+	}))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	await userEvent.click(trigger)
+
+	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+	answer.release()
+	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
+	expect(trashed).toEqual([storedPost.id])
+})
+
+test('gives the focus back to Move to trash as the confirm closes for the trash', async () => {
+	const answer = holdTrash()
+	const { trigger, dialog } = await openConfirmLaidOut()
+	await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus())
+
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
+
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(trigger).toHaveFocus()
 	answer.release()
 	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
 })
@@ -551,77 +600,50 @@ test('opens a post trashed from the editor as a reading view', async () => {
 	expect(screen.queryByRole('textbox', { name: 'Title' })).not.toBeInTheDocument()
 })
 
-test('reports a trash the server refused inside the confirm, above its buttons, keeping the confirm open', async () => {
-	server.use(
-		http.delete(`/api/content/${storedPost.id}`, () => HttpResponse.json({}, { status: 500 })),
-	)
+/**
+ * Confirms the trash of the post in the editor, the server answering with the given refusal.
+ * @param body - The body the refusal carries.
+ * @param status - The status the refusal carries.
+ * @returns The Move to trash button.
+ */
+async function trashRefused(body: Record<string, unknown>, status: number): Promise<HTMLElement> {
+	server.use(http.delete(`/api/content/${storedPost.id}`, () => HttpResponse.json(body, { status })))
 	renderAt(EDITOR_PATH)
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
+	const trigger = await screen.findByRole('button', { name: 'Move to trash' })
+	await userEvent.click(trigger)
+	await userEvent.click(within(await screen.findByRole('dialog', { name: QUESTION })).getByRole('button', {
+		name: 'Move to trash',
+	}))
+	return trigger
+}
 
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
+test('reports a trash the server refused in a toast, leaving the editor open and Move to trash ready', async () => {
+	const trigger = await trashRefused({}, 500)
 
-	const dialog = await screen.findByRole('dialog', { name: QUESTION })
-	const notice = await within(dialog).findByRole('alert')
-	expect(notice).toHaveTextContent('The item could not be moved to the trash.')
+	expect(await screen.findByText('The item could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+	expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue(storedPost.title)
+	await waitFor(() => expect(trigger).not.toHaveClass('is-busy'))
+	expect(trigger).not.toHaveAttribute('aria-disabled', 'true')
+})
+
+test('reports the reason a refused trash gave in a toast', async () => {
+	await trashRefused({ error: 'content: item holds children', code: 'content_holds_children' }, 422)
+
 	expect(
-		notice.compareDocumentPosition(within(dialog).getByRole('button', { name: 'Cancel' })) &
-			Node.DOCUMENT_POSITION_FOLLOWING,
-	).toBeTruthy()
-	expect(within(dialog).getByRole('button', { name: 'Move to trash' })).not.toHaveAttribute('aria-disabled', 'true')
-	expect(screen.queryByText('The item could not be moved to the trash.', { selector: '.godmin-toast' }))
-		.not.toBeInTheDocument()
-})
-
-test('opens the trash confirm again without the failure of the last try', async () => {
-	server.use(
-		http.delete(`/api/content/${storedPost.id}`, () => HttpResponse.json({}, { status: 500 })),
-	)
-	renderAt(EDITOR_PATH)
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
-	await within(await screen.findByRole('dialog', { name: QUESTION })).findByRole('alert')
-	await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
-	await userEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
-
-	expect(await screen.findByRole('dialog', { name: QUESTION })).not.toHaveTextContent(
-		'The item could not be moved to the trash.',
-	)
-})
-
-test('reports the reason a refused trash gave inside the confirm', async () => {
-	server.use(
-		http.delete(`/api/content/${storedPost.id}`, () =>
-			HttpResponse.json({ error: 'content: item holds children', code: 'content_holds_children' }, { status: 422 }),
-		),
-	)
-	renderAt(EDITOR_PATH)
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
-
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
-
-	expect(await within(await screen.findByRole('dialog', { name: QUESTION })).findByRole('alert')).toHaveTextContent(
-		'This item still holds items nested inside it. Move or delete those first.',
-	)
-})
-
-test('keeps the confirm open when Cancel is pressed while the trash runs', async () => {
-	const answer = gate()
-	server.use(
-		http.delete(`/api/content/${storedPost.id}`, async () => {
-			await answer.held
-			return HttpResponse.json({ ...storedPost, status: 'trash' })
+		await screen.findByText('This item still holds items nested inside it. Move or delete those first.', {
+			selector: '.godmin-toast',
 		}),
-	)
-	renderAt(EDITOR_PATH)
-	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
-	const dialog = await screen.findByRole('dialog', { name: QUESTION })
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }))
+	).toBeInTheDocument()
+})
 
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+test('asks again from Move to trash once a refused trash settles', async () => {
+	const trigger = await trashRefused({}, 500)
+	await screen.findByText('The item could not be moved to the trash.', { selector: '.godmin-toast' })
 
-	expect(dialog).toBeInTheDocument()
-	answer.release()
-	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
+	await userEvent.click(trigger)
+
+	expect(await screen.findByRole('dialog', { name: QUESTION })).toBeInTheDocument()
 })

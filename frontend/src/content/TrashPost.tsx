@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button } from '@gophenberg/frontend-sdk'
+import { Button } from '@gophenberg/frontend-sdk/editor'
 import { useToaster } from '@gopherium/godmin'
 import { ConfirmDialog } from '@gopherium/godmin/dialogs'
 import { __, sprintf } from '@wordpress/i18n'
@@ -13,34 +13,49 @@ import { trashPost } from './api'
 /**
  * Renders the control moving the post being edited to the trash, and the question it asks first.
  * @param props - The post to trash and the name it is known by.
- * @returns The trash control, and its confirm while it asks.
+ * @returns The trash control, busy while the trash runs, and its confirm while it asks.
  */
 export function TrashPost({ postId, title }: { postId: string, title: string }) {
 	const navigate = useNavigate()
 	const refresh = useRefresh()
 	const toaster = useToaster()
 	const [asking, setAsking] = useState(false)
+	const [trashing, setTrashing] = useState(false)
 	const label = __('Move to trash', 'gophenberg')
 	const named = toaster.name(title === '' ? __('(no title)', 'gophenberg') : title)
-	const confirm = async () => {
-		try {
-			await trashPost(postId)
-		} catch (failure) {
-			return (failure as Error).message
-		}
-		await navigate({ to: '/content/$typeKey' })
-		await refresh([postId])
-		toaster.show(sprintf(__('"%s" moved to the trash.', 'gophenberg'), named))
+	const trash = () => {
+		setTrashing(true)
+		void trashPost(postId).then(
+			async () => {
+				await navigate({ to: '/content/$typeKey' })
+				await refresh([postId])
+				toaster.show(sprintf(__('"%s" moved to the trash.', 'gophenberg'), named))
+			},
+			(failure: Error) => {
+				setTrashing(false)
+				toaster.show(failure.message)
+			},
+		)
 	}
 	return (
 		<>
-			<Button variant="outline" onClick={() => setAsking(true)}>{label}</Button>
+			<Button
+				__next40pxDefaultSize
+				className="gophenberg-editor__trash"
+				isDestructive
+				variant="secondary"
+				isBusy={trashing}
+				aria-disabled={trashing}
+				onClick={trashing ? undefined : () => setAsking(true)}
+			>
+				{label}
+			</Button>
 			{asking ? (
 				<ConfirmDialog
 					size="small"
 					confirmLabel={label}
 					cancelLabel={__('Cancel', 'gophenberg')}
-					onConfirm={confirm}
+					onConfirm={trash}
 					onClose={() => setAsking(false)}
 				>
 					{sprintf(__('Are you sure you want to move "%s" to the trash?', 'gophenberg'), named)}
