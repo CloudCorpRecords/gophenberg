@@ -498,30 +498,62 @@ Import them from the SDK, so the admin keeps one copy of the icon set:
 import { trashIcon } from '@gophenberg/frontend-sdk'
 ```
 
-To confirm an action outside a list, use an `AlertDialog`. The SDK
-passes it on from `@wordpress/ui`. Its `Dialog` is the one from
-`@wordpress/ui` too, except that the popup renders where the selects
-inside it list their options, so a screen reader reaches every
-option. Import both from the SDK. Give an `AlertDialog` a
-short question as its `title`, what happens next as its
-`description`, and the words of its two buttons. Cancel has the
-focus when it opens. `onConfirm` may be async: while it runs, the
-confirm button shows a spinner and both buttons wait. Return
-`{ close: false, error }` to keep the dialog open and show the reason
-under the buttons. Pass `intent="irreversible"` when the action
-cannot be undone, and the confirm button turns red:
+A write that fails never shows inside a dialog. Say why in a toast
+at the bottom of the screen, as WordPress does. `useToaster` from the
+SDK hands you the admin's own toasts:
+
+```ts
+const toaster = useToaster()
+
+toaster.show(failure.message)
+```
+
+To confirm an action outside a list, such as a button in your
+screen's header, use `ConfirmDialog` from
+`@gophenberg/frontend-sdk/dialogs`. It draws the WordPress modal, a
+sheet along the bottom of the screen on a phone, with Cancel
+focused. Leave `title` out on a confirm that removes something, so
+the question is the only text. What `onConfirm` returns decides when
+the dialog goes. For a button, make it a plain function that returns
+nothing. The dialog then closes at once while your write runs, as the
+editor's Move to trash does, and the button that opened it shows the
+work:
 
 ```tsx
-<AlertDialog.Root onConfirm={confirm}>
-	<AlertDialog.Trigger render={<Button variant="outline" />}>{label}</AlertDialog.Trigger>
-	<AlertDialog.Popup
-		title={question}
-		description={consequence}
-		confirmButtonText={label}
-		cancelButtonText={cancel}
-	/>
-</AlertDialog.Root>
+import { Button, useToaster } from '@gophenberg/frontend-sdk'
+import { ConfirmDialog } from '@gophenberg/frontend-sdk/dialogs'
+
+const remove = () => {
+	setRemoving(true)
+	removeItem(item.id)
+		.then(() => toaster.show(done))
+		.catch((failure) => toaster.show(failure.message))
+		.finally(() => setRemoving(false))
+}
+
+<Button variant="outline" loading={removing} onClick={() => setAsking(true)}>{label}</Button>
+{asking ? (
+	<ConfirmDialog confirmLabel={label} cancelLabel={cancel} onConfirm={remove} onClose={() => setAsking(false)}>
+		{question}
+	</ConfirmDialog>
+) : null}
 ```
+
+An `async` function always returns a promise, which keeps the dialog
+open, so leave `onConfirm` plain. Return the write's promise only
+for a confirm on a row of a list you draw yourself, outside DataViews,
+as WordPress does for a row's own menu. The dialog then stays open
+with its button busy until the write ends. Put the `.catch` inside
+and return what it answers, such as
+`() => removeItem(item.id).catch((failure) => toaster.show(failure.message))`.
+
+`FormDialog` from the same entry asks for a form from a button, as
+WordPress opens Add Page: a title, the first field focused, and the
+dialog left open after a failure so the reader keeps what they typed.
+
+The SDK still passes on `AlertDialog` and `Dialog` from
+`@wordpress/ui`. They float as a card on a phone, where WordPress
+draws a sheet, so prefer the two dialogs above.
 
 A confirm on a list row is different: WordPress draws it inside the
 list's own modal. A confirm that removes something, such as Move to
@@ -537,11 +569,21 @@ Cancel inert while the run goes and closes once it settles.
 
 Import `RunConfirm` from `@gophenberg/frontend-sdk`, beside
 `useListRun` and `useBulkRun`, the hooks the admin's own lists run
-their actions with. `useListRun` holds the failure notice, the ticked
-rows and the focus after a run, and `useBulkRun` makes one call per
-picked row, refreshes your list and shows one toast in the words you
-pass as `BulkWords`. Taking them from the SDK keeps your plugin on the
-admin's own copy.
+their actions with. `useListRun` holds the ticked rows and the focus
+after a run, and `useBulkRun` makes one call per picked row,
+refreshes your list and shows one toast in the words you pass as
+`BulkWords`: the failure words when a row failed, else the done
+words.
+
+For a row action that asks for more, the SDK passes on the bodies
+the admin draws in a row modal. `ConfirmBody` asks a question you
+run yourself. `RenameBody` asks for a new name. Give its button the
+label **Save**, as WordPress does, close the modal the moment the
+reader saves, then write. `FormBody` holds any fields, with `kind`
+set to `edit`, `copy` or `create` to space its buttons as WordPress
+does. A copy, or a change to several rows, keeps the modal open with
+`busy` until the write ends. Taking all of these from the SDK keeps
+your plugin on the admin's own copy.
 
 ## Versions
 
