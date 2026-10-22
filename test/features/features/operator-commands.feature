@@ -85,11 +85,32 @@ Feature: Operators run Gophenberg from one command line
     And the error says "<error>"
 
     Examples:
-      | case                                | change                                  | error                                     |
-      | a key list no trusted root signed   | only a stranger signed the key list     | no trusted root signed it                 |
-      | an index no listed key signed       | only a stranger signed the index        | no release or standby key the list names  |
-      | an index that expired               | the index expired yesterday             | which expired                             |
-      | an index for another channel        | the index names the channel "beta"      | the site asks for                         |
+      | case                                          | change                                                   | error                                                                          |
+      | a key list no trusted root signed             | only a stranger signed the key list                      | no trusted root signed it                                                      |
+      | an index no listed key signed                 | only a stranger signed the index                         | no release or standby key the list names                                       |
+      | an index that expired                         | the index expired yesterday                              | which expired                                                                  |
+      | an index for another channel                  | the index names the channel "beta"                       | the site asks for                                                              |
+      | a key list with no timestamp key              | the key list names no timestamp key                      | which names no timestamp key                                                   |
+      | a key list naming one key under two roles     | the key list names the release key as its timestamp key  | names one key as its release key and its timestamp key                         |
+      | a timestamp file that expired                 | the timestamp file expired yesterday                     | refused the timestamp file, which expired at                                   |
+      | a missing timestamp file                      | the update site serves no timestamp file                 | timestamp.json: the site answered 404                                          |
+      | a timestamp file naming a newer index         | the timestamp file names a newer index                   | refused the index of serial 2, older than serial 3 the timestamp file names    |
+      | a timestamp file naming a newer key list      | the timestamp file names a newer key list                | refused the key list of serial 1, older than serial 2 the timestamp file names |
+      | a timestamp file the release key signed       | only the release key signed the timestamp file           | no timestamp key the list names signed it                                      |
+      | an index the timestamp key signed             | only the timestamp key signed the index                  | no release or standby key the list names                                       |
+      | a timestamp file with no line for the channel | the timestamp file names no index of the channel         | which names no index of channel                                                |
+
+  Scenario Outline: A check takes <case>
+    Given an update site whose stable index offers version "99.0.0"
+    And <change>
+    When the operator runs "update:check -json"
+    Then the command succeeds
+    And the answer offers version "99.0.0"
+
+    Examples:
+      | case                                                          | change                                                  |
+      | an index older than 30 days that a fresh timestamp file names | the index was signed 40 days ago and expires in 50 days |
+      | an index newer than the one the timestamp file names          | the timestamp file names an older index                 |
 
   Scenario: A check refuses an index older than the one it took before
     Given an update site whose stable index offers version "99.0.0"
