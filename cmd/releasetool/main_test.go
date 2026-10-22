@@ -49,6 +49,16 @@ func TestRunPrintsTheUsageWithoutACommand(t *testing.T) {
 	}
 }
 
+func TestUsageNamesEveryCommand(t *testing.T) {
+	t.Parallel()
+
+	for name := range commands {
+		if !strings.Contains(usage, "\n  releasetool "+name+" ") {
+			t.Errorf("the usage has no line for the command %s", name)
+		}
+	}
+}
+
 func TestMainBinaryMakesAKeySignsAndVerifies(t *testing.T) {
 	t.Parallel()
 

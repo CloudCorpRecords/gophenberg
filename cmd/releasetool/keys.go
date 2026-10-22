@@ -14,7 +14,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -31,17 +30,13 @@ var listedRoles = []update.Role{update.RoleRelease, update.RoleStandby, update.R
 // keys writes a key list naming the release key, the standby and the timestamp key, for a root to sign.
 func keys(args []string, stdout, stderr io.Writer) error {
 	flags := newFlagSet("keys", stderr)
-	named := map[update.Role]*string{
-		update.RoleRelease:   flags.String("release", "", "the Multikey of the release key"),
-		update.RoleStandby:   flags.String("standby", "", "the Multikey of the standby"),
-		update.RoleTimestamp: flags.String("timestamp", "", "the Multikey of the timestamp key"),
-	}
+	named := keyFlags(flags)
 	serial := flags.Int64("serial", 0, "the serial, the Unix time of the run when left out")
 	valid := flags.Duration("valid", keyListValidity, "how long the key list stays valid")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
-	if slices.ContainsFunc(listedRoles, func(role update.Role) bool { return *named[role] == "" }) {
+	if missingKey(named) {
 		return usageError{"keys needs -release, -standby and -timestamp, the Multikeys of the release key, the standby " +
 			"and the timestamp key"}
 	}
