@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command releasetool makes release keys, signs release files, checks their signatures, lists them in
-// SHA256SUMS and the release record, and writes the key list and the channel index of the update site.
+// Command releasetool makes release keys, signs and checks release files, lists them in SHA256SUMS and the
+// release record, and writes the key list, the channel indexes and the timestamp file of the update site.
 package main
 
 import (
@@ -22,11 +22,14 @@ const usage = `usage:
   releasetool verify -public <file|multikey> <file>...
   releasetool sums   <file>...
   releasetool record -version <version> -download-url <https address> <archive>...
-  releasetool keys   -release <multikey> -standby <multikey> [-serial <n>] [-valid <duration>]
+  releasetool keys   -release <multikey> -standby <multikey> -timestamp <multikey> [-serial <n>] [-valid <duration>]
   releasetool sign-keys -key <root file> [-passphrase-file <file>] <keys.json>
-  releasetool index  [-channel <name>] [-previous <file>] -record <file> -release-json <file> [-valid <duration>]
-                     [-keep <n>]
-  releasetool index  [-channel <name>] -previous <file> -withdraw <version> [-valid <duration>] [-keep <n>]
+  releasetool index  -site <clone> -release <multikey> -standby <multikey> -timestamp <multikey> [-root <multikey>]...
+                     [-channel <name>] -record <file> -release-json <file> -valid <duration> [-keep <n>]
+  releasetool index  -site <clone> -release <multikey> -standby <multikey> -timestamp <multikey> [-root <multikey>]...
+                     [-channel <name>] -withdraw <version> -valid <duration> [-keep <n>]
+  releasetool timestamp -site <clone> -release <multikey> -standby <multikey> -timestamp <multikey> -valid <duration>
+                     [-newest <channel>=<version>]... [-root <multikey>]...
 `
 
 // command runs one releasetool command over its arguments.
@@ -42,6 +45,7 @@ var commands = map[string]command{
 	"keys":      keys,
 	"sign-keys": signKeys,
 	"index":     index,
+	"timestamp": timestamp,
 }
 
 // errFlags reports flags the flag package refused and has already described.

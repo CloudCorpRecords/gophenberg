@@ -24,14 +24,15 @@ import (
 
 // updateSite is a loopback update site whose key list, index and archives one test signs with keys it made.
 type updateSite struct {
-	t        *testing.T
-	root     *ecdsa.PrivateKey
-	release  ed25519.PrivateKey
-	stranger ed25519.PrivateKey
-	address  string
-	mu       sync.Mutex
-	files    map[string][]byte
-	served   func(path string)
+	t         *testing.T
+	root      *ecdsa.PrivateKey
+	release   ed25519.PrivateKey
+	timestamp ed25519.PrivateKey
+	stranger  ed25519.PrivateKey
+	address   string
+	mu        sync.Mutex
+	files     map[string][]byte
+	served    func(path string)
 }
 
 // newUpdateSite starts an update site on loopback whose key list the root signed, closed when t ends.
@@ -42,8 +43,8 @@ func newUpdateSite(t *testing.T) *updateSite {
 		t.Fatalf("making the root key: %v", err)
 	}
 	site := &updateSite{
-		t: t, root: root, release: newSigner(t), stranger: newSigner(t), files: map[string][]byte{},
-		served: func(string) {},
+		t: t, root: root, release: newSigner(t), timestamp: newSigner(t), stranger: newSigner(t),
+		files: map[string][]byte{}, served: func(string) {},
 	}
 	server := httptest.NewServer(http.HandlerFunc(site.serve))
 	t.Cleanup(server.Close)
@@ -91,16 +92,25 @@ func marshalled(t *testing.T, v any) []byte {
 	return body
 }
 
-// publishKeyList serves a key list naming the release key, signed by the root.
+// multikey returns the Multikey of key, failing the test when it cannot.
+func (s *updateSite) multikey(key ed25519.PrivateKey) string {
+	s.t.Helper()
+	text, err := signature.Multikey(key.Public())
+	if err != nil {
+		s.t.Fatalf("writing a Multikey: %v", err)
+	}
+	return text
+}
+
+// publishKeyList serves a key list naming the release key and the timestamp key, signed by the root.
 func (s *updateSite) publishKeyList() {
 	s.t.Helper()
-	release, err := signature.Multikey(s.release.Public())
-	if err != nil {
-		s.t.Fatalf("writing the Multikey of the release key: %v", err)
-	}
 	body := marshalled(s.t, update.KeyList{
 		Schema: 1, Serial: 1, Expires: time.Now().AddDate(1, 0, 0).UTC().Truncate(time.Second),
-		Keys: []update.ListedKey{{Role: update.RoleRelease, Multikey: release}},
+		Keys: []update.ListedKey{
+			{Role: update.RoleRelease, Multikey: s.multikey(s.release)},
+			{Role: update.RoleTimestamp, Multikey: s.multikey(s.timestamp)},
+		},
 	})
 	line, err := update.SignKeyList(body, s.root)
 	if err != nil {
@@ -108,9 +118,10 @@ func (s *updateSite) publishKeyList() {
 	}
 	s.put(update.KeyListPath, body)
 	s.put(update.KeyListPath+update.SignatureSuffix, []byte(line+"\n"))
+	s.publishTimestamp()
 }
 
-// publish serves the stable index offering offers, signed by key.
+// publish serves the stable index offering offers, signed by key, then a fresh timestamp file naming it.
 func (s *updateSite) publish(key ed25519.PrivateKey, offers ...update.Offer) {
 	s.t.Helper()
 	body := marshalled(s.t, update.Index{
@@ -119,6 +130,18 @@ func (s *updateSite) publish(key ed25519.PrivateKey, offers ...update.Offer) {
 	})
 	s.put(update.IndexPath("stable"), body)
 	s.put(update.IndexPath("stable")+update.SignatureSuffix, []byte(update.SignIndex(body, key)+"\n"))
+	s.publishTimestamp()
+}
+
+// publishTimestamp serves a timestamp file valid for seven days naming the files served, signed by the timestamp key.
+func (s *updateSite) publishTimestamp() {
+	s.t.Helper()
+	body := marshalled(s.t, update.Timestamp{
+		Schema: 1, Expires: time.Now().AddDate(0, 0, 7).UTC().Truncate(time.Second), Keys: 1,
+		Indexes: map[string]int64{"stable": 1},
+	})
+	s.put(update.TimestampPath, body)
+	s.put(update.TimestampPath+update.SignatureSuffix, []byte(update.SignIndex(body, s.timestamp)+"\n"))
 }
 
 // archive serves body as the archive of 0.21.0 for this platform and returns its record entry, signed by key.

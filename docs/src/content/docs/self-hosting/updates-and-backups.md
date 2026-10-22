@@ -470,13 +470,19 @@ built theme keeps working.
 ## How a site hears of a new version
 
 Twice a day, on the next visit or when the host's cron calls the cron
-address, a site asks `https://updates.gophenberg.org` for two files:
-the list of the Gophenberg release keys, which the two root keys
-built into the binary sign, and the index of the stable channel,
-which a release key signs. It checks both signatures, refuses a file
-that expired or that is older than the last one it took, and keeps
-what it found for the admin. A check installs nothing. On a server
-install, `update:apply` installs the update when you run it, see
+address, a site asks `https://updates.gophenberg.org` for three files,
+each with its signature:
+
+- **The key list**, the list of the Gophenberg keys, which the two
+  root keys built into the binary sign.
+- **The timestamp file**, which the timestamp key signs every day.
+- **The index** of the stable channel, the versions on offer, which a
+  release key signs.
+
+It checks every signature, refuses a file that expired or that is
+older than the last one it took, and keeps what it found for the
+admin. A check installs nothing. On a server install, `update:apply`
+installs the update when you run it, see
 [updating a server install](#updating-a-server-install). Everywhere
 else, such as in the Docker image, you update by hand as
 [updating](#updating) shows.
@@ -490,10 +496,52 @@ to check now. A site with no internet access sets
 `GOPHENBERG_UPDATE_CHECKS` to `false`, which stops the checks it
 makes on its own.
 
+### Why a check fetches a timestamp file
+
+An old index is how an attacker could hide a security fix from your
+site. If they keep serving last month's index, honestly signed, the
+site never hears of the fix. A signature cannot catch that. Only a
+date can.
+
+So a key that signs nothing else, the timestamp key, signs a short
+timestamp file every day. The file names the newest key list and the
+newest index of each channel by their serial numbers. It expires 7
+days after it was signed. While it has not expired, it is fresh.
+
+A site takes the key list and the index only when the timestamp file
+is fresh and neither file is older than the one it names. A newer
+file passes, so a new release reaches your site at once, before the
+next timestamp file names it. A site refuses a timestamp file that is
+missing, that expired, that another key signed, or that names no
+index of the site's channel. A site never takes an index or an
+archive the timestamp key signed.
+
+The index keeps its own expiry as well, 90 days after it was signed.
+A fresh timestamp file never carries an index past that date.
+
+### Keep the site's clock right
+
+These dates work only when the site's clock is right to within a few
+days. A clock more than about 6 days fast refuses every timestamp
+file. When a check refuses a file that expired, the error names the
+expiry and the time the site's clock reads, so you can spot a wrong
+clock. Most hosts keep the clock right with NTP.
+
+### Your own copy of the update site
+
 To try a release before it reaches every site, point
 `GOPHENBERG_UPDATE_URL` at your own copy of the update site, and list
 the root keys that sign its key list in `GOPHENBERG_TRUSTED_KEYS`.
 See [configuration](/self-hosting/configuration/).
+
+Your copy needs what the official site holds. Its key list must name
+a timestamp key beside the release key, a different key for each.
+It must also serve a fresh timestamp file at `v1/timestamp.json`,
+signed by that timestamp key. Make it with `releasetool timestamp`,
+the release tool in the Gophenberg source, and make a new one before
+the last one expires. The official update site makes a new one every
+day, and each lasts 7 days. Once the last one expires, every site
+that follows your copy refuses its checks.
 
 ## Updating a server install
 

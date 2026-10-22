@@ -48,6 +48,7 @@ Feature: Operators update the core from the command line
       | an index no listed key signed     | only a stranger signed the index          | refused the index, no release or standby key the list names signed it       |
       | an archive whose checksum differs | the archive changed after it was released | the one the release record names                                            |
       | an archive no listed key signed   | only a stranger signed the archive        | refused the archive, no release or standby key the key list names signed it |
+      | an expired timestamp file         | the timestamp file expired yesterday      | refused the timestamp file, which expired at                                |
 
   Scenario Outline: A version that failed is never picked again on its own
     Given an install root running this version as an official build

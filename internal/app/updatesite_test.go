@@ -25,18 +25,24 @@ import (
 	"github.com/gopherium/gophenberg/internal/update"
 )
 
-// updateSite is a loopback update site whose key list, stable index and archive the test signs with keys it made.
+// bothRoots names the two roots the site's settings trust.
+var bothRoots = []string{"the first root", "the second root"}
+
+// updateSite is a loopback update site whose key list, index, timestamp file and archive the test signs with its keys.
 type updateSite struct {
-	t        *testing.T
-	roots    map[string]*ecdsa.PrivateKey
-	release  ed25519.PrivateKey
-	stranger ed25519.PrivateKey
-	offered  string
-	minimum  string
-	archive  update.Artifact
-	mu       sync.Mutex
-	files    map[string][]byte
-	address  string
+	t           *testing.T
+	roots       map[string]*ecdsa.PrivateKey
+	release     ed25519.PrivateKey
+	timestamp   ed25519.PrivateKey
+	stranger    ed25519.PrivateKey
+	offered     string
+	minimum     string
+	archive     update.Artifact
+	listSerial  int64
+	indexSerial int64
+	mu          sync.Mutex
+	files       map[string][]byte
+	address     string
 }
 
 // newUpdateSite starts an update site on loopback, closed when t ends, offering nothing yet.
@@ -51,6 +57,7 @@ func newUpdateSite(t *testing.T) *updateSite {
 		site.roots[name] = key
 	}
 	site.release = newEd25519(t)
+	site.timestamp = newEd25519(t)
 	site.stranger = newEd25519(t)
 	server := httptest.NewServer(http.HandlerFunc(site.serve))
 	t.Cleanup(server.Close)
@@ -58,13 +65,13 @@ func newUpdateSite(t *testing.T) *updateSite {
 	return site
 }
 
-// newOfferingSite starts an update site whose key list both roots signed and whose index offers offered under minimum.
+// newOfferingSite starts an update site offering offered under minimum, its key list signed by both roots.
 func newOfferingSite(t *testing.T, offered, minimum string) *updateSite {
 	t.Helper()
 	site := newUpdateSite(t)
 	site.offered, site.minimum = offered, minimum
 	site.publishArchive(site.release)
-	site.publishKeyList("the first root", "the second root")
+	site.publishKeyList(unchanged, bothRoots...)
 	site.publishIndex(site.release, unchanged)
 	return site
 }
@@ -144,6 +151,13 @@ func (s *updateSite) put(path string, body []byte) {
 	s.files[path] = body
 }
 
+// drop serves nothing at path.
+func (s *updateSite) drop(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.files, path)
+}
+
 // trustedRoots returns the Multikeys of the two roots the site's settings trust.
 func (s *updateSite) trustedRoots() string {
 	return s.multikey(&s.roots["the first root"].PublicKey) + "," + s.multikey(&s.roots["the second root"].PublicKey)
@@ -159,13 +173,19 @@ func (s *updateSite) multikey(key any) string {
 	return text
 }
 
-// publishKeyList serves a key list naming the release key, signed by each root signers names.
-func (s *updateSite) publishKeyList(signers ...string) {
+// publishKeyList serves the key list changed by edit, signed by each root signers names, then a fresh timestamp file.
+func (s *updateSite) publishKeyList(edit func(*update.KeyList), signers ...string) {
 	s.t.Helper()
-	body := s.marshal(update.KeyList{
+	list := update.KeyList{
 		Schema: 1, Serial: 1, Expires: time.Now().AddDate(1, 0, 0).UTC().Truncate(time.Second),
-		Keys: []update.ListedKey{{Role: update.RoleRelease, Multikey: s.multikey(s.release.Public())}},
-	})
+		Keys: []update.ListedKey{
+			{Role: update.RoleRelease, Multikey: s.multikey(s.release.Public())},
+			{Role: update.RoleTimestamp, Multikey: s.multikey(s.timestamp.Public())},
+		},
+	}
+	edit(&list)
+	s.listSerial = list.Serial
+	body := s.marshal(list)
 	lines := make([]string, 0, len(signers))
 	for _, name := range signers {
 		line, err := update.SignKeyList(body, s.roots[name])
@@ -176,9 +196,10 @@ func (s *updateSite) publishKeyList(signers ...string) {
 	}
 	s.put(update.KeyListPath, body)
 	s.put(update.KeyListPath+update.SignatureSuffix, []byte(strings.Join(lines, "\n")+"\n"))
+	s.publishTimestamp(s.timestamp, unchanged)
 }
 
-// publishIndex serves the index changed by edit, signed by key.
+// publishIndex serves the index changed by edit, signed by key, then a fresh timestamp file naming it.
 func (s *updateSite) publishIndex(key ed25519.PrivateKey, edit func(*update.Index)) {
 	s.t.Helper()
 	index := update.Index{
@@ -192,9 +213,24 @@ func (s *updateSite) publishIndex(key ed25519.PrivateKey, edit func(*update.Inde
 		}},
 	}
 	edit(&index)
+	s.indexSerial = index.Serial
 	body := s.marshal(index)
 	s.put(update.IndexPath("stable"), body)
 	s.put(update.IndexPath("stable")+update.SignatureSuffix, []byte(update.SignIndex(body, key)+"\n"))
+	s.publishTimestamp(s.timestamp, unchanged)
+}
+
+// publishTimestamp serves a seven day timestamp file naming the files served, changed by edit and signed by key.
+func (s *updateSite) publishTimestamp(key ed25519.PrivateKey, edit func(*update.Timestamp)) {
+	s.t.Helper()
+	stamp := update.Timestamp{
+		Schema: 1, Expires: time.Now().AddDate(0, 0, 7).UTC().Truncate(time.Second), Keys: s.listSerial,
+		Indexes: map[string]int64{"stable": s.indexSerial},
+	}
+	edit(&stamp)
+	body := s.marshal(stamp)
+	s.put(update.TimestampPath, body)
+	s.put(update.TimestampPath+update.SignatureSuffix, []byte(update.SignIndex(body, key)+"\n"))
 }
 
 // marshal returns v as JSON, failing the test when it cannot.
@@ -207,5 +243,5 @@ func (s *updateSite) marshal(v any) []byte {
 	return body
 }
 
-// unchanged leaves an index as it is.
-func unchanged(*update.Index) {}
+// unchanged leaves a file of the update site as it is.
+func unchanged[T any](*T) {}

@@ -20,10 +20,10 @@ import (
 // now is the moment every test reads the files at.
 var now = time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
 
-// keys holds the keys one test signs with: two roots, a stranger root, a release key, a standby and a stranger.
+// keys holds the keys one test signs with: three roots, one a stranger, and four Ed25519 keys, one a stranger.
 type keys struct {
-	root1, root2, strangerRoot *ecdsa.PrivateKey
-	release, standby, stranger ed25519.PrivateKey
+	root1, root2, strangerRoot            *ecdsa.PrivateKey
+	release, standby, timestamp, stranger ed25519.PrivateKey
 }
 
 // newKeys returns fresh keys for one test.
@@ -31,7 +31,7 @@ func newKeys(t *testing.T) keys {
 	t.Helper()
 	return keys{
 		root1: newRoot(t), root2: newRoot(t), strangerRoot: newRoot(t),
-		release: newSigner(t), standby: newSigner(t), stranger: newSigner(t),
+		release: newSigner(t), standby: newSigner(t), timestamp: newSigner(t), stranger: newSigner(t),
 	}
 }
 
@@ -70,7 +70,7 @@ func (k keys) trusted() []*ecdsa.PublicKey {
 	return []*ecdsa.PublicKey{&k.root1.PublicKey, &k.root2.PublicKey}
 }
 
-// keyList returns a key list naming the release key and the standby, valid for a year from now.
+// keyList returns a key list naming the release key, the standby and the timestamp key, valid for a year from now.
 func (k keys) keyList(t *testing.T) update.KeyList {
 	t.Helper()
 	return update.KeyList{
@@ -78,6 +78,7 @@ func (k keys) keyList(t *testing.T) update.KeyList {
 		Keys: []update.ListedKey{
 			{Role: update.RoleRelease, Multikey: multikey(t, k.release.Public())},
 			{Role: update.RoleStandby, Multikey: multikey(t, k.standby.Public())},
+			{Role: update.RoleTimestamp, Multikey: multikey(t, k.timestamp.Public())},
 		},
 	}
 }
@@ -129,10 +130,22 @@ func signIndex(body []byte, key ed25519.PrivateKey) []byte {
 	return []byte(update.SignIndex(body, key) + "\n")
 }
 
-// wantRefused fails t unless err is a refusal carrying text.
+// timestamp returns a timestamp file valid for seven days from now, naming the key list 5 and the stable index 9.
+func timestamp() update.Timestamp {
+	return update.Timestamp{Schema: 1, Expires: now.AddDate(0, 0, 7), Keys: 5, Indexes: map[string]int64{"stable": 9}}
+}
+
+// signedTimestamp returns stamp as JSON and its signature file under key.
+func signedTimestamp(t *testing.T, stamp update.Timestamp, key ed25519.PrivateKey) ([]byte, []byte) {
+	t.Helper()
+	body := marshal(t, stamp)
+	return body, signIndex(body, key)
+}
+
+// wantRefused fails t unless err refuses with text.
 func wantRefused(t *testing.T, err error, text string) {
 	t.Helper()
 	if err == nil || !strings.Contains(err.Error(), text) {
-		t.Errorf("error = %v, want a refusal saying %q", err, text)
+		t.Errorf("error = %v, want it refused saying %q", err, text)
 	}
 }

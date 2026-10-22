@@ -31,7 +31,7 @@ type Chosen struct {
 	Signers []ed25519.PublicKey
 }
 
-// Choose verifies the key list and the index again, keeps their serials, then returns the offer named or the newest.
+// Choose verifies the key list, timestamp file and index again, keeps their serials, returns the offer named or newest.
 func Choose(ctx context.Context, cfg Config, store Settings, named string) (Chosen, error) {
 	defer cfg.Client.CloseIdleConnections()
 	cfg, taken, err := prepared(ctx, cfg, store)

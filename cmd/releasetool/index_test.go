@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -44,37 +45,28 @@ func versionsOf(index update.Index) []string {
 	return versions
 }
 
-// previousIndex writes an index of serial offering the versions in order to dir, and returns its path.
-func previousIndex(t *testing.T, dir string, serial int64, versions ...string) string {
+// siteWithStable writes a clone whose stable index of serial offers the versions in order, signed by the release key.
+func siteWithStable(t *testing.T, serial int64, versions ...string) *testSite {
 	t.Helper()
-	index := update.Index{Schema: 1, Channel: "stable", Serial: serial, Expires: time.Now().AddDate(0, 0, 3)}
-	for _, version := range versions {
-		index.Offers = append(index.Offers, update.Offer{
-			Rollout: 100, MinimumVersion: version, PostgreSQL: 15, Kits: []string{"0.9.0"},
-			Notes: "https://example.com/releases/v" + version, Release: json.RawMessage(fmt.Sprintf(`{"version":%q}`, version)),
-		})
-	}
-	body, err := json.Marshal(index)
-	if err != nil {
-		t.Fatalf("writing the previous index: %v", err)
-	}
-	return writeFile(t, dir, "previous.json", string(body))
+	site := newTestSite(t)
+	site.putIndex("stable", indexOf("stable", serial, versions...), site.release)
+	return site
 }
 
 func TestIndexStartsAChannelWithItsFirstRelease(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	record, facts := releaseFilesOf(t, dir, "0.20.0", "0.19.0")
+	site := newTestSite(t)
+	record, facts := releaseFilesOf(t, t.TempDir(), "0.20.0", "0.19.0")
 	before := time.Now()
 
-	index := readIndexOf(t, runTool("index", "-record", record, "-release-json", facts))
+	index := readIndexOf(t, site.run("index", "-record", record, "-release-json", facts, "-valid", "2160h"))
 
 	if index.Schema != 1 || index.Channel != "stable" || index.Serial < before.Unix() || index.Serial > time.Now().Unix() {
 		t.Errorf("index wrote %+v, want schema 1, channel stable and the Unix time of the run as its serial", index)
 	}
-	if index.Expires.Before(before.Add(720 * time.Hour).Truncate(time.Second)) {
-		t.Errorf("index expires at %v, want 720 hours after the run", index.Expires)
+	if index.Expires.Before(before.Add(2160 * time.Hour).Truncate(time.Second)) {
+		t.Errorf("index expires at %v, want 2160 hours after the run", index.Expires)
 	}
 	if len(index.Offers) != 1 {
 		t.Fatalf("index offers %d versions, want one", len(index.Offers))
@@ -95,11 +87,10 @@ func TestIndexPutsEachReleaseInOrderAfterTheNewest(t *testing.T) {
 		"0.20.1": {"0.21.0", "0.20.1", "0.20.0"},
 		"0.21.0": {"0.21.0", "0.20.0"},
 	} {
-		dir := t.TempDir()
-		previous := previousIndex(t, dir, 7, "0.21.0", "0.20.0")
-		record, facts := releaseFilesOf(t, dir, added, added)
+		site := siteWithStable(t, 7, "0.21.0", "0.20.0")
+		record, facts := releaseFilesOf(t, t.TempDir(), added, added)
 
-		index := readIndexOf(t, runTool("index", "-previous", previous, "-record", record, "-release-json", facts))
+		index := readIndexOf(t, site.run("index", "-record", record, "-release-json", facts, "-valid", "2160h"))
 
 		if !slices.Equal(versionsOf(index), want) {
 			t.Errorf("index adding %s offers %v, want %v", added, versionsOf(index), want)
@@ -110,11 +101,10 @@ func TestIndexPutsEachReleaseInOrderAfterTheNewest(t *testing.T) {
 func TestIndexRaisesTheSerialPastThePreviousOne(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
 	future := time.Now().AddDate(10, 0, 0).Unix()
-	previous := previousIndex(t, dir, future, "0.20.0")
+	site := siteWithStable(t, future, "0.20.0")
 
-	index := readIndexOf(t, runTool("index", "-previous", previous, "-withdraw", "0.20.0"))
+	index := readIndexOf(t, site.run("index", "-withdraw", "0.20.0", "-valid", "2160h"))
 
 	if index.Serial != future+1 {
 		t.Errorf("index wrote serial %d after %d, want the next one", index.Serial, future)
@@ -124,10 +114,9 @@ func TestIndexRaisesTheSerialPastThePreviousOne(t *testing.T) {
 func TestIndexWithdrawsAVersionAndKeepsTheOthers(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	previous := previousIndex(t, dir, 7, "0.21.0", "0.20.0")
+	site := siteWithStable(t, 7, "0.21.0", "0.20.0")
 
-	index := readIndexOf(t, runTool("index", "-previous", previous, "-withdraw", "0.21.0", "-valid", "48h"))
+	index := readIndexOf(t, site.run("index", "-withdraw", "0.21.0", "-valid", "48h"))
 
 	if !slices.Equal(versionsOf(index), []string{"0.21.0", "0.20.0"}) || !index.Offers[0].Withdrawn ||
 		index.Offers[1].Withdrawn {
@@ -138,6 +127,58 @@ func TestIndexWithdrawsAVersionAndKeepsTheOthers(t *testing.T) {
 	}
 }
 
+func TestIndexTakesAnExpiredPreviousIndex(t *testing.T) {
+	t.Parallel()
+
+	site := newTestSite(t)
+	expired := indexOf("stable", 7, "0.20.0")
+	expired.Expires = time.Now().AddDate(-1, 0, 0)
+	site.putIndex("stable", expired, site.standby)
+	record, facts := releaseFilesOf(t, t.TempDir(), "0.21.0", "0.21.0")
+
+	index := readIndexOf(t, site.run("index", "-record", record, "-release-json", facts, "-valid", "2160h"))
+
+	if !slices.Equal(versionsOf(index), []string{"0.21.0", "0.20.0"}) || !index.Expires.After(time.Now()) {
+		t.Errorf("index after an expired index offers %v until %v, want 0.21.0 and 0.20.0 and a new expiry",
+			versionsOf(index), index.Expires)
+	}
+}
+
+func TestIndexRefusesAPreviousIndexNoKeyOfTheListSigned(t *testing.T) {
+	t.Parallel()
+
+	for name, signer := range map[string]func(site *testSite) ed25519.PrivateKey{
+		"a key the list does not name": func(*testSite) ed25519.PrivateKey { return newTestEd25519(t) },
+		"the timestamp key":            func(site *testSite) ed25519.PrivateKey { return site.timestamp },
+	} {
+		site := newTestSite(t)
+		site.putIndex("stable", indexOf("stable", 7, "0.20.0"), signer(site))
+
+		got := site.run("index", "-withdraw", "0.20.0", "-valid", "2160h")
+
+		if got.code != 1 || got.stdout != "" || !strings.Contains(got.stderr, "no release or standby key the list names") {
+			t.Errorf("index over a previous index signed by %s = %d, %q, %q, want 1 and nothing written", name,
+				got.code, got.stdout, got.stderr)
+		}
+	}
+}
+
+func TestIndexRefusesAKeyListNamingOtherKeys(t *testing.T) {
+	t.Parallel()
+
+	site := siteWithStable(t, 7, "0.20.0")
+	list := site.keyList()
+	list.Keys[1].Multikey = signerMultikey(t)
+	site.putKeyList(list, site.root)
+
+	got := site.run("index", "-withdraw", "0.20.0", "-valid", "2160h")
+
+	if got.code != 1 || got.stdout != "" || !strings.Contains(got.stderr, "does not name exactly the keys") {
+		t.Errorf("index over a key list naming another standby = %d, %q, %q, want 1 and nothing written", got.code,
+			got.stdout, got.stderr)
+	}
+}
+
 func TestIndexRefusesWhatItCannotWrite(t *testing.T) {
 	t.Parallel()
 
@@ -145,38 +186,55 @@ func TestIndexRefusesWhatItCannotWrite(t *testing.T) {
 	record, facts := releaseFilesOf(t, dir, "0.21.0", "0.21.0")
 	otherRecord, _ := releaseFilesOf(t, dir, "0.22.0", "0.22.0")
 	badRecord, badMinimum := releaseFilesOf(t, dir, "0.23.0", "0.23")
-	previous := previousIndex(t, dir, 7, "0.20.0")
 	notJSON := writeFile(t, dir, "not.json", "index")
-	beta := writeFile(t, dir, "beta.json", `{"schema":1,"channel":"beta","serial":1,"offers":[]}`)
 	missing := filepath.Join(dir, "missing.json")
+	site := siteWithStable(t, 7, "0.20.0")
+	site.putIndex("candidate", indexOf("beta", 1), site.release)
+	site.put(update.IndexPath("broken"), []byte("index"), update.SignIndex([]byte("index"), site.release))
+	site.putIndex("unsigned", indexOf("unsigned", 1), site.release)
+	removeFile(t, site.path(update.IndexPath("unsigned")+".sig"))
+	args := func(more ...string) []string { return slices.Concat(site.flags(), []string{"-valid", "2160h"}, more) }
+	adding := []string{"-record", record, "-release-json", facts}
 	for _, tc := range []struct {
 		name string
 		code int
 		args []string
+		text string
 	}{
-		{"nothing to add or withdraw", 2, []string{"-previous", previous}},
-		{"both an addition and a withdrawal", 2, []string{"-previous", previous, "-withdraw", "0.20.0",
-			"-record", record, "-release-json", facts}},
-		{"a record without its release.json", 2, []string{"-record", record}},
-		{"a withdrawal with no index", 2, []string{"-withdraw", "0.20.0"}},
-		{"a validity of zero", 2, []string{"-record", record, "-release-json", facts, "-valid", "0s"}},
-		{"no offer to keep", 2, []string{"-record", record, "-release-json", facts, "-keep", "0"}},
-		{"an argument it does not take", 2, []string{"-record", record, "-release-json", facts, "more"}},
-		{"a flag it does not know", 2, []string{"-offer", record}},
-		{"a version no offer names", 1, []string{"-previous", previous, "-withdraw", "0.19.0"}},
-		{"a record of another version", 1, []string{"-record", otherRecord, "-release-json", facts}},
-		{"a minimum version it cannot read", 1, []string{"-record", badRecord, "-release-json", badMinimum}},
-		{"a previous index of another channel", 1, []string{"-previous", beta, "-record", record,
-			"-release-json", facts}},
-		{"a previous index that is not JSON", 1, []string{"-previous", notJSON, "-withdraw", "0.20.0"}},
-		{"a release.json that is not JSON", 1, []string{"-record", record, "-release-json", notJSON}},
-		{"a record that is not JSON", 1, []string{"-record", notJSON, "-release-json", facts}},
-		{"a previous index not there", 1, []string{"-previous", missing, "-withdraw", "0.20.0"}},
-		{"a record not there", 1, []string{"-record", missing, "-release-json", facts}},
-		{"a release.json not there", 1, []string{"-record", record, "-release-json", missing}},
+		{"nothing to add or withdraw", 2, args(), "index needs -record and -release-json"},
+		{"both an addition and a withdrawal", 2, args(append([]string{"-withdraw", "0.20.0"}, adding...)...),
+			"not both in one run"},
+		{"a record without its release.json", 2, args("-record", record), "index needs -record and -release-json"},
+		{"no validity", 2, slices.Concat(site.flags(), adding), "index needs a -valid above zero"},
+		{"a validity of zero", 2, args(append(adding, "-valid", "0s")...), "index needs a -valid above zero"},
+		{"no offer to keep", 2, args(append(adding, "-keep", "0")...), "index needs a -keep of one offer"},
+		{"an argument it does not take", 2, args(append(adding, "more")...), "reads no other file"},
+		{"a flag it does not know", 2, args("-offer", record), "flag provided but not defined: -offer"},
+		{"the -previous it no longer takes", 2, args("-previous", notJSON, "-withdraw", "0.20.0"),
+			"flag provided but not defined: -previous"},
+		{"no clone", 2, without(args(adding...), "-site"), "index needs -site"},
+		{"no timestamp key", 2, without(args(adding...), "-timestamp"), "index needs -site"},
+		{"a root that is no key", 2, args(append(adding, "-root", "z6Mk")...), "invalid value"},
+		{"a version no offer names", 1, args("-withdraw", "0.19.0"), "refused to withdraw 0.19.0"},
+		{"a withdrawal with no index", 1, args("-channel", "beta", "-withdraw", "0.20.0"),
+			`refused to withdraw 0.20.0, which the index of channel "beta" does not offer`},
+		{"a record of another version", 1, args("-record", otherRecord, "-release-json", facts), `a record of "0.22.0"`},
+		{"a minimum version it cannot read", 1, args("-record", badRecord, "-release-json", badMinimum),
+			`minimum_version "0.23"`},
+		{"a previous index of another channel", 1, args(append(adding, "-channel", "candidate")...),
+			`the site asks for "candidate"`},
+		{"a previous index that is not JSON", 1, args("-channel", "broken", "-withdraw", "0.20.0"), "not JSON"},
+		{"a previous index with no signature", 1, args("-channel", "unsigned", "-withdraw", "0.20.0"),
+			"reading the update site"},
+		{"a release.json that is not JSON", 1, args("-record", record, "-release-json", notJSON), "not JSON"},
+		{"a record that is not JSON", 1, args("-record", notJSON, "-release-json", facts), "not JSON"},
+		{"a record not there", 1, args("-record", missing, "-release-json", facts), "reading the release record"},
+		{"a release.json not there", 1, args("-record", record, "-release-json", missing), "reading the release.json"},
 	} {
-		if got := runTool(append([]string{"index"}, tc.args...)...); got.code != tc.code {
-			t.Errorf("index with %s = %d, %q, want %d", tc.name, got.code, got.stderr, tc.code)
+		got := runTool(append([]string{"index"}, tc.args...)...)
+		if got.code != tc.code || got.stdout != "" || !strings.Contains(got.stderr, tc.text) {
+			t.Errorf("index with %s = %d, %q, %q, want %d and %q said", tc.name, got.code, got.stdout, got.stderr,
+				tc.code, tc.text)
 		}
 	}
 }
@@ -200,12 +258,11 @@ func TestIndexKeepsOnlyTheNewestOffers(t *testing.T) {
 		"twenty by default":      {want: versionsFrom(41, 22)},
 		"as many as -keep names": {keep: []string{"-keep", "2"}, want: versionsFrom(41, 40)},
 	} {
-		dir := t.TempDir()
-		previous := previousIndex(t, dir, 7, versionsFrom(40, 20)...)
-		record, facts := releaseFilesOf(t, dir, "0.41.0", "0.41.0")
-		args := append([]string{"index", "-previous", previous, "-record", record, "-release-json", facts}, tc.keep...)
+		site := siteWithStable(t, 7, versionsFrom(40, 20)...)
+		record, facts := releaseFilesOf(t, t.TempDir(), "0.41.0", "0.41.0")
+		args := append([]string{"-record", record, "-release-json", facts, "-valid", "2160h"}, tc.keep...)
 
-		if got := versionsOf(readIndexOf(t, runTool(args...))); !slices.Equal(got, tc.want) {
+		if got := versionsOf(readIndexOf(t, site.run("index", args...))); !slices.Equal(got, tc.want) {
 			t.Errorf("index keeping %s offers %v, want %v", name, got, tc.want)
 		}
 	}
@@ -214,11 +271,10 @@ func TestIndexKeepsOnlyTheNewestOffers(t *testing.T) {
 func TestIndexRefusesAnIndexLargerThanASiteReads(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	previous := previousIndex(t, dir, 7, versionsFrom(400, 1)...)
-	record, facts := releaseFilesOf(t, dir, "0.401.0", "0.401.0")
+	site := siteWithStable(t, 7, versionsFrom(400, 1)...)
+	record, facts := releaseFilesOf(t, t.TempDir(), "0.401.0", "0.401.0")
 
-	got := runTool("index", "-previous", previous, "-record", record, "-release-json", facts, "-keep", "1000")
+	got := site.run("index", "-record", record, "-release-json", facts, "-keep", "1000", "-valid", "2160h")
 
 	if got.code != 1 || got.stdout != "" || !strings.Contains(got.stderr, "-keep") {
 		t.Errorf("index of 401 offers = %d, %q, want 1, nothing written and -keep named", got.code, got.stderr)
@@ -228,12 +284,14 @@ func TestIndexRefusesAnIndexLargerThanASiteReads(t *testing.T) {
 func TestIndexWritesTheChannelItIsNamed(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	record, facts := releaseFilesOf(t, dir, "0.21.0-rc.1", "0.21.0-rc.1")
+	site := siteWithStable(t, 7, "0.20.0")
+	record, facts := releaseFilesOf(t, t.TempDir(), "0.21.0-rc.1", "0.21.0-rc.1")
 
-	index := readIndexOf(t, runTool("index", "-channel", "beta", "-record", record, "-release-json", facts))
+	index := readIndexOf(t, site.run("index", "-channel", "beta", "-record", record, "-release-json", facts,
+		"-valid", "2160h"))
 
-	if index.Channel != "beta" {
-		t.Errorf("index -channel beta wrote the channel %q, want beta", index.Channel)
+	if index.Channel != "beta" || !slices.Equal(versionsOf(index), []string{"0.21.0-rc.1"}) {
+		t.Errorf("index -channel beta wrote the channel %q offering %v, want beta offering 0.21.0-rc.1 alone",
+			index.Channel, versionsOf(index))
 	}
 }

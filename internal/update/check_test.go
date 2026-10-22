@@ -3,6 +3,7 @@
 package update_test
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,12 +26,13 @@ type updateServer struct {
 	headers []http.Header
 	delay   time.Duration
 	server  *httptest.Server
+	stamp   update.Timestamp
 }
 
-// newUpdateServer starts a test update site under base, serving the key list and index k signs.
+// newUpdateServer starts a test update site under base, serving the key list, index and timestamp file k signs.
 func newUpdateServer(t *testing.T, k keys, base string, offers ...update.Offer) *updateServer {
 	t.Helper()
-	s := &updateServer{t: t, base: base, files: map[string][]byte{}}
+	s := &updateServer{t: t, base: base, files: map[string][]byte{}, stamp: timestamp()}
 	s.server = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(s.server.Close)
 	list := marshal(t, k.keyList(t))
@@ -69,11 +71,20 @@ func (s *updateServer) drop(path string) {
 	delete(s.files, path)
 }
 
-// putIndex serves the index the release key signed, at the path of its channel.
+// putIndex serves the index the release key signed at the path of its channel, then a timestamp file naming it.
 func (s *updateServer) putIndex(k keys, held update.Index) {
 	body := marshal(s.t, held)
 	s.put(update.IndexPath(held.Channel), body)
 	s.put(update.IndexPath(held.Channel)+update.SignatureSuffix, signIndex(body, k.release))
+	s.stamp.Indexes[held.Channel] = held.Serial
+	s.putTimestamp(k.timestamp, s.stamp)
+}
+
+// putTimestamp serves the timestamp file stamp, signed by key.
+func (s *updateServer) putTimestamp(key ed25519.PrivateKey, stamp update.Timestamp) {
+	body, sig := signedTimestamp(s.t, stamp, key)
+	s.put(update.TimestampPath, body)
+	s.put(update.TimestampPath+update.SignatureSuffix, sig)
 }
 
 // config returns the check of the stable channel on the server, for a site running 0.20.0 on PostgreSQL 18.
@@ -113,8 +124,9 @@ func TestCheckSendsNothingButItsUserAgent(t *testing.T) {
 	if _, _, err := update.Check(t.Context(), server.config(k), update.Serials{}); err != nil {
 		t.Fatalf("Check() error = %v, want nil", err)
 	}
-	if len(server.headers) != 4 {
-		t.Fatalf("Check() made %d requests, want the key list, the index and their two signatures", len(server.headers))
+	if len(server.headers) != 6 {
+		t.Fatalf("Check() made %d requests, want the key list, the timestamp file, the index and their three signatures",
+			len(server.headers))
 	}
 	for _, header := range server.headers {
 		names := slices.Sorted(func(yield func(string) bool) {
@@ -153,6 +165,7 @@ func TestCheckRefusesAMissingFile(t *testing.T) {
 	k := newKeys(t)
 	for _, path := range []string{
 		update.KeyListPath, update.KeyListPath + update.SignatureSuffix,
+		update.TimestampPath, update.TimestampPath + update.SignatureSuffix,
 		update.IndexPath("stable"), update.IndexPath("stable") + update.SignatureSuffix,
 	} {
 		server := newUpdateServer(t, k, "")
@@ -278,4 +291,77 @@ func TestCheckRefusesAKeyListOrIndexItCannotTake(t *testing.T) {
 	unsignedIndex.put(update.IndexPath("stable")+update.SignatureSuffix, signIndex([]byte("other"), k.release))
 	_, _, err = update.Check(t.Context(), unsignedIndex.config(k), update.Serials{})
 	wantRefused(t, err, "no release or standby key the list names")
+}
+
+func TestCheckRefusesATimestampFileNoTimestampKeySigned(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	server.putTimestamp(k.release, timestamp())
+
+	_, _, err := update.Check(t.Context(), server.config(k), update.Serials{})
+
+	wantRefused(t, err, "refused the timestamp file, no timestamp key the list names signed it")
+}
+
+func TestCheckRefusesFilesTheTimestampFileDoesNotVouchFor(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	for name, tc := range map[string]struct {
+		edit func(stamp *update.Timestamp)
+		text string
+	}{
+		"a newer key list": {
+			edit: func(stamp *update.Timestamp) { stamp.Keys = 6 },
+			text: "refused the key list of serial 5, older than serial 6 the timestamp file names",
+		},
+		"a newer index": {
+			edit: func(stamp *update.Timestamp) { stamp.Indexes["stable"] = 10 },
+			text: "refused the index of serial 9, older than serial 10 the timestamp file names",
+		},
+		"no index of the channel": {
+			edit: func(stamp *update.Timestamp) { stamp.Indexes = map[string]int64{"beta": 3} },
+			text: `refused the timestamp file, which names no index of channel "stable"`,
+		},
+		"no index of the channel and a newer key list": {
+			edit: func(stamp *update.Timestamp) { stamp.Keys, stamp.Indexes = 6, map[string]int64{"beta": 3} },
+			text: `refused the timestamp file, which names no index of channel "stable"`,
+		},
+		"an expiry in the past": {
+			edit: func(stamp *update.Timestamp) { stamp.Expires = now.Add(-time.Hour) },
+			text: "refused the timestamp file, which expired at 2026-11-03T08:00:00Z",
+		},
+	} {
+		server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+		stamp := timestamp()
+		tc.edit(&stamp)
+		server.putTimestamp(k.timestamp, stamp)
+
+		_, _, err := update.Check(t.Context(), server.config(k), update.Serials{})
+
+		if err == nil || !strings.Contains(err.Error(), tc.text) {
+			t.Errorf("Check() with a timestamp file naming %s = %v, want a check refused saying %q", name, err, tc.text)
+		}
+	}
+}
+
+func TestCheckTakesAKeyListAndIndexNewerThanTheTimestampFileNames(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	server := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	older := timestamp()
+	older.Keys, older.Indexes["stable"] = 4, 8
+	server.putTimestamp(k.timestamp, older)
+
+	found, taken, err := update.Check(t.Context(), server.config(k), update.Serials{})
+
+	if err != nil || found == nil {
+		t.Fatalf("Check() = %+v, %v, want the newer key list and index taken", found, err)
+	}
+	if taken != (update.Serials{Keys: 5, Index: 9}) {
+		t.Errorf("Check() took serials %+v, want the newer key list 5 and index 9", taken)
+	}
 }

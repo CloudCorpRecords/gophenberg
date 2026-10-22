@@ -505,9 +505,14 @@ holding `checked_at`, `offer`, `failed_at` and `error`. It runs the
 migrations first. It installs nothing: on a server install,
 [`update:apply`](#updateapply) installs the update when you run it.
 
-It refuses an update site whose files the Gophenberg keys did not
-sign, a file that expired, and a file older than the last one the
-site took, and exits with code 1 naming why. See
+It fetches three files: the key list, the timestamp file and the
+index. It refuses an update site whose files the Gophenberg keys did
+not sign, a file that expired, and a file older than the last one the
+site took. It also refuses a missing timestamp file, and a key list or
+an index older than the one the timestamp file names. Each time it
+exits with code 1 naming why. When a file expired, the error names
+the time the site's clock reads, since a wrong clock refuses good
+files. See
 [how a site hears of a new version](/self-hosting/updates-and-backups/#how-a-site-hears-of-a-new-version).
 
 ### update:apply
@@ -523,8 +528,9 @@ install root, see
 Run it with the binary that `current` names, as the user Gophenberg
 runs as. The server keeps running the old build while it works.
 
-It checks the signed key list and index again, refuses what a check
-would refuse, then downloads the archive into `downloads/`, checks its
+It checks the signed key list, timestamp file and index again,
+refuses what a check would refuse, an expired timestamp file
+included, then downloads the archive into `downloads/`, checks its
 checksum and its signature, unpacks it into `versions/<version>/`, backs
 up the database with `pg_dump` into `backups/`, and points `previous`
 at the build that runs and `current` at the new one. It ends with this

@@ -483,6 +483,21 @@ func TestApplyPutsTheInstallRootBackWhenAStepFails(t *testing.T) {
 	}
 }
 
+func TestApplyRefusesAnArchiveTheTimestampKeySigned(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	writeState(t, f.layout, committed)
+	f.artifact = f.site.archive(releaseArchive(t, aboutScript(offered, "official", 0)), f.site.timestamp)
+	f.offer(running, keepOffer)
+	job := f.job()
+
+	_, err := job.Apply(t.Context())
+
+	wantRefused(t, err, "refused the archive, no release or standby key the key list names signed it")
+	f.wantPutBack(committed)
+}
+
 func TestApplyClearsAnUpdateThatStoppedBeforeItsSwitchEnded(t *testing.T) {
 	t.Parallel()
 

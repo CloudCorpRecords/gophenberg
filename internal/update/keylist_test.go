@@ -4,6 +4,8 @@ package update_test
 
 import (
 	"crypto/ecdsa"
+	"crypto/ed25519"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,7 +24,7 @@ func TestReadKeyListTakesEitherRootAlone(t *testing.T) {
 		"a stranger, then a root": {k.strangerRoot, k.root2},
 	} {
 		list, err := update.ReadKeyList(body, signLines(t, body, roots...), k.trusted(), now)
-		if err != nil || list.Serial != 5 || len(list.Keys) != 2 {
+		if err != nil || list.Serial != 5 || len(list.Keys) != 3 {
 			t.Errorf("ReadKeyList() signed by %s = %+v, %v, want the list taken", name, list, err)
 		}
 	}
@@ -107,18 +109,82 @@ func TestReadKeyListRefusesAListItCannotRead(t *testing.T) {
 	}
 }
 
+func TestReadKeyListRefusesAKeyItCannotTrustInItsRole(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	for name, tc := range map[string]struct {
+		edit func(keys []update.ListedKey) []update.ListedKey
+		text string
+	}{
+		"a timestamp key that is not Ed25519": {
+			edit: func(keys []update.ListedKey) []update.ListedKey {
+				keys[2].Multikey = multikey(t, &k.root1.PublicKey)
+				return keys
+			},
+			text: "its timestamp key",
+		},
+		"no timestamp key": {
+			edit: func(keys []update.ListedKey) []update.ListedKey { return keys[:2] },
+			text: "names no timestamp key",
+		},
+		"the release key as the timestamp key": {
+			edit: func(keys []update.ListedKey) []update.ListedKey {
+				keys[2].Multikey = keys[0].Multikey
+				return keys
+			},
+			text: "names one key as its release key and its timestamp key",
+		},
+		"the release key as the standby": {
+			edit: func(keys []update.ListedKey) []update.ListedKey {
+				keys[1].Multikey = keys[0].Multikey
+				return keys
+			},
+			text: "names one key as its release key and its standby key",
+		},
+	} {
+		list := k.keyList(t)
+		list.Keys = tc.edit(list.Keys)
+		body := marshal(t, list)
+
+		_, err := update.ReadKeyList(body, signLines(t, body, k.root1), k.trusted(), now)
+
+		if err == nil || !strings.Contains(err.Error(), tc.text) {
+			t.Errorf("ReadKeyList() of a list with %s = %v, want it refused saying %q", name, err, tc.text)
+		}
+	}
+}
+
 func TestReadKeyListLeavesARoleItDoesNotKnowOut(t *testing.T) {
 	t.Parallel()
 
 	k := newKeys(t)
 	list := k.keyList(t)
-	list.Keys = append(list.Keys, update.ListedKey{Role: "timestamp", Multikey: multikey(t, &k.root1.PublicKey)})
+	list.Keys = append(list.Keys, update.ListedKey{Role: "mirror", Multikey: multikey(t, &k.root1.PublicKey)})
 	body := marshal(t, list)
 
 	got, err := update.ReadKeyList(body, signLines(t, body, k.root1), k.trusted(), now)
 
-	if err != nil || len(got.Signers()) != 2 {
-		t.Errorf("ReadKeyList() = %d signers, %v, want the release key and the standby only", len(got.Signers()), err)
+	if err != nil || len(got.Signers()) != 2 || len(got.TimestampKeys()) != 1 {
+		t.Errorf("ReadKeyList() = %d signers and %d timestamp keys, %v, want the three it knows", len(got.Signers()),
+			len(got.TimestampKeys()), err)
+	}
+}
+
+func TestKeyListKeepsTheTimestampKeyApartFromTheSigners(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	list := k.keyList(t)
+
+	signers, stamps := list.Signers(), list.TimestampKeys()
+
+	wantSigners := []ed25519.PublicKey{k.release.Public().(ed25519.PublicKey), k.standby.Public().(ed25519.PublicKey)}
+	if !slices.EqualFunc(signers, wantSigners, func(a, b ed25519.PublicKey) bool { return a.Equal(b) }) {
+		t.Errorf("Signers() = %x, want the release key and the standby", signers)
+	}
+	if len(stamps) != 1 || !stamps[0].Equal(k.timestamp.Public()) {
+		t.Errorf("TimestampKeys() = %x, want the timestamp key alone", stamps)
 	}
 }
 

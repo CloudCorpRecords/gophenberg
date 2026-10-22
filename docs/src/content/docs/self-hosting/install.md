@@ -167,8 +167,11 @@ Every release also publishes the binary itself, packed for Linux on
 each archive the release carries a `.sig` file with its signature, and
 `SHA256SUMS` lists the SHA-256 of every archive.
 
-Before you run a binary you downloaded, check that the release key
-signed it. Save the release key as `release.pub.pem`:
+Before you run a binary you downloaded, check who signed it. A release
+is signed by one of two keys, the release key or the standby, a second
+key that signs releases while the release key is being replaced. A file
+signed by either one is genuine. Save the release key as
+`release.pub.pem`:
 
 ```text
 -----BEGIN PUBLIC KEY-----
@@ -176,8 +179,19 @@ MCowBQYDK2VwAyEANLMkB0RToFiEfIMw2VdG5Ml636MuXEwm4C+hGbbd5Mw=
 -----END PUBLIC KEY-----
 ```
 
+And save the standby as `standby.pub.pem`:
+
+```text
+-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAWrchu9WREyEOuKPjK7hoKSyEClGejpYjcaISqSJ1CPM=
+-----END PUBLIC KEY-----
+```
+
 Then check the archive with OpenSSL alone. It needs OpenSSL 3, and the
-last line prints `Signature Verified Successfully`:
+last line prints `Signature Verified Successfully`. If it prints
+`Signature Verification Failure` instead, run the last line again with
+`standby.pub.pem` in place of `release.pub.pem`. A release the standby
+signed passes that way:
 
 ```sh
 printf '%s==' "$(tr '_-' '/+' < gophenberg_%VERSION%_linux_amd64.tar.gz.sig | tr -d '\n')" | openssl base64 -d -A > sig.bin
@@ -193,6 +207,7 @@ Three other checks reach the same answer another way:
 - From a checkout of the repository,
   `go run ./cmd/releasetool verify -public z6MkhzygKXb6Xx7PB1NZsPhuNamiHiinZcaBijQZKMFYgWc3 gophenberg_%VERSION%_linux_amd64.tar.gz`
   checks the signature in one step. The long `z6Mk` text is the same
-  release key, written as a Multikey.
+  release key, written as a Multikey. The standby written the same way
+  is `z6MkkZNhcEbvKKuSsj3Ywz39iXYwCtxm5AVwxEzqjHJw35vJ`.
 - `gh attestation verify gophenberg_%VERSION%_linux_amd64.tar.gz --repo gopherium/gophenberg --signer-workflow gopherium/gophenberg/.github/workflows/release.yml --source-ref refs/tags/v%VERSION%`
   checks that the release workflow built the file from the release tag.

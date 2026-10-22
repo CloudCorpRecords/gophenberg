@@ -1,0 +1,141 @@
+name: timestamp
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timestamp
+  cancel-in-progress: false
+
+jobs:
+  timestamp:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: timestamp
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse a run that leaves out a key or a setting it needs
+        env:
+          UPDATE_TIMESTAMP_KEY: ${{ secrets.UPDATE_TIMESTAMP_KEY }}
+          TIMESTAMP_KEY_MULTIKEY: ${{ vars.TIMESTAMP_KEY_MULTIKEY }}
+          UPDATE_TIMESTAMP_VALID: ${{ vars.UPDATE_TIMESTAMP_VALID }}
+          RELEASE_KEY_MULTIKEY: ${{ vars.RELEASE_KEY_MULTIKEY }}
+          RELEASE_STANDBY_MULTIKEY: ${{ vars.RELEASE_STANDBY_MULTIKEY }}
+          UPDATES_APP_PRIVATE_KEY: ${{ secrets.UPDATES_APP_PRIVATE_KEY }}
+          UPDATES_APP_CLIENT_ID: ${{ vars.UPDATES_APP_CLIENT_ID }}
+        run: |
+          missing=()
+          for name in UPDATE_TIMESTAMP_KEY TIMESTAMP_KEY_MULTIKEY UPDATE_TIMESTAMP_VALID RELEASE_KEY_MULTIKEY \
+            RELEASE_STANDBY_MULTIKEY UPDATES_APP_PRIVATE_KEY UPDATES_APP_CLIENT_ID; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf -v list '%s, ' "${missing[@]}"
+            echo "the timestamp environment or the repository holds no ${list%, }" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build releasetool from the standard library alone
+        run: |
+          GOMODCACHE="$RUNNER_TEMP/empty-module-cache" GOPROXY=off GOFLAGS=-mod=readonly GOWORK=off \
+            go build -o "$RUNNER_TEMP/releasetool" ./cmd/releasetool
+      - name: Read the newest published release
+        id: newest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")"
+          tag="$(jq -r '.tag_name // empty' <<< "$release")"
+          if [ -z "$tag" ]; then
+            echo "the repository names no newest published release" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          record="gophenberg_${version}_release-record.json"
+          if jq -e --arg record "$record" 'any(.assets[]; .name == $record)' <<< "$release" > /dev/null; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          else
+            echo "the newest release $tag holds no $record, so no index has to offer it"
+          fi
+      - name: Ask the update site's app for a token that writes to the update site alone
+        id: updates
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UPDATES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UPDATES_APP_PRIVATE_KEY }}
+          owner: gopherium
+          repositories: gophenberg-updates
+          permission-contents: write
+      - name: Write, sign and push the timestamp file of the update site
+        env:
+          UPDATE_TIMESTAMP_KEY: ${{ secrets.UPDATE_TIMESTAMP_KEY }}
+          TIMESTAMP_KEY_MULTIKEY: ${{ vars.TIMESTAMP_KEY_MULTIKEY }}
+          UPDATE_TIMESTAMP_VALID: ${{ vars.UPDATE_TIMESTAMP_VALID }}
+          RELEASE_KEY_MULTIKEY: ${{ vars.RELEASE_KEY_MULTIKEY }}
+          RELEASE_STANDBY_MULTIKEY: ${{ vars.RELEASE_STANDBY_MULTIKEY }}
+          NEWEST_STABLE: ${{ steps.newest.outputs.version }}
+          UPDATES_TOKEN: ${{ steps.updates.outputs.token }}
+        run: |
+          tool="$RUNNER_TEMP/releasetool"
+          key="$RUNNER_TEMP/timestamp.pem"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$UPDATE_TIMESTAMP_KEY" > "$key")
+          helper='!f() { echo username=x-access-token; echo "password=$UPDATES_TOKEN"; }; f'
+          newest=()
+          if [ -n "$NEWEST_STABLE" ]; then
+            newest=(-newest "stable=$NEWEST_STABLE")
+          fi
+          for attempt in 1 2 3; do
+            rm -rf updates
+            git clone -q --depth 1 https://github.com/gopherium/gophenberg-updates.git updates
+            note=updates/v1/timestamp.json
+            written="$RUNNER_TEMP/timestamp.json"
+            code=0
+            "$tool" timestamp -site updates -release "$RELEASE_KEY_MULTIKEY" -standby "$RELEASE_STANDBY_MULTIKEY" \
+              -timestamp "$TIMESTAMP_KEY_MULTIKEY" "${newest[@]}" -valid "$UPDATE_TIMESTAMP_VALID" \
+              > "$written" || code=$?
+            if [ ! -s "$written" ]; then
+              echo "releasetool wrote no timestamp file, so the update site keeps the one it holds" >&2
+              exit 1
+            fi
+            for held in updates/v1/core/*.json; do
+              channel="$(basename "$held" .json)"
+              if [ -f "$held" ] && ! jq -e --arg channel "$channel" '.indexes | has($channel)' "$written" > /dev/null; then
+                echo "releasetool left out the channel $channel, which the update site holds an index of," \
+                  "so the update site keeps the timestamp file it holds" >&2
+                exit 1
+              fi
+            done
+            mv "$written" "$note"
+            rm -f "$note.sig"
+            "$tool" sign -key "$key" "$note"
+            "$tool" verify -public "$TIMESTAMP_KEY_MULTIKEY" "$note"
+            git -C updates add v1/timestamp.json v1/timestamp.json.sig
+            git -C updates -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "chore(timestamp): vouch for the current key list and indexes"
+            if git -C updates -c credential.helper= -c credential.helper="$helper" push -q origin HEAD:main; then
+              if [ "$code" -ne 0 ]; then
+                echo "pushed a timestamp file without the channels releasetool left out above," \
+                  "which the update site holds no index of yet" >&2
+              fi
+              exit "$code"
+            fi
+            echo "attempt $attempt could not push, so the timestamp file is written again over the newer one" >&2
+          done
+          exit 1
