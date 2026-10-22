@@ -644,9 +644,6 @@ msgstr ""
 msgid "Empty Trash"
 msgstr ""
 
-msgid "Empty the trash?"
-msgstr ""
-
 msgid "Empty trash"
 msgstr ""
 
