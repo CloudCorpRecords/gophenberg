@@ -78,7 +78,7 @@ so it takes the default.
 | `GOPHENBERG_UPDATE_CHECK_INTERVAL` | No | `12h` | How long after one check the site checks again on its own |
 | `GOPHENBERG_UPDATE_URL` | No | `https://updates.gophenberg.org` | The update site. It must be `https`, or `http` on a loopback host such as `localhost` |
 | `GOPHENBERG_UPDATE_CHANNEL` | No | `stable` | The channel the site follows, in lowercase letters, digits and hyphens |
-| `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary |
+| `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary. That site's key list must also name a timestamp key, and the site must serve a timestamp file that has not expired, see [your own copy of the update site](/self-hosting/updates-and-backups/#your-own-copy-of-the-update-site) |
 | `GOPHENBERG_UPDATE_TIMEOUT` | No | `30s` | How long a check has to fetch each file |
 | `GOPHENBERG_UPDATES_SCREEN_CHECK_AGE` | No | `1m` | How long after one check the admin waits before it runs another when asked |
 | `GOPHENBERG_INSTALL_ROOT` | No | | The install root of a server install, an absolute path that holds each build in `versions/` beside a `current` link naming the one that runs. `update:apply` updates only an install that sets it. Empty, as in the Docker image, means the site only tells you about updates, see [updating a server install](/self-hosting/updates-and-backups/#updating-a-server-install) |
@@ -545,6 +545,9 @@ The server refuses to start, and says why, when:
   digits and hyphens, or does not start with a letter.
 - `GOPHENBERG_TRUSTED_KEYS` names a key that is not a P-256 Multikey,
   or is set while `GOPHENBERG_UPDATE_URL` is the official update site.
+  Startup never fetches the update site, so a copy whose key list
+  names no timestamp key, or whose timestamp file expired, fails at
+  its first check instead.
 - `GOPHENBERG_UPDATE_CHECKS` is not `true` or `false`.
 - `GOPHENBERG_THEME_MAX_BACKOFF` stands below
   `GOPHENBERG_THEME_BACKOFF`, which would leave no room to grow.
