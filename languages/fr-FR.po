@@ -597,10 +597,6 @@ msgid "Group"
 msgstr "Groupe"
 
 #, fuzzy
-msgid "Hand over the root"
-msgstr "Céder la racine"
-
-#, fuzzy
 msgid "Highest"
 msgstr "Maximum"
 
@@ -664,10 +660,6 @@ msgstr "Lié depuis"
 #, fuzzy
 msgid "List view"
 msgstr "Vue en liste"
-
-#, fuzzy
-msgid "Loading content types."
-msgstr "Chargement des types de contenu."
 
 #, fuzzy
 msgid "Loading field groups."
@@ -944,14 +936,6 @@ msgstr "Lit depuis"
 #, fuzzy
 msgid "Redo"
 msgstr "Rétablir"
-
-#, fuzzy
-msgid "Register"
-msgstr "Déclarer"
-
-#, fuzzy
-msgid "Register a content type"
-msgstr "Déclarer un type de contenu"
 
 #, fuzzy
 msgid "Relation"
@@ -1654,18 +1638,6 @@ msgid "%(theme)s will not load, so the built-in renderer is serving."
 msgstr "%(theme)s ne se charge pas, le moteur de rendu intégré sert donc le site."
 
 #, fuzzy
-msgid "%(type)s registered."
-msgstr "%(type)s déclaré."
-
-#, fuzzy
-msgid "%(type)s removed."
-msgstr "Type de contenu %(type)s retiré."
-
-#, fuzzy
-msgid "%(type)s updated."
-msgstr "Type de contenu %(type)s mis à jour."
-
-#, fuzzy
 msgid "%(type)s will answer at the root."
 msgstr "Le type %(type)s répondra à la racine."
 
@@ -1680,10 +1652,6 @@ msgstr "Ajouter %(type)s"
 #, fuzzy
 msgid "Back to %(type)s"
 msgstr "Retour aux %(type)s"
-
-#, fuzzy
-msgid "Change the address of %(type)s"
-msgstr "Changer l'adresse de %(type)s"
 
 #, fuzzy
 msgid "Choose %(field)s"
@@ -1719,10 +1687,6 @@ msgstr "Désactiver %(name)s"
 #, fuzzy
 msgid "Enable %(name)s"
 msgstr "Activer %(name)s"
-
-#, fuzzy
-msgid "Hand the root to %(type)s"
-msgstr "Céder la racine à %(type)s"
 
 #, fuzzy
 msgid "Media %(id)s"
@@ -2444,10 +2408,6 @@ msgid "It reads a relation inside a container, and only an import can point it e
 msgstr "Il lit une relation dans un conteneur, et seule une importation peut le faire pointer ailleurs."
 
 #, fuzzy
-msgid "Describe %(type)s"
-msgstr "Décrire %(type)s"
-
-#, fuzzy
 msgid "A descriptive summary of the content type."
 msgstr "Un résumé descriptif du type de contenu."
 
@@ -2766,14 +2726,6 @@ msgid "No media items yet."
 msgstr "Aucun fichier média pour l’instant."
 
 #, fuzzy
-msgid "Delete \"%(type)s\"?"
-msgstr "Supprimer « %(type)s » ?"
-
-#, fuzzy
-msgid "This cannot be undone."
-msgstr "Cette action est irréversible."
-
-#, fuzzy
 msgid "Manage the images and files this site holds."
 msgstr "Gérez les images et les fichiers que ce site contient."
 
@@ -2822,3 +2774,118 @@ msgstr "Catégories"
 #, fuzzy
 msgid "Manage the categories on this site."
 msgstr "Gérez les catégories de ce site."
+
+#, fuzzy
+msgid "\"%s\" activated."
+msgstr "Type de contenu « %s » activé."
+
+#, fuzzy
+msgid "\"%s\" deactivated."
+msgstr "Type de contenu « %s » désactivé."
+
+#, fuzzy
+msgid "%s content type activated."
+msgid_plural "%s content types activated."
+msgstr[0] "%s type de contenu activé."
+msgstr[1] "%s types de contenu activés."
+msgstr[2] "%s types de contenu activés."
+
+#, fuzzy
+msgid "%s content type could not be activated."
+msgid_plural "%s content types could not be activated."
+msgstr[0] "%s type de contenu n'a pas pu être activé."
+msgstr[1] "%s types de contenu n'ont pas pu être activés."
+msgstr[2] "%s types de contenu n'ont pas pu être activés."
+
+#, fuzzy
+msgid "%s content type could not be deactivated."
+msgid_plural "%s content types could not be deactivated."
+msgstr[0] "%s type de contenu n'a pas pu être désactivé."
+msgstr[1] "%s types de contenu n'ont pas pu être désactivés."
+msgstr[2] "%s types de contenu n'ont pas pu être désactivés."
+
+#, fuzzy
+msgid "%s content type deactivated."
+msgid_plural "%s content types deactivated."
+msgstr[0] "%s type de contenu désactivé."
+msgstr[1] "%s types de contenu désactivés."
+msgstr[2] "%s types de contenu désactivés."
+
+#, fuzzy
+msgid "%s content type permanently deleted."
+msgid_plural "%s content types permanently deleted."
+msgstr[0] "%s type de contenu supprimé définitivement."
+msgstr[1] "%s types de contenu supprimés définitivement."
+msgstr[2] "%s types de contenu supprimés définitivement."
+
+#, fuzzy
+msgid "%s content type could not be permanently deleted."
+msgid_plural "%s content types could not be permanently deleted."
+msgstr[0] "%s type de contenu n'a pas pu être supprimé définitivement."
+msgstr[1] "%s types de contenu n'ont pas pu être supprimés définitivement."
+msgstr[2] "%s types de contenu n'ont pas pu être supprimés définitivement."
+
+#, fuzzy
+msgid "Delete %s content type for good? This cannot be undone."
+msgid_plural "Delete %s content types for good? This cannot be undone."
+msgstr[0] "Supprimer %s type de contenu définitivement ? Cette action est irréversible."
+msgstr[1] "Supprimer %s types de contenu définitivement ? Cette action est irréversible."
+msgstr[2] "Supprimer %s types de contenu définitivement ? Cette action est irréversible."
+
+#, fuzzy
+msgctxt "content type"
+msgid "\"%s\" permanently deleted."
+msgstr "Type de contenu « %s » supprimé définitivement."
+
+#, fuzzy
+msgctxt "content type"
+msgid "\"%s\" successfully created."
+msgstr "Type de contenu « %s » créé avec succès."
+
+#, fuzzy
+msgid "Address updated."
+msgstr "Adresse mise à jour."
+
+#, fuzzy
+msgid "Change address…"
+msgstr "Changer l'adresse…"
+
+#, fuzzy
+msgid "Content type updated."
+msgstr "Type de contenu mis à jour."
+
+#, fuzzy
+msgid "Created"
+msgstr "Date de création"
+
+#, fuzzy
+msgid "Default content type updated."
+msgstr "Type de contenu par défaut mis à jour."
+
+#, fuzzy
+msgid "Delete…"
+msgstr "Supprimer…"
+
+#, fuzzy
+msgid "Describe…"
+msgstr "Décrire…"
+
+#, fuzzy
+msgid "Description updated."
+msgstr "Description mise à jour."
+
+#, fuzzy
+msgid "Key"
+msgstr "Clé"
+
+#, fuzzy
+msgid "Make default…"
+msgstr "Rendre par défaut…"
+
+#, fuzzy
+msgid "No content types found."
+msgstr "Aucun type de contenu trouvé."
+
+#, fuzzy
+msgid "No description"
+msgstr "Aucune description"
