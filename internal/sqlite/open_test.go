@@ -4,6 +4,7 @@ package sqlite_test
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"io/fs"
 	"math"
@@ -33,7 +34,7 @@ const (
 	waitMargin = 2 * time.Second
 )
 
-// testSettings returns the settings a test handle opens with: four connections and a 5s busy timeout tried every 10ms.
+// testSettings returns a test handle's settings: four connections, a 5s busy timeout and opening tried every 10ms.
 func testSettings() sqlite.Settings {
 	return sqlite.Settings{
 		BusyTimeout: 5 * time.Second, BusyPoll: 10 * time.Millisecond, CacheSize: 2048, MaxConns: 4,
@@ -334,24 +335,43 @@ func TestOpenWaitsTheBusyTimeoutForALockAnotherConnectionHolds(t *testing.T) {
 	}
 }
 
-func TestOpenTriesALockAgainOnceEachBusyPoll(t *testing.T) {
+// heldNewFile returns a handle under settings on a new file whose write lock a plain driver connection holds.
+func heldNewFile(t *testing.T, settings sqlite.Settings) (db *sql.DB, holder driver.ExecerContext) {
+	t.Helper()
+	address, path := emptyFile(t)
+	db = open(t, address, settings)
+	conn, err := db.Driver().Open(path)
+	if err != nil {
+		t.Fatalf("opening a plain driver connection to %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	holder, ok := conn.(driver.ExecerContext)
+	if !ok {
+		t.Fatalf("the SQLite driver connection %T runs no statement", conn)
+	}
+	if _, err := holder.ExecContext(t.Context(), "BEGIN IMMEDIATE", nil); err != nil {
+		t.Fatalf("BEGIN IMMEDIATE on the plain driver connection error = %v, want nil", err)
+	}
+	return db, holder
+}
+
+func TestOpenTriesAFirstConnectionAgainOnceEachBusyPoll(t *testing.T) {
 	t.Parallel()
 
 	settings := testSettings()
 	settings.BusyPoll = slowPoll
-	holder, waiter := holderAndWaiter(t, settings)
+	db, holder := heldNewFile(t, settings)
 	trying := make(chan time.Time, 1)
 	answered := make(chan error, 1)
 	go func() {
 		trying <- time.Now()
-		_, err := waiter.ExecContext(t.Context(), "BEGIN IMMEDIATE")
-		answered <- err
+		answered <- db.PingContext(t.Context())
 	}()
 
 	began := <-trying
 	letGo := make(chan error, 1)
 	time.AfterFunc(letGoAfter, func() {
-		_, err := holder.ExecContext(t.Context(), "ROLLBACK")
+		_, err := holder.ExecContext(t.Context(), "ROLLBACK", nil)
 		letGo <- err
 	})
 	err := <-answered
@@ -361,10 +381,10 @@ func TestOpenTriesALockAgainOnceEachBusyPoll(t *testing.T) {
 		t.Fatalf("ROLLBACK of the other writer error = %v, want nil", released)
 	}
 	if err != nil {
-		t.Fatalf("BEGIN IMMEDIATE once the other writer let go error = %v, want nil", err)
+		t.Fatalf("PingContext() once the other writer let go error = %v, want nil", err)
 	}
 	if waited < slowPoll || waited > slowPoll+waitMargin {
-		t.Errorf("BEGIN IMMEDIATE behind a writer that let go after %v answered after %v, want about the busy poll %v",
+		t.Errorf("PingContext() on a new file whose writer let go after %v answered after %v, want about the busy poll %v",
 			letGoAfter, waited, slowPoll)
 	}
 }
