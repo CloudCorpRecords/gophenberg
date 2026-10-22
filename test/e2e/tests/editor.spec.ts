@@ -8,6 +8,7 @@ const TITLE = `A post the golden path wrote ${RUN}`
 const TRASH_TITLE = `A post the golden path trashed ${RUN}`
 const READ_TITLE = `A post the golden path read in the trash ${RUN}`
 const LAYOUT_TITLE = `A post the golden path asked to trash ${RUN}`
+const REFUSED_TITLE = `A post the golden path could not trash ${RUN}`
 const FLEXIBLE_TITLE = `A post the golden path built in rows ${RUN}`
 const PARAGRAPH = 'The paragraph the golden path typed.'
 const HEADING = 'The heading the golden path typed'
@@ -297,6 +298,8 @@ test('lays out Move to trash and the small confirm it opens as the WordPress edi
 		}
 	})
 	expect(placed).toEqual({ gap: 16, under: 16, height: 40, left: 0, right: 0 })
+	await expect(trigger).toHaveCSS('color', 'rgb(204, 24, 24)')
+	await expect(trigger).toHaveCSS('justify-content', 'center')
 	const field = await page.getByLabel('On sale').boundingBox()
 	const button = await trigger.boundingBox()
 	expect(field?.y ?? 0).toBeGreaterThan((button?.y ?? 0) + (button?.height ?? 0))
@@ -309,6 +312,37 @@ test('lays out Move to trash and the small confirm it opens as the WordPress edi
 	await confirm.getByRole('button', { name: 'Cancel', exact: true }).click()
 	await expect(confirm).toBeHidden()
 	await expect(trigger).toBeFocused()
+})
+
+test('closes the trash confirm at once and reports a trash the server refused in a toast', async ({ page }) => {
+	await openNewDraft(page)
+	await page.getByRole('textbox', { name: 'Title' }).fill(REFUSED_TITLE)
+	await page.getByRole('button', { name: 'Save draft' }).click()
+	await expect(shown(page, 'Draft saved.')).toBeVisible()
+	let answer: () => void = () => undefined
+	const held = new Promise<void>((release) => {
+		answer = release
+	})
+	await page.route('**/api/content/*', async (route) => {
+		if (route.request().method() !== 'DELETE') {
+			await route.fallback()
+			return
+		}
+		await held
+		await route.fulfill({ status: 500, json: {} })
+	})
+	const trigger = page.getByRole('button', { name: 'Move to trash' })
+	await trigger.click()
+
+	await page.getByRole('dialog').getByRole('button', { name: 'Move to trash' }).click()
+
+	await expect(page.getByRole('dialog')).toHaveCount(0)
+	await expect(trigger).toHaveAttribute('aria-disabled', 'true')
+	await expect(trigger).toHaveClass(/\bis-busy\b/)
+	answer()
+	await expect(shown(page, 'The item could not be moved to the trash.')).toBeVisible()
+	await expect(trigger).not.toHaveClass(/\bis-busy\b/)
+	await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue(REFUSED_TITLE)
 })
 
 test('reads a trashed post and restores it into the editor', async ({ page }) => {

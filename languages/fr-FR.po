@@ -2648,10 +2648,6 @@ msgid "Are you sure you want to move \"%s\" to the trash?"
 msgstr "Voulez-vous vraiment déplacer « %s » dans la corbeille ?"
 
 #, fuzzy
-msgid "Empty the trash?"
-msgstr "Vider la corbeille ?"
-
-#, fuzzy
 msgid "The %(count)s item in the trash is deleted for good. This cannot be undone."
 msgid_plural "The %(count)s items in the trash are deleted for good. This cannot be undone."
 msgstr[0] "%(count)s élément de la corbeille est supprimé définitivement. Cette action est irréversible."

@@ -317,7 +317,7 @@ test('restores every ticked post at once and counts them', async () => {
 	expect(restored).toEqual(expect.arrayContaining([TRASHED.id, '019fb000-0000-7000-8000-000000000004']))
 })
 
-test('counts what a partly refused bulk restore brought back and what it could not', async () => {
+test('counts only what a partly refused bulk restore could not bring back, in one toast', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	serveTwoTrashed('019fb000-0000-7000-8000-000000000004')
 	renderAt('/content/post')
@@ -325,8 +325,11 @@ test('counts what a partly refused bulk restore brought back and what it could n
 
 	await userEvent.click(bulkBar().getByRole('button', { name: 'Restore' }))
 
-	expect(await screen.findByText('1 post has been restored.', { selector: '.godmin-toast' })).toBeInTheDocument()
-	expect(await screen.findByText('1 item could not be restored.')).toBeInTheDocument()
+	expect(await screen.findByText('1 item could not be restored.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	await waitFor(() => expect(restored).toEqual([TRASHED.id]))
+	expect(document.querySelectorAll('.godmin-toast')).toHaveLength(1)
+	expect(screen.queryByText('1 post has been restored.')).not.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 test('shows the bulk restore as busy until it settles', async () => {
@@ -365,15 +368,15 @@ async function tickInAllWhileRestoring(held: Promise<void>) {
 	await userEvent.click(await screen.findByRole('checkbox', { name: 'Fresh Notes' }))
 }
 
-test('keeps a failure off the status the list moved to before the run settled', async () => {
+test('reports a run that settles after the list moved to another status in its toast, the new ticks kept', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	const answer = gate()
 	await tickInAllWhileRestoring(answer.held)
 
 	answer.release()
 
-	await screen.findByText('1 post has been restored.', { selector: '.godmin-toast' })
-	expect(screen.queryByText('1 item could not be restored.')).not.toBeInTheDocument()
+	expect(await screen.findByText('1 item could not be restored.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.getByRole('checkbox', { name: 'Fresh Notes' })).toBeChecked()
 })
 
@@ -384,7 +387,7 @@ test('leaves the focus alone on the status the list moved to before the run sett
 
 	answer.release()
 
-	await screen.findByText('1 post has been restored.', { selector: '.godmin-toast' })
+	await screen.findByText('1 item could not be restored.', { selector: '.godmin-toast' })
 	expect(screen.getByRole('checkbox', { name: 'Fresh Notes' })).toHaveFocus()
 })
 
@@ -408,7 +411,7 @@ function serveTwoTrashedRefusingLater(held: Promise<void>) {
 	)
 }
 
-test('keeps the newer failure and the focus once a run from an earlier visit of the status settles', async () => {
+test('keeps the focus where a newer run left it once a run from an earlier visit of the status settles', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	const answer = gate()
 	serveTwoTrashedRefusingLater(answer.held)
@@ -422,18 +425,18 @@ test('keeps the newer failure and the focus once a run from an earlier visit of 
 	expect(screen.getByRole('checkbox', { name: 'Old Notes' })).not.toBeChecked()
 	await userEvent.click(screen.getAllByRole('button', { name: 'Actions' })[0])
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Restore' }))
-	await screen.findByText('The item could not be restored.')
+	await screen.findByText('The item could not be restored.', { selector: '.godmin-toast' })
 	await waitFor(() => expect(screen.getAllByRole('button', { name: 'Actions' })[0]).toHaveFocus())
 
 	answer.release()
 
 	await screen.findByText('2 posts have been restored.', { selector: '.godmin-toast' })
-	expect(screen.getByText('The item could not be restored.')).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.getAllByRole('button', { name: 'Actions' })[0]).toHaveFocus()
 	expect(screen.getByRole('region', { name: 'Posts' })).not.toHaveFocus()
 })
 
-test('keeps a failure off the type the list moved to before the run settled', async () => {
+test('reports a run that settles after the list moved to another type in its toast, above no list', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	const answer = gate()
 	serveTwoTrashed('019fb000-0000-7000-8000-000000000004', answer.held)
@@ -448,8 +451,8 @@ test('keeps a failure off the type the list moved to before the run settled', as
 	await screen.findByRole('heading', { name: 'Pages', level: 1 })
 	answer.release()
 
-	await screen.findByText('1 post has been restored.', { selector: '.godmin-toast' })
-	expect(screen.queryByText('1 item could not be restored.')).not.toBeInTheDocument()
+	expect(await screen.findByText('1 item could not be restored.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 test('counts the pages a bulk restore brought back as pages', async () => {
@@ -546,7 +549,7 @@ test('opens a post removed by emptying the trash as a missing post', async () =>
 	await goToList(router)
 	await userEvent.click(await tab('Trash'))
 	await userEvent.click(await screen.findByRole('button', { name: 'Empty Trash' }))
-	await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Empty trash' }))
+	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Empty trash' }))
 	await waitFor(() => expect(emptied).toBe(true))
 
 	await goToEditor(router)
@@ -665,7 +668,7 @@ test('keeps the post when the permanent delete is dismissed', async () => {
 	expect(deleted).toEqual([])
 })
 
-test('reports a restore the server refused above the list', async () => {
+test('reports a restore the server refused in a toast, never above the list', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(http.post('/api/content/:id/restore', () => HttpResponse.json({}, { status: 500 })))
 	renderAt('/content/post')
@@ -673,10 +676,11 @@ test('reports a restore the server refused above the list', async () => {
 
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Restore' }))
 
-	expect(await screen.findByText('The item could not be restored.')).toBeInTheDocument()
+	expect(await screen.findByText('The item could not be restored.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('reports a permanent delete the server refused above the list', async () => {
+test('reports a permanent delete the server refused in a toast, never above the list', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(http.delete('/api/content/:id', () => HttpResponse.json({}, { status: 500 })))
 	renderAt('/content/post')
@@ -685,11 +689,13 @@ test('reports a permanent delete the server refused above the list', async () =>
 
 	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Permanently delete' }))
 
-	expect(await screen.findByText('The item could not be permanently deleted.')).toBeInTheDocument()
+	expect(await screen.findByText('The item could not be permanently deleted.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
-test('counts the posts a partly refused bulk permanent delete could not remove', async () => {
+test('counts only the posts a partly refused bulk permanent delete could not remove, in one toast', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	serveTwoTrashed()
 	server.use(
@@ -707,6 +713,10 @@ test('counts the posts a partly refused bulk permanent delete could not remove',
 
 	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Permanently delete' }))
 
-	expect(await screen.findByText('1 item permanently deleted.', { selector: '.godmin-toast' })).toBeInTheDocument()
-	expect(await screen.findByText('1 item could not be permanently deleted.')).toBeInTheDocument()
+	expect(await screen.findByText('1 item could not be permanently deleted.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	await waitFor(() => expect(deleted).toHaveLength(1))
+	expect(document.querySelectorAll('.godmin-toast')).toHaveLength(1)
+	expect(screen.queryByText('1 item permanently deleted.')).not.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

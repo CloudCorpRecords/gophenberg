@@ -274,3 +274,7 @@
 .gophenberg-editor__sidebar-panel {
 	padding: 16px;
 }
+
+.gophenberg-editor__trash.components-button {
+	justify-content: center;
+}

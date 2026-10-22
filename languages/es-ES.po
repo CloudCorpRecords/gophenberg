@@ -1877,9 +1877,6 @@ msgstr[2] "¿Borrar estos %(count)s elementos para siempre? Esto no se puede des
 msgid "Describe %(type)s"
 msgstr "Describir %(type)s"
 
-msgid "Empty the trash?"
-msgstr "¿Vaciar la papelera?"
-
 #, fuzzy
 msgid "Empty trash"
 msgstr "Vaciar papelera"

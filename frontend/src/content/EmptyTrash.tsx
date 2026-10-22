@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { AlertDialog, Button } from '@gophenberg/frontend-sdk'
+import { Button } from '@gophenberg/frontend-sdk'
 import { useToaster } from '@gopherium/godmin'
 import type { ListRun } from '@gopherium/godmin'
+import { ConfirmDialog } from '@gopherium/godmin/dialogs'
 import { formatNumber } from '@gopherium/gottext'
 import { __, _n, sprintf } from '@wordpress/i18n'
 import { useQueryClient } from '@tanstack/react-query'
@@ -46,47 +47,68 @@ function warningOf(count: number): string {
 }
 
 /**
- * Renders the control removing every trashed item of a type for good, and its confirm.
- * @param props - The type whose trash to empty, how many items it holds, and what the list does around the run.
- * @returns The empty trash control and its confirm.
+ * Returns the handler emptying the trash of a type, reporting how it went in a toast and settling the run on the list.
+ * @param type - The type whose trash to empty.
+ * @param list - What the list does around the run.
+ * @param setEmptying - Marks the control busy while the trash empties.
+ * @returns The handler.
  */
-export function EmptyTrash({ type, count, list }: { type: string, count: number, list: ListRun }) {
+function useEmptying(type: string, list: ListRun, setEmptying: (emptying: boolean) => void): () => Promise<void> {
 	const client = useQueryClient()
 	const refresh = useRefresh()
 	const toaster = useToaster()
-	const [open, setOpen] = useState(false)
-	const confirm = async () => {
+	return async () => {
+		setEmptying(true)
 		const settle = list.onStart()
 		let emptied: Emptied
 		try {
 			emptied = await emptyTrash(type)
 		} catch (failure) {
-			return { close: false, error: (failure as Error).message }
+			setEmptying(false)
+			toaster.show((failure as Error).message)
+			settle(false)
+			return
 		}
 		client.removeQueries({
 			queryKey: ['post'],
 			predicate: (query) => (query.state.data as Post | undefined)?.type === type,
 		})
 		await refresh()
-		setOpen(false)
+		setEmptying(false)
 		const toast = emptiedToast(emptied)
 		if (toast !== '') {
 			toaster.show(toast)
 		}
-		settle(undefined, emptied.deleted > 0)
+		settle(emptied.deleted > 0)
 	}
+}
+
+/**
+ * Renders the control removing every trashed item of a type for good, and its confirm.
+ * @param props - The type whose trash to empty, how many items it holds, and what the list does around the run.
+ * @returns The empty trash control, busy while the trash empties, and its confirm while it asks.
+ */
+export function EmptyTrash({ type, count, list }: { type: string, count: number, list: ListRun }) {
+	const [asking, setAsking] = useState(false)
+	const [emptying, setEmptying] = useState(false)
+	const empty = useEmptying(type, list, setEmptying)
 	return (
-		<AlertDialog.Root open={open} onOpenChange={setOpen} onConfirm={confirm}>
-			<AlertDialog.Trigger render={<Button variant="outline" size="compact" />}>
+		<>
+			<Button variant="outline" size="compact" loading={emptying} onClick={() => setAsking(true)}>
 				{__('Empty Trash', 'gophenberg')}
-			</AlertDialog.Trigger>
-			<AlertDialog.Popup
-				intent="irreversible"
-				title={__('Empty the trash?', 'gophenberg')}
-				description={warningOf(count)}
-				confirmButtonText={__('Empty trash', 'gophenberg')}
-				cancelButtonText={__('Cancel', 'gophenberg')}
-			/>
-		</AlertDialog.Root>
+			</Button>
+			{asking ? (
+				<ConfirmDialog
+					confirmLabel={__('Empty trash', 'gophenberg')}
+					cancelLabel={__('Cancel', 'gophenberg')}
+					onConfirm={() => {
+						void empty()
+					}}
+					onClose={() => setAsking(false)}
+				>
+					{warningOf(count)}
+				</ConfirmDialog>
+			) : null}
+		</>
 	)
 }

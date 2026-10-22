@@ -64,7 +64,7 @@ test('the add button of the list header creates a draft and opens it in the edit
 	expect(recorded.bodies).toEqual([{ type: 'post', title: '', fields: {} }])
 })
 
-test('the add button of the list header reports a failure above the list without navigating away', async () => {
+test('the add button of the list header reports a failure in a toast without navigating away', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
 		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
@@ -74,10 +74,30 @@ test('the add button of the list header reports a failure above the list without
 
 	await userEvent.click(await headerAddNew())
 
-	const notice = await within(screen.getByRole('region', { name: 'Posts' })).findByRole('alert')
-	expect(notice).toHaveTextContent('The draft could not be created.')
+	expect(await screen.findByText('The draft could not be created.', { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.queryByTitle('Editor canvas')).not.toBeInTheDocument()
 	expect(await headerAddNew()).toHaveFocus()
+})
+
+test('the add button of the list header reports the reason the server gave in a toast', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(
+		http.get('/api/content', () => HttpResponse.json({ items: [], total: 0 })),
+		http.post('/api/content', () =>
+			HttpResponse.json({ error: 'content: type inactive', code: 'type_inactive' }, { status: 422 }),
+		),
+	)
+	renderAt('/content/post')
+
+	await userEvent.click(await headerAddNew())
+
+	expect(
+		await screen.findByText(
+			'This content type is turned off, so its content is not served or edited. Activate it first.',
+			{ selector: '.godmin-toast' },
+		),
+	).toBeInTheDocument()
 })
 
 /** The post type whose rating field names a default of 5. */

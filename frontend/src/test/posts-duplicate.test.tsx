@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { screen, waitFor, within } from '@testing-library/react'
+import { buttonClasses } from '@gopherium/godmin/testing'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
@@ -30,6 +31,13 @@ const PUBLISHED = {
 	updated_at: '2026-07-20T10:00:00Z',
 }
 
+const SECOND = {
+	...PUBLISHED,
+	id: '019fb000-0000-7000-8000-0000000000bb',
+	slug: 'notes-on-the-next-release',
+	title: 'Notes on the Next Release',
+}
+
 const STORED = {
 	...storedPost,
 	excerpt: 'A short tour of the editor.',
@@ -38,6 +46,8 @@ const STORED = {
 }
 
 const STAMP = '2026-08-01T10:00:00Z'
+
+const TRASHED_REASON = 'This item is in the trash. Restore it first to work on it again.'
 
 const POST_TYPE = {
 	key: 'post',
@@ -117,14 +127,26 @@ beforeEach(() => {
 })
 
 /**
- * Opens the duplicate dialog of the only listed post.
+ * Opens a dialog from the actions menu of a listed post.
+ * @param menuItem - The words the menu item reads.
+ * @param heading - The words the dialog is named by.
+ * @param title - The title of the post, the first listed one unless a test names another.
  * @returns The dialog.
  */
-async function openDuplicate(): Promise<HTMLElement> {
-	await screen.findByText('Welcome to Gophenberg')
-	await userEvent.click(screen.getByRole('button', { name: 'Actions' }))
-	await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate…' }))
-	return screen.findByRole('dialog', { name: 'Duplicate' })
+async function openRowDialog(menuItem: string, heading: string, title = PUBLISHED.title): Promise<HTMLElement> {
+	const row = within((await screen.findByRole('link', { name: title })).closest('tr') as HTMLElement)
+	await userEvent.click(row.getByRole('button', { name: 'Actions' }))
+	await userEvent.click(await screen.findByRole('menuitem', { name: menuItem }))
+	return screen.findByRole('dialog', { name: heading })
+}
+
+/**
+ * Opens the duplicate dialog of a listed post.
+ * @param title - The title of the post, the first listed one unless a test names another.
+ * @returns The dialog.
+ */
+function openDuplicate(title = PUBLISHED.title): Promise<HTMLElement> {
+	return openRowDialog('Duplicate…', 'Duplicate', title)
 }
 
 test('duplicates in a medium dialog headed Duplicate, as WordPress sizes it, its Title field a copy', async () => {
@@ -136,6 +158,19 @@ test('duplicates in a medium dialog headed Duplicate, as WordPress sizes it, its
 	expect(within(dialog).getByRole('heading', { name: 'Duplicate' })).toBeInTheDocument()
 	expect(within(dialog).getByRole('textbox', { name: 'Title' })).toHaveValue('Welcome to Gophenberg (Copy)')
 	expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+})
+
+test('spaces the duplicate form as WordPress spaces a copy, Cancel as accent text before Duplicate', async () => {
+	renderAt('/content/post')
+
+	const dialog = await openDuplicate()
+
+	const form = within(dialog).getByRole('textbox', { name: 'Title' }).closest('form')
+	expect(form).toHaveClass('godmin-modal-body', 'godmin-modal-body--copy')
+	const [cancel, submit, ...rest] = within(form as HTMLElement).getAllByRole('button')
+	expect([cancel.textContent, submit.textContent, rest]).toEqual(['Cancel', 'Duplicate', []])
+	expect([...cancel.classList]).toEqual(buttonClasses('minimal'))
+	expect(submit).toHaveAttribute('type', 'submit')
 })
 
 test('makes one draft holding the title typed and the content, excerpt, parent and fields of the item', async () => {
@@ -236,22 +271,93 @@ test('names the copy in a toast cut at the length the site serves, and reads the
 	expect(listings).toBeGreaterThan(before)
 })
 
-test('shows the reason a refused copy gave inside the dialog, the title kept', async () => {
+/**
+ * Refuses every copy with the reason the trash gives.
+ */
+function refuseCopies() {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
 		http.post('/api/content', () =>
 			HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 }),
 		),
 	)
+}
+
+/**
+ * Types a title in the open duplicate dialog and sends it.
+ * @param dialog - The duplicate dialog.
+ * @param title - The title of the copy.
+ */
+async function duplicateAs(dialog: HTMLElement, title: string) {
+	const field = within(dialog).getByRole('textbox', { name: 'Title' })
+	await userEvent.clear(field)
+	await userEvent.type(field, title)
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
+}
+
+test('shows the reason a refused copy gave in a toast, closing the dialog once the write ends', async () => {
+	refuseCopies()
 	renderAt('/content/post')
 	const dialog = await openDuplicate()
 
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
 
-	expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-		'This item is in the trash. Restore it first to work on it again.',
+	expect(await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })).toBeInTheDocument()
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('offers the title a refused copy left unsaved when the dialog opens again', async () => {
+	refuseCopies()
+	renderAt('/content/post')
+	await duplicateAs(await openDuplicate(), 'A Second Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	const again = await openDuplicate()
+
+	expect(within(again).getByRole('textbox', { name: 'Title' })).toHaveValue('A Second Welcome')
+})
+
+test('offers the title a refused copy left unsaved only on the item it was typed for', async () => {
+	refuseCopies()
+	server.use(http.get('/api/content', () => HttpResponse.json({ items: [PUBLISHED, SECOND], total: 2 })))
+	renderAt('/content/post')
+	await duplicateAs(await openDuplicate(), 'A Second Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	const other = await openDuplicate(SECOND.title)
+
+	expect(within(other).getByRole('textbox', { name: 'Title' })).toHaveValue('Notes on the Next Release (Copy)')
+})
+
+test('opens on a fresh copy title once a later copy lands', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	let refuse = true
+	server.use(
+		http.post('/api/content', async ({ request }) => {
+			if (refuse) {
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			const body = (await request.json()) as Record<string, unknown>
+			return HttpResponse.json({ ...PUBLISHED, id: '019fb000-0000-7000-8000-0000000000aa', title: body.title }, {
+				status: 201,
+			})
+		}),
 	)
-	expect(within(dialog).getByRole('textbox', { name: 'Title' })).toHaveValue('Welcome to Gophenberg (Copy)')
+	renderAt('/content/post')
+	await duplicateAs(await openDuplicate(), 'A Second Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	refuse = false
+	await userEvent.click(within(await openDuplicate()).getByRole('button', { name: 'Duplicate' }))
+	await screen.findByText('"A Second Welcome" successfully created.', { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	const again = await openDuplicate()
+
+	expect(within(again).getByRole('textbox', { name: 'Title' })).toHaveValue('Welcome to Gophenberg (Copy)')
 })
 
 /**
@@ -265,7 +371,7 @@ function refused() {
 test.each([
 	{ refusal: 'a create the server refused with no reason', answer: () => http.post('/api/content', refused) },
 	{ refusal: 'a read of the item that failed', answer: () => http.get(`/api/content/${PUBLISHED.id}`, refused) },
-])('says the item could not be duplicated after $refusal', async ({ answer }) => {
+])('says in a toast the item could not be duplicated after $refusal', async ({ answer }) => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(answer())
 	renderAt('/content/post')
@@ -273,28 +379,157 @@ test.each([
 
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
 
-	expect(await within(dialog).findByRole('alert')).toHaveTextContent('The item could not be duplicated.')
+	expect(await screen.findByText('The item could not be duplicated.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
 })
 
-test('greys Cancel out and keeps the dialog open when Cancel is pressed while the copy is made', async () => {
+/**
+ * Holds the answer to every copy until the returned gate opens.
+ * @returns The gate the answer waits on.
+ */
+function holdCopies(): ReturnType<typeof gate> {
 	const answer = gate()
 	server.use(
-		http.post('/api/content', async () => {
+		http.post('/api/content', async ({ request }) => {
 			await answer.held
-			return HttpResponse.json({ ...PUBLISHED, id: '019fb000-0000-7000-8000-0000000000aa' }, { status: 201 })
+			const body = (await request.json()) as Record<string, unknown>
+			created.push(body)
+			return HttpResponse.json({ ...PUBLISHED, id: '019fb000-0000-7000-8000-0000000000aa', title: body.title }, {
+				status: 201,
+			})
 		}),
 	)
+	return answer
+}
+
+test('keeps the dialog open with Duplicate busy and Cancel live until the copy is made', async () => {
+	const answer = holdCopies()
 	renderAt('/content/post')
 	const dialog = await openDuplicate()
+
 	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
-	const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
 
-	await userEvent.click(cancel)
-
-	expect(cancel).toHaveAttribute('aria-disabled', 'true')
+	const submit = within(dialog).getByRole('button', { name: 'Duplicate' })
+	await waitFor(() => expect(submit.className).toMatch(/__is-loading\b/))
+	expect(submit).toHaveAttribute('aria-disabled', 'true')
+	expect(within(dialog).getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-disabled', 'true')
 	expect(dialog).toBeInTheDocument()
 	answer.release()
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(created).toHaveLength(1)
+})
+
+test('closes the dialog on Cancel while the copy is made, the copy still named in a toast once made', async () => {
+	const answer = holdCopies()
+	renderAt('/content/post')
+	const dialog = await openDuplicate()
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
+
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	answer.release()
+	expect(await screen.findByText('"Welcome to Gophenberg (Copy)" successfully created.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(created).toHaveLength(1)
+})
+
+/**
+ * Sends a copy held until the returned gate opens, then cancels its dialog.
+ * @returns The gate the copy waits on.
+ */
+async function cancelHeldCopy(): Promise<ReturnType<typeof gate>> {
+	const answer = holdCopies()
+	renderAt('/content/post')
+	const dialog = await openDuplicate()
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Duplicate' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	return answer
+}
+
+test.each([
+	{ form: 'Duplicate', menuItem: 'Duplicate…', label: 'Title' },
+	{ form: 'Rename', menuItem: 'Rename…', label: 'Name' },
+])('leaves a $form dialog opened after a cancelled copy open with its text once the copy ends', async (
+	{ form, menuItem, label },
+) => {
+	const answer = await cancelHeldCopy()
+	const opened = await openRowDialog(menuItem, form)
+	const field = within(opened).getByRole('textbox', { name: label })
+	await userEvent.clear(field)
+	await userEvent.type(field, 'A Third Welcome')
+
+	answer.release()
+
+	await screen.findByText('"Welcome to Gophenberg (Copy)" successfully created.', { selector: '.godmin-toast' })
+	await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+	expect(screen.getByRole('dialog', { name: form })).toBe(opened)
+	expect(within(opened).getByRole('textbox', { name: label })).toHaveValue('A Third Welcome')
+})
+
+/**
+ * Holds the first copy until the returned gate opens, refusing either the first copy or the later ones.
+ * @param firstRefused - Whether the first copy is the refused one.
+ * @returns The gate the first copy waits on.
+ */
+function holdFirstCopy(firstRefused: boolean): ReturnType<typeof gate> {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const first = gate()
+	let copies = 0
+	server.use(
+		http.post('/api/content', async ({ request }) => {
+			copies += 1
+			const isFirst = copies === 1
+			const body = (await request.json()) as Record<string, unknown>
+			if (isFirst) {
+				await first.held
+			}
+			if (isFirst === firstRefused) {
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			return HttpResponse.json({ ...PUBLISHED, id: '019fb000-0000-7000-8000-0000000000ab', title: body.title }, {
+				status: 201,
+			})
+		}),
+	)
+	return first
+}
+
+test.each([
+	{
+		order: 'an older cancelled copy is refused after a newer one is made',
+		firstRefused: true,
+		newer: 'A Saved Copy',
+		newerToast: '"A Saved Copy" successfully created.',
+		olderToast: TRASHED_REASON,
+		offered: 'Welcome to Gophenberg (Copy)',
+	},
+	{
+		order: 'an older cancelled copy is made after a newer one is refused',
+		firstRefused: false,
+		newer: 'A Refused Copy',
+		newerToast: TRASHED_REASON,
+		olderToast: '"A Cancelled Copy" successfully created.',
+		offered: 'A Refused Copy',
+	},
+])('offers the title of the latest copy when $order', async (copies) => {
+	const { firstRefused, newer, newerToast, olderToast, offered } = copies
+	const first = holdFirstCopy(firstRefused)
+	renderAt('/content/post')
+	const older = await openDuplicate()
+	await duplicateAs(older, 'A Cancelled Copy')
+	await userEvent.click(within(older).getByRole('button', { name: 'Cancel' }))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	await duplicateAs(await openDuplicate(), newer)
+	await screen.findByText(newerToast, { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	first.release()
+	await screen.findByText(olderToast, { selector: '.godmin-toast' })
+
+	const again = await openDuplicate()
+	expect(within(again).getByRole('textbox', { name: 'Title' })).toHaveValue(offered)
 })
 
 test('closes the dialog on Cancel, making nothing', async () => {

@@ -4,9 +4,11 @@ import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { buttonClasses } from '@gopherium/godmin/testing'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, beforeEach, expect, test, vi } from 'vitest'
+import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
+import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 
-import { holdWrite } from '../content/postWrites'
+import { heldWrites, holdWrite } from '../content/postWrites'
+import { catalogFor } from '../i18n/catalog'
 import { gate } from './gate'
 import { renderAt, renderRoutedAt } from './render'
 import { storedPost } from './postFixture'
@@ -36,6 +38,15 @@ const PUBLISHED = {
 	updated_at: LISTED_VERSION,
 }
 
+const SECOND = {
+	...PUBLISHED,
+	id: '019fb000-0000-7000-8000-0000000000bb',
+	slug: 'notes-on-the-next-release',
+	title: 'Notes on the Next Release',
+}
+
+const TRASHED_REASON = 'This item is in the trash. Restore it first to work on it again.'
+
 const patched: Record<string, unknown>[] = []
 const patchedAs: (string | null)[] = []
 let listings = 0
@@ -62,18 +73,21 @@ beforeEach(() => {
 })
 
 /**
- * Opens the rename dialog of the only listed post.
+ * Opens the rename dialog of a listed post.
+ * @param title - The title of the post, the first listed one unless a test names another.
+ * @param menuItem - The words the menu item reads, the English ones unless a test names others.
+ * @param heading - The words the dialog is named by, the English ones unless a test names others.
  * @returns The dialog.
  */
-async function openRename(): Promise<HTMLElement> {
-	await screen.findByText('Welcome to Gophenberg')
-	await userEvent.click(screen.getByRole('button', { name: 'Actions' }))
-	await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename…' }))
-	return screen.findByRole('dialog', { name: 'Rename' })
+async function openRename(title = PUBLISHED.title, menuItem = 'Rename…', heading = 'Rename'): Promise<HTMLElement> {
+	const row = within((await screen.findByRole('link', { name: title })).closest('tr') as HTMLElement)
+	await userEvent.click(row.getByRole('button', { name: 'Actions' }))
+	await userEvent.click(await screen.findByRole('menuitem', { name: menuItem }))
+	return screen.findByRole('dialog', { name: heading })
 }
 
 /**
- * Types a new name in the open rename dialog and submits it.
+ * Types a new name in the open rename dialog and saves it.
  * @param dialog - The rename dialog.
  * @param name - The new name.
  */
@@ -81,7 +95,19 @@ async function renameTo(dialog: HTMLElement, name: string) {
 	const field = within(dialog).getByRole('textbox', { name: 'Name' })
 	await userEvent.clear(field)
 	await userEvent.type(field, name)
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Rename' }))
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+}
+
+/**
+ * Refuses every rename with the reason the trash gives.
+ */
+function refuseRenames() {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	server.use(
+		http.patch(`/api/content/${PUBLISHED.id}`, () =>
+			HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 }),
+		),
+	)
 }
 
 test('renames in a medium dialog headed Rename, as WordPress sizes it, its Name field holding the title', async () => {
@@ -103,19 +129,49 @@ test('draws Cancel of the rename dialog as accent text, as WordPress Site Editor
 	expect([...within(dialog).getByRole('button', { name: 'Cancel' }).classList]).toEqual(buttonClasses('minimal'))
 })
 
-test('keeps Rename off while the name is blank or unchanged', async () => {
+test('sends the rename with Save, the word WordPress gives its rename button', async () => {
+	renderAt('/content/post')
+
+	const dialog = await openRename()
+
+	expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveAttribute('type', 'submit')
+	expect(within(dialog).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument()
+})
+
+test('sends the Spanish rename with Guardar under the Renombrar heading', async () => {
+	setLocaleData(await catalogFor('es-ES'), 'gophenberg')
+	onTestFinished(() => resetLocaleData({}, 'gophenberg'))
+	renderAt('/content/post')
+
+	const dialog = await openRename(PUBLISHED.title, 'Renombrar…', 'Renombrar')
+
+	expect(within(dialog).getByRole('textbox', { name: 'Nombre' })).toHaveValue('Welcome to Gophenberg')
+	expect(within(dialog).getByRole('button', { name: 'Guardar' })).toHaveAttribute('type', 'submit')
+	expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
+})
+
+test('keeps Save off only while the name is blank, as WordPress keeps its rename', async () => {
 	renderAt('/content/post')
 	const dialog = await openRename()
-	const submit = within(dialog).getByRole('button', { name: 'Rename' })
+	const submit = within(dialog).getByRole('button', { name: 'Save' })
 	const field = within(dialog).getByRole('textbox', { name: 'Name' })
 
-	expect(submit).toHaveAttribute('aria-disabled', 'true')
+	expect(submit).not.toHaveAttribute('aria-disabled', 'true')
 	await userEvent.clear(field)
 	await userEvent.type(field, '   ')
 
 	expect(submit).toHaveAttribute('aria-disabled', 'true')
 	await userEvent.type(field, 'A New Welcome')
 	expect(submit).not.toHaveAttribute('aria-disabled', 'true')
+})
+
+test('sends a name left as it was, as the WordPress rename does', async () => {
+	renderAt('/content/post')
+	const dialog = await openRename()
+
+	await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+	await waitFor(() => expect(patched).toEqual([{ title: 'Welcome to Gophenberg', updated_at: CURRENT_VERSION }]))
 })
 
 test('writes the new name over the version read just before the write, so the newest name wins', async () => {
@@ -157,6 +213,27 @@ test('waits for a write in flight to the item before reading its version, so the
 	await waitFor(() => expect(patched).toEqual([{ title: 'A New Welcome', updated_at: settledVersion }]))
 })
 
+test('closes the dialog the moment Save is pressed, before the write answers, as WordPress does', async () => {
+	const answer = gate()
+	server.use(
+		http.patch(`/api/content/${PUBLISHED.id}`, async ({ request }) => {
+			await answer.held
+			const body = (await request.json()) as Record<string, unknown>
+			patched.push(body)
+			return HttpResponse.json({ ...PUBLISHED, title: body.title })
+		}),
+	)
+	renderAt('/content/post')
+	const dialog = await openRename()
+
+	await renameTo(dialog, 'A New Welcome')
+
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(patched).toEqual([])
+	answer.release()
+	expect(await screen.findByText('Name updated.', { selector: '.godmin-toast' })).toBeInTheDocument()
+})
+
 test('says Name updated, closes the dialog and reads the list again', async () => {
 	renderAt('/content/post')
 	const dialog = await openRename()
@@ -165,7 +242,7 @@ test('says Name updated, closes the dialog and reads the list again', async () =
 	await renameTo(dialog, 'A New Welcome')
 
 	expect(await screen.findByText('Name updated.', { selector: '.godmin-toast' })).toBeInTheDocument()
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 	expect(listings).toBeGreaterThan(before)
 })
 
@@ -193,41 +270,124 @@ test('opens the editor on the new name after a rename from the list, not on a co
 	expect(await screen.findByRole('textbox', { name: 'Title' })).toHaveValue('A New Welcome')
 })
 
-test('keeps the dialog open when Cancel is pressed while the rename runs', async () => {
+test('opens the editor on the new name when it opens while the rename is still in flight', async () => {
 	const answer = gate()
+	let title = PUBLISHED.title
 	server.use(
-		http.patch(`/api/content/${PUBLISHED.id}`, async () => {
+		http.get(`/api/content/${PUBLISHED.id}`, () =>
+			HttpResponse.json({ ...storedPost, title, updated_at: CURRENT_VERSION }),
+		),
+		http.patch(`/api/content/${PUBLISHED.id}`, async ({ request }) => {
+			const body = (await request.json()) as { title: string }
 			await answer.held
-			return HttpResponse.json({ ...PUBLISHED, title: 'A New Welcome' })
+			title = body.title
+			return HttpResponse.json({ ...PUBLISHED, title, updated_at: '2026-07-21T09:00:00Z' })
+		}),
+	)
+	const { client, router } = renderRoutedAt('/content/post')
+	await renameTo(await openRename(), 'A New Welcome')
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	await act(() =>
+		router.navigate({ to: '/content/$typeKey/$postId/edit', params: { typeKey: 'post', postId: PUBLISHED.id } }),
+	)
+
+	await waitFor(() =>
+		expect(heldWrites(client, PUBLISHED.id) ?? screen.queryByRole('textbox', { name: 'Title' })).toBeTruthy(),
+	)
+	answer.release()
+
+	expect(await screen.findByRole('textbox', { name: 'Title' })).toHaveValue('A New Welcome')
+})
+
+test('shows the reason a refused rename gave in a toast, the dialog already closed', async () => {
+	refuseRenames()
+	renderAt('/content/post')
+	const dialog = await openRename()
+
+	await renameTo(dialog, 'A New Welcome')
+
+	expect(await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })).toBeInTheDocument()
+	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('offers the name a refused rename left unsaved when the dialog opens again', async () => {
+	refuseRenames()
+	renderAt('/content/post')
+	await renameTo(await openRename(), 'A New Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+
+	const again = await openRename()
+
+	expect(within(again).getByRole('textbox', { name: 'Name' })).toHaveValue('A New Welcome')
+})
+
+test('offers the name a refused rename left unsaved only on the item it was typed for', async () => {
+	refuseRenames()
+	server.use(
+		http.get('/api/content', () => HttpResponse.json({ items: [PUBLISHED, SECOND], total: 2, per_page: 20 })),
+	)
+	renderAt('/content/post')
+	await renameTo(await openRename(), 'A New Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+
+	const other = await openRename(SECOND.title)
+
+	expect(within(other).getByRole('textbox', { name: 'Name' })).toHaveValue(SECOND.title)
+})
+
+test('opens on the stored name again once a later rename lands', async () => {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	let refuse = true
+	server.use(
+		http.patch(`/api/content/${PUBLISHED.id}`, async ({ request }) => {
+			if (refuse) {
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			const body = (await request.json()) as Record<string, unknown>
+			return HttpResponse.json({ ...PUBLISHED, title: body.title })
 		}),
 	)
 	renderAt('/content/post')
-	const dialog = await openRename()
-	await renameTo(dialog, 'A New Welcome')
+	await renameTo(await openRename(), 'A New Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	refuse = false
+	await userEvent.click(within(await openRename()).getByRole('button', { name: 'Save' }))
+	await screen.findByText('Name updated.', { selector: '.godmin-toast' })
 
-	await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+	const again = await openRename()
 
-	expect(dialog).toBeInTheDocument()
-	answer.release()
-	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	expect(within(again).getByRole('textbox', { name: 'Name' })).toHaveValue('Welcome to Gophenberg')
 })
 
-test('shows the reason a refused rename gave under the field, the typed name kept', async () => {
+test('opens on the saved name when an earlier rename fails after a later one was sent', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const first = gate()
+	let title = PUBLISHED.title
+	let writes = 0
 	server.use(
-		http.patch(`/api/content/${PUBLISHED.id}`, () =>
-			HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 }),
-		),
+		http.get('/api/content', () => HttpResponse.json({ items: [{ ...PUBLISHED, title }], total: 1, per_page: 20 })),
+		http.patch(`/api/content/${PUBLISHED.id}`, async ({ request }) => {
+			writes += 1
+			if (writes === 1) {
+				await first.held
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			title = ((await request.json()) as { title: string }).title
+			return HttpResponse.json({ ...PUBLISHED, title })
+		}),
 	)
 	renderAt('/content/post')
-	const dialog = await openRename()
+	await renameTo(await openRename(), 'A Failed Welcome')
+	await waitFor(() => expect(writes).toBe(1))
+	await renameTo(await openRename(), 'A Saved Welcome')
 
-	await renameTo(dialog, 'A New Welcome')
+	first.release()
 
-	expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-		'This item is in the trash. Restore it first to work on it again.',
-	)
-	expect(within(dialog).getByRole('textbox', { name: 'Name' })).toHaveValue('A New Welcome')
+	await screen.findByText(TRASHED_REASON, { selector: '.godmin-toast' })
+	await screen.findByText('Name updated.', { selector: '.godmin-toast' })
+	const again = await openRename('A Saved Welcome')
+	expect(within(again).getByRole('textbox', { name: 'Name' })).toHaveValue('A Saved Welcome')
 })
 
 test.each([
@@ -239,7 +399,7 @@ test.each([
 		body: { error: 'content: stale', code: 'content_stale_update' },
 	},
 	{ refusal: 'a read of the current version that failed', at: 'get', status: 500, body: {} },
-])('says the name could not be updated after $refusal', async ({ at, status, body }) => {
+])('says in a toast the name could not be updated after $refusal', async ({ at, status, body }) => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	const answer = () => HttpResponse.json(body, { status })
 	const address = `/api/content/${PUBLISHED.id}`
@@ -249,10 +409,10 @@ test.each([
 
 	await renameTo(dialog, 'A New Welcome')
 
-	expect(await within(dialog).findByRole('alert')).toHaveTextContent('The name could not be updated.')
+	expect(await screen.findByText('The name could not be updated.', { selector: '.godmin-toast' })).toBeInTheDocument()
 })
 
-test('says the name could not be updated when the network drops the write', async () => {
+test('says in a toast the name could not be updated when the network drops the write', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(http.patch(`/api/content/${PUBLISHED.id}`, () => HttpResponse.error()))
 	renderAt('/content/post')
@@ -260,5 +420,5 @@ test('says the name could not be updated when the network drops the write', asyn
 
 	await renameTo(dialog, 'A New Welcome')
 
-	expect(await within(dialog).findByRole('alert')).toHaveTextContent('The name could not be updated.')
+	expect(await screen.findByText('The name could not be updated.', { selector: '.godmin-toast' })).toBeInTheDocument()
 })

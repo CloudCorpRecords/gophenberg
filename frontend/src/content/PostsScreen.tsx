@@ -15,9 +15,10 @@ import {
 	sizedView,
 	useListRun,
 	useMediaQuery,
+	useToaster,
 	viewNarrows,
 } from '@gopherium/godmin'
-import type { ListRun, OfferedView } from '@gopherium/godmin'
+import type { OfferedView } from '@gopherium/godmin'
 import { openOnTap, useListView } from '@gopherium/godmin/router'
 import type { ListView } from '@gopherium/godmin/router'
 import { useSession } from '@gopherium/react-auth'
@@ -288,21 +289,19 @@ function PostsTable(props: {
 }
 
 /**
- * Renders the add button of the list header, its failure shown above the list like the failure of any run.
- * @param props - The type the list shows and what the list does around a run.
+ * Renders the add button of the list header, its failure shown in a toast like the failure of any write.
+ * @param props - The type the list shows.
  * @returns The header button.
  */
-function HeaderAddNew({ listed, run }: { listed: ContentType, run: ListRun }) {
+function HeaderAddNew({ listed }: { listed: ContentType }) {
 	const addNew = useAddNew(listed)
+	const toaster = useToaster()
 	return (
 		<Button
 			variant="solid"
 			size="compact"
 			loading={addNew.isPending}
-			onClick={() => {
-				const settle = run.onStart()
-				addNew.mutate(undefined, { onError: (failure) => settle(failure.message, false) })
-			}}
+			onClick={() => addNew.mutate(undefined, { onError: (failure) => toaster.show(failure.message) })}
 		>
 			{addLabelOf(listed)}
 		</Button>
@@ -318,7 +317,7 @@ export function PostsScreen() {
 	const current = useSearch({ strict: false, select: (search) => search.status })
 	const status = current ?? ''
 	const { list, columns, view, settings, posts, waiting, registered } = usePostList(listed, status)
-	const { failure, run, region } = useListRun(`${listed.key} ${status}`, list.onChangeSelection)
+	const { run, region } = useListRun(`${listed.key} ${status}`, list.onChangeSelection)
 	const actions = usePostActions(status, listed, run)
 	const held = useTrashTotal(listed.key, status)
 	const session = useSession().data
@@ -331,7 +330,7 @@ export function PostsScreen() {
 					{offersEmptyTrash(status, posts.data, held, session) ? (
 						<EmptyTrash type={listed.key} count={held} list={run} />
 					) : null}
-					{registered ? <HeaderAddNew listed={listed} run={run} /> : null}
+					{registered ? <HeaderAddNew listed={listed} /> : null}
 				</>
 			}
 			tabs={<StatusTabs current={current} />}
@@ -339,7 +338,6 @@ export function PostsScreen() {
 			listLabel={pluralOf(listed)}
 			listRef={region}
 		>
-			{failure === undefined ? null : <ErrorNotice>{failure}</ErrorNotice>}
 			<PostsTable
 				listed={listed}
 				status={status}
