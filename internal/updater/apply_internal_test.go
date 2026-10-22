@@ -75,7 +75,7 @@ func TestPutBackKeepsASwitchThatTookEffectBeforeItsSaveFailed(t *testing.T) {
 	}
 	saveErr := errors.New("updater: point current at 0.21.0: input/output error")
 
-	err := r.putBack(saveErr)
+	err := r.putBack(StepSwitched, saveErr)
 
 	stands := "current names Gophenberg 0.21.0, so restart Gophenberg to start it"
 	if !errors.Is(err, saveErr) || !strings.Contains(err.Error(), stands) {

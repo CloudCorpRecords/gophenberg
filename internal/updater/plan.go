@@ -24,20 +24,55 @@ const (
 	manualSteps = "https://docs.gophenberg.org/self-hosting/updates-and-backups/"
 )
 
+// ErrRefused marks an update a check before its download refused, its message saying why.
+var ErrRefused = errors.New("updater: a check refused the update")
+
+// refusedError is what a check before the download says of an update it refuses.
+type refusedError struct {
+	err error
+}
+
+// Error says why the check refused the update.
+func (e refusedError) Error() string {
+	return e.err.Error()
+}
+
+// Unwrap returns what the check refused the update with, beside ErrRefused.
+func (e refusedError) Unwrap() []error {
+	return []error{e.err, ErrRefused}
+}
+
 // plan refuses an update this install cannot take, before anything in the install root changes.
 func (r *run) plan(ctx context.Context) error {
 	for _, check := range []func() error{
 		r.official, r.rooted, r.archived, r.servedPostgres, r.themeLoads, r.servedKit, r.runsCurrent, r.notWaiting,
-		r.writable,
+		r.writable, func() error { return r.dumpReady(ctx) }, r.roomy,
 	} {
 		if err := check(); err != nil {
-			return err
+			return refusedError{err: err}
 		}
 	}
-	if err := r.dumpReady(ctx); err != nil {
-		return err
+	return nil
+}
+
+// cannotUpdateError is what a check of the plan says of an install that cannot update itself, and why it cannot.
+type cannotUpdateError struct {
+	reason  Reason
+	message string
+}
+
+// Error says why the install cannot update itself and what to do instead.
+func (e cannotUpdateError) Error() string {
+	return e.message
+}
+
+// ReasonOf returns why the install cannot update itself when err says so, empty for any other error and for none.
+func ReasonOf(err error) Reason {
+	var cannot cannotUpdateError
+	if errors.As(err, &cannot) {
+		return cannot.reason
 	}
-	return r.roomy()
+	return ""
 }
 
 // official refuses a binary the release workflow did not build, since an official archive drops its own plugins.
@@ -45,9 +80,9 @@ func (r *run) official() error {
 	if r.job.Stamp == officialStamp {
 		return nil
 	}
-	return fmt.Errorf("updater: this is a %s build of Gophenberg %s, which an official archive would replace "+
-		"without the plugins built into it, so rebuild it on Gophenberg %s", cmp.Or(r.job.Stamp, "custom"),
-		r.running(), r.to())
+	return cannotUpdateError{reason: CustomBuild, message: fmt.Sprintf("updater: this is a %s build of Gophenberg "+
+		"%s, which an official archive would replace without the plugins built into it, so rebuild it on Gophenberg %s",
+		cmp.Or(r.job.Stamp, "custom"), r.running(), r.to())}
 }
 
 // rooted refuses an install with no install root, like the Docker image, which only a person updates.
@@ -55,8 +90,9 @@ func (r *run) rooted() error {
 	if r.layout.Root != "" {
 		return nil
 	}
-	return fmt.Errorf("updater: %s is empty, so this install cannot switch builds on its own, "+
-		"update by hand to Gophenberg %s as %s shows", r.job.Settings.names.Key("INSTALL_ROOT"), r.to(), manualSteps)
+	return cannotUpdateError{reason: NoInstallRoot, message: fmt.Sprintf("updater: %s is empty, so this install "+
+		"cannot switch builds on its own, update by hand to Gophenberg %s as %s shows",
+		r.job.Settings.names.Key("INSTALL_ROOT"), r.to(), manualSteps)}
 }
 
 // archived refuses a release that publishes no archive for this platform, keeping the one it publishes.

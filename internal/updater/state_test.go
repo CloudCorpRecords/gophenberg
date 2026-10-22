@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gopherium/gophenberg/internal/updater"
 )
@@ -71,6 +72,38 @@ func TestWriteStateKeepsEveryFieldUnderItsFrozenName(t *testing.T) {
 	}
 	if read := readState(t, layout); !reflect.DeepEqual(read, switchedState) {
 		t.Errorf("ReadState() = %+v, want the state written %+v", read, switchedState)
+	}
+}
+
+func TestWriteStateKeepsTheFailureOfAJobBesideTheFrozenFields(t *testing.T) {
+	t.Parallel()
+
+	layout := updater.Layout{Root: t.TempDir()}
+	failed := switchedState
+	failed.Failure = &updater.JobFailure{
+		At: time.Date(2026, 10, 22, 9, 12, 0, 0, time.UTC), From: "0.21.0", To: "0.22.0", Step: updater.StepStage,
+		Error: "updater: refused the archive",
+	}
+
+	writeState(t, layout, failed)
+
+	body, err := os.ReadFile(layout.StateFile())
+	if err != nil {
+		t.Fatalf("reading the state file: %v", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(body, &fields); err != nil {
+		t.Fatalf("reading the state file as JSON: %v", err)
+	}
+	want := map[string]any{
+		"at": "2026-10-22T09:12:00Z", "from": "0.21.0", "to": "0.22.0", "step": "stage",
+		"error": "updater: refused the archive",
+	}
+	if !reflect.DeepEqual(fields["failure"], want) || len(fields) != 8 {
+		t.Errorf("the state file holds %v, want the seven frozen fields and the failure %v", fields, want)
+	}
+	if read := readState(t, layout); !reflect.DeepEqual(read, failed) {
+		t.Errorf("ReadState() = %+v, want the state written %+v", read, failed)
 	}
 }
 

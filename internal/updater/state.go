@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"syscall"
+	"time"
 )
 
 // stateName is the file of the state folder that holds the state of the last update.
@@ -40,15 +41,25 @@ const (
 	StepRolledBack Step = "rolled-back"
 )
 
-// State is what the state file holds of the last update, and the versions that failed their start check.
+// State is what the state file holds: the last update, the versions that failed their start check, the last failure.
 type State struct {
-	Step     Step     `json:"step"`
-	From     string   `json:"from"`
-	To       string   `json:"to"`
-	Attempts int      `json:"attempts"`
-	LongJump bool     `json:"long_jump"`
-	Backup   string   `json:"backup"`
-	Refused  []string `json:"refused"`
+	Step     Step        `json:"step"`
+	From     string      `json:"from"`
+	To       string      `json:"to"`
+	Attempts int         `json:"attempts"`
+	LongJump bool        `json:"long_jump"`
+	Backup   string      `json:"backup"`
+	Refused  []string    `json:"refused"`
+	Failure  *JobFailure `json:"failure,omitempty"`
+}
+
+// JobFailure is how a job failed after it wrote a step: when, from and to which versions, at which step and why.
+type JobFailure struct {
+	At    time.Time `json:"at"`
+	From  string    `json:"from"`
+	To    string    `json:"to"`
+	Step  Step      `json:"step"`
+	Error string    `json:"error"`
 }
 
 // WithEmptyLists returns the state with an empty list of refused versions in place of none, which JSON shows as [].

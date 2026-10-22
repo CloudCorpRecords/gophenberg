@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gopherium/gophenberg/internal/update"
 	"github.com/gopherium/gophenberg/internal/updater"
@@ -234,6 +235,10 @@ func TestApplyStopsWhenAnotherCommandWroteTheStateSinceItRead(t *testing.T) {
 				t.Errorf("Apply() = %v, want the state that changed named once", err)
 			}
 			f.wantPutBack(committedTakenBack)
+			if held := readState(t, f.layout); held.Failure != nil {
+				t.Errorf("the state holds the failure %+v, want the state the other command wrote left as it is",
+					held.Failure)
+			}
 		})
 	}
 }
@@ -402,71 +407,86 @@ func TestApplyBacksUpAReleaseThatRaisedTheMinimumVersionEvenWhenAskedToSkip(t *t
 	wantFile(t, filepath.Join(f.layout.Root, f.backupName()), dumpBody)
 }
 
+// stepCase is a step that fails: the change to the fixture or the job that makes it fail, the step and the error.
+type stepCase struct {
+	change func(*jobFixture, *updater.Job)
+	step   updater.Step
+	text   string
+}
+
+// stepCases are the steps of a job that fail after the job wrote them, by name.
+var stepCases = map[string]stepCase{
+	"an archive whose checksum differs": {
+		change: func(f *jobFixture, _ *updater.Job) { f.site.replace(f.artifact, []byte("another archive")) },
+		step:   updater.StepDownload,
+		text:   "refused the archive, its checksum is",
+	},
+	"an archive no listed key signed": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			body := releaseArchive(f.t, aboutScript(offered, "official", 0))
+			f.artifact = f.site.archive(body, f.site.stranger)
+			f.offer(running, keepOffer)
+		},
+		step: updater.StepDownload,
+		text: "refused the archive, no release or standby key the key list names signed it",
+	},
+	"an archive that holds no binary": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			f.artifact = f.site.archive(packed(f.t, file("LICENSE", "a license")), f.site.release)
+			f.offer(running, keepOffer)
+		},
+		step: updater.StepStage,
+		text: "refused the archive, which holds no gophenberg binary",
+	},
+	"a build that names another version": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			body := releaseArchive(f.t, aboutScript("0.21.1", "official", 0))
+			f.artifact = f.site.archive(body, f.site.release)
+			f.offer(running, keepOffer)
+		},
+		step: updater.StepStage,
+		text: `refused the build of Gophenberg 0.21.0, its about -json names version "0.21.1" and stamp "official"`,
+	},
+	"a build that is not official": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			body := releaseArchive(f.t, aboutScript(offered, "", 0))
+			f.artifact = f.site.archive(body, f.site.release)
+			f.offer(running, keepOffer)
+		},
+		step: updater.StepStage,
+		text: `its about -json names version "0.21.0" and stamp ""`,
+	},
+	"a build that cannot run": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			body := releaseArchive(f.t, aboutScript(offered, "official", 3))
+			f.artifact = f.site.archive(body, f.site.release)
+			f.offer(running, keepOffer)
+		},
+		step: updater.StepStage,
+		text: "refused the build of Gophenberg 0.21.0, its about -json failed: exit status 3",
+	},
+	"a backup that fails": {
+		change: func(f *jobFixture, job *updater.Job) {
+			job.Settings.PgDump = newFakeDump(f.t, "pg_dump (PostgreSQL) 99.0", 2).bin
+		},
+		step: updater.StepBackup,
+		text: "updater: back up the database with",
+	},
+	"a previous link it cannot replace": {
+		change: func(f *jobFixture, _ *updater.Job) {
+			if err := os.MkdirAll(filepath.Join(f.layout.Root, "previous", "kept"), 0o755); err != nil {
+				f.t.Fatalf("making a folder called previous: %v", err)
+			}
+		},
+		step: updater.StepSwitched,
+		text: "updater: point previous at 0.20.0",
+	},
+}
+
 func TestApplyPutsTheInstallRootBackWhenAStepFails(t *testing.T) {
 	t.Parallel()
 
-	for name, failing := range map[string]struct {
-		change func(*jobFixture, *updater.Job)
-		text   string
-	}{
-		"an archive whose checksum differs": {
-			change: func(f *jobFixture, _ *updater.Job) { f.site.replace(f.artifact, []byte("another archive")) },
-			text:   "refused the archive, its checksum is",
-		},
-		"an archive no listed key signed": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				body := releaseArchive(f.t, aboutScript(offered, "official", 0))
-				f.artifact = f.site.archive(body, f.site.stranger)
-				f.offer(running, keepOffer)
-			},
-			text: "refused the archive, no release or standby key the key list names signed it",
-		},
-		"an archive that holds no binary": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				f.artifact = f.site.archive(packed(f.t, file("LICENSE", "a license")), f.site.release)
-				f.offer(running, keepOffer)
-			},
-			text: "refused the archive, which holds no gophenberg binary",
-		},
-		"a build that names another version": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				body := releaseArchive(f.t, aboutScript("0.21.1", "official", 0))
-				f.artifact = f.site.archive(body, f.site.release)
-				f.offer(running, keepOffer)
-			},
-			text: `refused the build of Gophenberg 0.21.0, its about -json names version "0.21.1" and stamp "official"`,
-		},
-		"a build that is not official": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				body := releaseArchive(f.t, aboutScript(offered, "", 0))
-				f.artifact = f.site.archive(body, f.site.release)
-				f.offer(running, keepOffer)
-			},
-			text: `its about -json names version "0.21.0" and stamp ""`,
-		},
-		"a build that cannot run": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				body := releaseArchive(f.t, aboutScript(offered, "official", 3))
-				f.artifact = f.site.archive(body, f.site.release)
-				f.offer(running, keepOffer)
-			},
-			text: "refused the build of Gophenberg 0.21.0, its about -json failed: exit status 3",
-		},
-		"a backup that fails": {
-			change: func(f *jobFixture, job *updater.Job) {
-				job.Settings.PgDump = newFakeDump(f.t, "pg_dump (PostgreSQL) 99.0", 2).bin
-			},
-			text: "updater: back up the database with",
-		},
-		"a previous link it cannot replace": {
-			change: func(f *jobFixture, _ *updater.Job) {
-				if err := os.MkdirAll(filepath.Join(f.layout.Root, "previous", "kept"), 0o755); err != nil {
-					f.t.Fatalf("making a folder called previous: %v", err)
-				}
-			},
-			text: "updater: point previous at 0.20.0",
-		},
-	} {
+	for name, failing := range stepCases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -479,7 +499,39 @@ func TestApplyPutsTheInstallRootBackWhenAStepFails(t *testing.T) {
 
 			wantRefused(t, err, failing.text)
 			f.wantPutBack(committed)
+			f.wantFailure(failing.step, failing.text)
 		})
+	}
+}
+
+func TestApplyRecordsOnlyTheLatestFailure(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	earlier := committed
+	earlier.Failure = &updater.JobFailure{At: f.now.Add(-time.Hour), Step: updater.StepStage, Error: "an earlier job"}
+	writeState(t, f.layout, earlier)
+	f.site.replace(f.artifact, []byte("another archive"))
+
+	_, err := f.job().Apply(t.Context())
+
+	wantRefused(t, err, "refused the archive, its checksum is")
+	f.wantPutBack(committed)
+	f.wantFailure(updater.StepDownload, "refused the archive, its checksum is")
+}
+
+func TestApplyClearsTheFailureAnEarlierJobRecorded(t *testing.T) {
+	t.Parallel()
+
+	f := newJobFixture(t)
+	earlier := committed
+	earlier.Failure = &updater.JobFailure{At: f.now.Add(-time.Hour), Step: updater.StepStage, Error: "an earlier job"}
+	writeState(t, f.layout, earlier)
+
+	state := applied(t, f.job())
+
+	if held := readState(t, f.layout); state.Failure != nil || held.Failure != nil {
+		t.Errorf("Apply() = %+v and the state file holds %+v, want no failure once a job switched", state, held)
 	}
 }
 
