@@ -265,6 +265,42 @@ func TestChooseStopsWhenTheStoreFails(t *testing.T) {
 	}
 }
 
+func TestChooseMarksWhatTheUpdateSiteServesAsNotTakenAndLeavesAStoreThatFailedUnmarked(t *testing.T) {
+	t.Parallel()
+
+	k := newKeys(t)
+	offering := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	unsigned := newUpdateServer(t, k, "", offer("0.21.0", "0.21.0"))
+	body := marshal(t, index(offer("0.21.0", "0.21.0")))
+	unsigned.put(update.IndexPath("stable")+update.SignatureSuffix, signIndex(body, k.stranger))
+	current := newUpdateServer(t, k, "", offer("0.20.0", "0.20.0"))
+	broken := offer("0.21.0", "0.21.0")
+	broken.Release = json.RawMessage(`{"version":"0.21.0","artifacts":{"package":"none"}}`)
+	for name, asked := range map[string]struct {
+		server *updateServer
+		store  *memoryStore
+		named  string
+		marked bool
+	}{
+		"an index no listed key signed":            {unsigned, newStore(), "", true},
+		"a version the update site does not offer": {offering, newStore(), "0.23.0", true},
+		"no version newer than the one it runs":    {current, newStore(), "", true},
+		"a release record it cannot read":          {newUpdateServer(t, k, "", broken), newStore(), "", true},
+		"a store it cannot read": {
+			offering, &memoryStore{values: map[string]string{}, lookupFail: errPlanted, failKey: "site_id"}, "", false,
+		},
+		"a store that cannot keep the serials": {
+			offering, &memoryStore{values: map[string]string{"site_id": siteID}, saveFail: errPlanted}, "", false,
+		},
+	} {
+		_, err := update.Choose(t.Context(), asked.server.config(k), asked.store, asked.named)
+
+		if err == nil || errors.Is(err, update.ErrNotTaken) != asked.marked {
+			t.Errorf("Choose() over %s = %v, want it marked as not taken %t", name, err, asked.marked)
+		}
+	}
+}
+
 func TestChooseLetsGoOfItsIdleConnections(t *testing.T) {
 	t.Parallel()
 

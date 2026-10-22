@@ -14,6 +14,24 @@ import (
 // ErrNoUpdate says the update site offers this site no version newer than the one it runs.
 var ErrNoUpdate = errors.New("update: the update site offers no version newer than the one this site runs")
 
+// ErrNotTaken marks why Choose takes no update from the update site, as against a store it could not use.
+var ErrNotTaken = errors.New("update: the update site serves no update this site takes")
+
+// notTakenError is what the update site or the version named stops Choose with, saying why.
+type notTakenError struct {
+	err error
+}
+
+// Error says why Choose takes no update.
+func (e notTakenError) Error() string {
+	return e.err.Error()
+}
+
+// Unwrap returns what stopped Choose, beside ErrNotTaken.
+func (e notTakenError) Unwrap() []error {
+	return []error{e.err, ErrNotTaken}
+}
+
 // RefusedError refuses a version that failed its start check after an earlier update, never taken again on its own.
 type RefusedError struct {
 	Version string
@@ -40,18 +58,18 @@ func Choose(ctx context.Context, cfg Config, store Settings, named string) (Chos
 	}
 	files, err := cfg.verified(ctx, taken)
 	if err != nil {
-		return Chosen{}, err
+		return Chosen{}, notTakenError{err: err}
 	}
 	if err := raiseSerials(ctx, store, sourceOf(cfg), files.serials()); err != nil {
 		return Chosen{}, err
 	}
 	offer, err := files.index.pick(cfg.Site, named)
 	if err != nil {
-		return Chosen{}, err
+		return Chosen{}, notTakenError{err: err}
 	}
 	release, err := offer.record()
 	if err != nil {
-		return Chosen{}, err
+		return Chosen{}, notTakenError{err: err}
 	}
 	return Chosen{Found: *cfg.Site.found(offer), Release: release, Signers: files.list.Signers()}, nil
 }
