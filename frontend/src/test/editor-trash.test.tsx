@@ -359,6 +359,30 @@ test('gives the focus back to Move to trash as the confirm closes for the trash'
 	expect(await screen.findByRole('heading', { name: 'Posts', level: 1 })).toBeInTheDocument()
 })
 
+test('keeps the reader on a post opened while the trash ran, naming the trashed post in a toast', async () => {
+	const answer = holdTrash()
+	server.use(
+		http.get(`/api/content/${OTHER_ID}`, () =>
+			HttpResponse.json({ ...storedPostWithId(OTHER_ID), title: 'A second post' }),
+		),
+	)
+	const { router } = renderRoutedAt(EDITOR_PATH)
+	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))
+	await userEvent.click(within(await screen.findByRole('dialog', { name: QUESTION })).getByRole('button', {
+		name: 'Move to trash',
+	}))
+	await openEditor(router, OTHER_ID)
+	await waitFor(() => expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('A second post'))
+
+	answer.release()
+
+	expect(await screen.findByText('"Welcome to Gophenberg" moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(trashed).toEqual([storedPost.id])
+	expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('A second post')
+	expect(screen.queryByRole('heading', { name: 'Posts', level: 1 })).not.toBeInTheDocument()
+})
+
 test('trashes the post once confirmed', async () => {
 	renderAt(EDITOR_PATH)
 	await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }))

@@ -4,7 +4,7 @@ import { Button } from '@gophenberg/frontend-sdk/editor'
 import { useToaster } from '@gopherium/godmin'
 import { ConfirmDialog } from '@gopherium/godmin/dialogs'
 import { __, sprintf } from '@wordpress/i18n'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { useRefresh } from './actions'
@@ -17,6 +17,7 @@ import { trashPost } from './api'
  */
 export function TrashPost({ postId, title }: { postId: string, title: string }) {
 	const navigate = useNavigate()
+	const router = useRouter()
 	const refresh = useRefresh()
 	const toaster = useToaster()
 	const [asking, setAsking] = useState(false)
@@ -25,9 +26,12 @@ export function TrashPost({ postId, title }: { postId: string, title: string }) 
 	const named = toaster.name(title === '' ? __('(no title)', 'gophenberg') : title)
 	const trash = () => {
 		setTrashing(true)
+		const editing = router.latestLocation.pathname
 		void trashPost(postId).then(
 			async () => {
-				await navigate({ to: '/content/$typeKey' })
+				if (router.latestLocation.pathname === editing) {
+					await navigate({ to: '/content/$typeKey' })
+				}
 				await refresh([postId])
 				toaster.show(sprintf(__('"%s" moved to the trash.', 'gophenberg'), named))
 			},
