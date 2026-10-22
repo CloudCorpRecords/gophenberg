@@ -10,7 +10,7 @@ import { useEffect } from 'react'
 import { beforeAll, expect, onTestFinished, test } from 'vitest'
 
 import { closeIcon, saveIcon, sidebarIcon, sidebarRtlIcon } from '../index'
-import { BLOCK_EDITOR_STORE, BlockEditorProvider, BlockToolbar, registerCuratedBlocks } from '../editor'
+import { BLOCK_EDITOR_STORE, BlockEditorProvider, BlockToolbar, Button, registerCuratedBlocks } from '../editor'
 
 beforeAll(() => {
 	registerCuratedBlocks()
@@ -137,4 +137,19 @@ test('names the empty row in the words of the toolbar it stands in for, whatever
 
 	expect(empty.name).toBe(live.name)
 	expect(live.buttons).toEqual(expect.arrayContaining(empty.buttons))
+})
+
+test('hands plugins the button the WordPress editor draws, red on an action that removes something', () => {
+	render(
+		<Button variant="secondary" isDestructive __next40pxDefaultSize>
+			Move to trash
+		</Button>,
+	)
+
+	expect(screen.getByRole('button', { name: 'Move to trash' })).toHaveClass(
+		'components-button',
+		'is-secondary',
+		'is-destructive',
+		'is-next-40px-default-size',
+	)
 })
