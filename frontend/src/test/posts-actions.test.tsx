@@ -3,7 +3,7 @@
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
 import { LIST_CHROME_DOMAIN, listChromeCatalogFor } from '@gopherium/godmin'
 import { buttonClasses } from '@gopherium/godmin/testing'
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import { beforeAll, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
@@ -13,7 +13,7 @@ import type { Post } from '../content/api'
 import { catalogFor } from '../i18n/catalog'
 import { listenAt } from './announcements'
 import { gate } from './gate'
-import { renderAt, renderRoutedAt } from './render'
+import { renderAt } from './render'
 import { storedPostWithId } from './postFixture'
 import { siteSettings } from './siteSettings'
 
@@ -327,7 +327,7 @@ test('cuts a long title in the toast at the length the site serves', async () =>
 		.toBeInTheDocument()
 })
 
-test('shows the reason a refused trash gave above the list', async () => {
+test('shows the reason a refused trash gave in a toast, never above the list', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
 		http.delete('/api/content/:id', () =>
@@ -338,8 +338,12 @@ test('shows the reason a refused trash gave above the list', async () => {
 
 	await trashTheListedPost()
 
-	expect(await screen.findByText('This item still holds items nested inside it. Move or delete those first.'))
-		.toBeInTheDocument()
+	expect(
+		await screen.findByText('This item still holds items nested inside it. Move or delete those first.', {
+			selector: '.godmin-toast',
+		}),
+	).toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
@@ -350,7 +354,7 @@ test('returns the focus to the row a refused trash left in place', async () => {
 
 	await trashTheListedPost()
 
-	await screen.findByText('The item could not be moved to the trash.')
+	await screen.findByText('The item could not be moved to the trash.', { selector: '.godmin-toast' })
 	await waitFor(() => expect(screen.getByRole('button', { name: 'Actions' })).toHaveFocus())
 })
 
@@ -361,35 +365,8 @@ test('reports a trash the server refused in its own words', async () => {
 
 	await trashTheListedPost()
 
-	expect(await screen.findByText('The item could not be moved to the trash.')).toBeInTheDocument()
-})
-
-test('clears the last failure once the next trash starts', async () => {
-	vi.spyOn(console, 'error').mockImplementation(() => {})
-	const second = gate()
-	let refuse = true
-	server.use(
-		http.delete('/api/content/:id', async () => {
-			if (refuse) {
-				return HttpResponse.json({}, { status: 500 })
-			}
-			await second.held
-			return HttpResponse.json({ ...PUBLISHED, status: 'trash' })
-		}),
-	)
-	renderAt('/content/post')
-	await trashTheListedPost()
-	await screen.findByText('The item could not be moved to the trash.')
-	refuse = false
-
-	await trashTheListedPost()
-
-	await waitFor(() =>
-		expect(screen.queryByText('The item could not be moved to the trash.')).not.toBeInTheDocument(),
-	)
-	expect(screen.getByRole('dialog')).toBeInTheDocument()
-	second.release()
-	await screen.findByText('"Welcome to Gophenberg" moved to the trash.', { selector: '.godmin-toast' })
+	expect(await screen.findByText('The item could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
 })
 
 test('keeps the confirm open when Cancel is pressed while the trash runs', async () => {
@@ -432,39 +409,4 @@ test('speaks Cargando to a Spanish reader while the trash runs, as WordPress es_
 	await waitFor(() => expect(polite()).toContain('Cargando'))
 	answer.release()
 	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-})
-
-test('forgets the failure of one type on the list of another', async () => {
-	vi.spyOn(console, 'error').mockImplementation(() => {})
-	const pageType = { ...BUILT_IN_TYPE, key: 'page', singular_label: 'Page', plural_label: 'Pages', route_word: 'pages' }
-	server.use(
-		http.get('/api/types', () => HttpResponse.json({ items: [BUILT_IN_TYPE, { ...pageType, default: false }] })),
-		http.delete('/api/content/:id', () => HttpResponse.json({}, { status: 500 })),
-	)
-	const { router } = renderRoutedAt('/content/post')
-	await trashTheListedPost()
-	await screen.findByText('The item could not be moved to the trash.')
-
-	await act(async () => {
-		await router.navigate({ to: '/content/$typeKey', params: { typeKey: 'page' } })
-	})
-
-	expect(await screen.findByRole('heading', { name: 'Pages', level: 1 })).toBeInTheDocument()
-	expect(screen.queryByText('The item could not be moved to the trash.')).not.toBeInTheDocument()
-})
-
-test('forgets the last failure once another status is shown', async () => {
-	vi.spyOn(console, 'error').mockImplementation(() => {})
-	server.use(http.delete('/api/content/:id', () => HttpResponse.json({}, { status: 500 })))
-	renderAt('/content/post')
-	await trashTheListedPost()
-	await screen.findByText('The item could not be moved to the trash.')
-
-	await userEvent.click(
-		within(screen.getByRole('navigation', { name: 'Filter by status' })).getByRole('link', { name: 'Published' }),
-	)
-
-	await waitFor(() =>
-		expect(screen.queryByText('The item could not be moved to the trash.')).not.toBeInTheDocument(),
-	)
 })

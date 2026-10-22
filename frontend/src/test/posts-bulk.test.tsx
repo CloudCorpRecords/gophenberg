@@ -128,7 +128,7 @@ test('counts the posts a bulk trash moved in a toast with no undo', async () => 
 	expect(restored).toEqual([])
 })
 
-test('counts what a partly refused bulk trash moved and what it could not', async () => {
+test('counts only what a partly refused bulk trash could not move, in one toast', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	const THIRD = { ...FIRST, id: '019fb000-0000-7000-8000-000000000003', title: 'Third Draft' }
 	listed = [FIRST, SECOND, THIRD]
@@ -147,8 +147,11 @@ test('counts what a partly refused bulk trash moved and what it could not', asyn
 
 	await trashTheTicked()
 
-	expect(await screen.findByText('1 item moved to the trash.', { selector: '.godmin-toast' })).toBeInTheDocument()
-	expect(await screen.findByText('2 items could not be moved to the trash.')).toBeInTheDocument()
+	expect(await screen.findByText('2 items could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(document.querySelectorAll('.godmin-toast')).toHaveLength(1)
+	expect(screen.queryByText('1 item moved to the trash.')).not.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 	expect(screen.getByRole('checkbox', { name: 'Second Thoughts' })).toBeChecked()
 	expect(screen.getByRole('checkbox', { name: 'Third Draft' })).toBeChecked()
 })
@@ -192,7 +195,7 @@ test('forgets the cached copy of a post a partly refused batch still moved', asy
 	})
 	await selectBoth()
 	await trashTheTicked()
-	await screen.findByText('1 item could not be moved to the trash.')
+	await screen.findByText('1 item could not be moved to the trash.', { selector: '.godmin-toast' })
 
 	await act(async () => {
 		await router.navigate({
@@ -204,7 +207,7 @@ test('forgets the cached copy of a post a partly refused batch still moved', asy
 	expect(await screen.findByText(/This item is in the trash/)).toBeInTheDocument()
 })
 
-test('reports a batch the server partly refused and reloads the list', async () => {
+test('reports a batch the server partly refused in a toast and reloads the list', async () => {
 	vi.spyOn(console, 'error').mockImplementation(() => {})
 	server.use(
 		http.delete('/api/content/:id', ({ params }) => {
@@ -221,7 +224,8 @@ test('reports a batch the server partly refused and reloads the list', async () 
 
 	await trashTheTicked()
 
-	expect(await screen.findByText('1 item could not be moved to the trash.')).toBeInTheDocument()
+	expect(await screen.findByText('1 item could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
 	await waitFor(() =>
 		expect(screen.queryByText('Welcome to Gophenberg')).not.toBeInTheDocument(),
 	)

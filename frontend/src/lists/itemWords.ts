@@ -13,7 +13,7 @@ interface RunSentences {
 	named: (name: string) => string
 	/** The toast counting the items a run finished. */
 	finished: (count: number) => string
-	/** The notice counting the items a run could not finish. */
+	/** The toast counting the items a run could not finish. */
 	unfinished: (count: number) => string
 }
 
@@ -30,7 +30,7 @@ function reasonOf<Item>(failures: BulkFailure<Item>[]): string {
  * Returns the words a run over items reads as.
  * @param name - Cuts a name to the length a toast shows.
  * @param nameOf - Returns the name an item is listed under.
- * @param sentences - The toasts and the notice of the run.
+ * @param sentences - The toasts of the run, the one counting its failures included.
  * @returns The words for the items that finished and for the ones that failed, the reason itself for a run over one.
  */
 export function itemWords<Item>(

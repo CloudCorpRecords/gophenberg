@@ -199,10 +199,10 @@ async function refuseTheTrash() {
 	await userEvent.click(await screen.findByRole('button', { name: 'Actions' }))
 	await userEvent.click(await screen.findByRole('menuitem', { name: 'Trash…' }))
 	await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Move to trash' }))
-	await screen.findByText('The item could not be moved to the trash.')
+	await screen.findByText('The item could not be moved to the trash.', { selector: '.godmin-toast' })
 }
 
-test('forgets a failure once Back shows another status', async () => {
+test('keeps a refused trash in its toast once Back shows another status, with no notice above the list', async () => {
 	const { router } = renderRoutedAt('/content/post?status=trash')
 	await screen.findByText('Old Notes')
 	await userEvent.click(tab('All'))
@@ -213,10 +213,12 @@ test('forgets a failure once Back shows another status', async () => {
 	})
 
 	await screen.findByText('Old Notes')
-	expect(screen.queryByText('The item could not be moved to the trash.')).not.toBeInTheDocument()
+	expect(screen.getByText('The item could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('forgets a failure once a pasted address shows another status', async () => {
+test('keeps a refused trash in its toast once a pasted address shows another status, with no notice', async () => {
 	const { router } = renderRoutedAt('/content/post')
 	await refuseTheTrash()
 
@@ -225,7 +227,9 @@ test('forgets a failure once a pasted address shows another status', async () =>
 	})
 
 	await screen.findByText('Old Notes')
-	expect(screen.queryByText('The item could not be moved to the trash.')).not.toBeInTheDocument()
+	expect(screen.getByText('The item could not be moved to the trash.', { selector: '.godmin-toast' }))
+		.toBeInTheDocument()
+	expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 test('shows the status column on All and not on Draft, even after a sort', async () => {
