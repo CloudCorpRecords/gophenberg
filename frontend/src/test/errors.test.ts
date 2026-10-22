@@ -89,6 +89,16 @@ test('writes a limit an error carries with every decimal it holds', () => {
 	expect(held).toContain('0,0001')
 })
 
+test('names the reason an update could not start', () => {
+	const held = errorText({
+		error: 'refused',
+		code: 'update_refused',
+		meta: { reason: 'Gophenberg 0.21.0 needs PostgreSQL 16 or newer' },
+	})
+
+	expect(held).toBe('Gophenberg cannot start this update: Gophenberg 0.21.0 needs PostgreSQL 16 or newer')
+})
+
 test('carries a message for every code the server can answer with', () => {
 	const script = join(repositoryRoot(), 'frontend', 'scripts', 'emittedCodes.sh')
 	const emitted = execFileSync('sh', [script], { cwd: repositoryRoot(), encoding: 'utf8' })

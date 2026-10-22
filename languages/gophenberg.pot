@@ -416,6 +416,9 @@ msgstr ""
 msgid "Another item of this content type already uses that address. Pick a different slug and save again."
 msgstr ""
 
+msgid "Another update is currently in progress."
+msgstr ""
+
 msgid "Appears on"
 msgstr ""
 
@@ -492,6 +495,9 @@ msgid "Choose the language the admin reads in."
 msgstr ""
 
 msgid "Choose the role of %(name)s."
+msgstr ""
+
+msgid "Choose the version to update to."
 msgstr ""
 
 msgid "Clear %(field)s"
@@ -723,6 +729,9 @@ msgid "From %(plugin)s"
 msgstr ""
 
 msgid "Full Size"
+msgstr ""
+
+msgid "Gophenberg cannot start this update: %(reason)s"
 msgstr ""
 
 msgid "Gophenberg checked for updates moments ago. Try again later."
@@ -1666,6 +1675,12 @@ msgid "This file was written in format %(declared)s, and this release reads %(se
 msgstr ""
 
 msgid "This group holds no fields yet."
+msgstr ""
+
+msgid "This install of Gophenberg has no install root, so it updates by hand."
+msgstr ""
+
+msgid "This is a custom build of Gophenberg, so it updates by hand."
 msgstr ""
 
 msgid "This item cannot go straight to that status from the one it holds now. Save it as a draft first, then try again."

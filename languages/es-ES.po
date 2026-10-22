@@ -2133,6 +2133,26 @@ msgid "Gophenberg checked for updates moments ago. Try again later."
 msgstr "Gophenberg ha buscado actualizaciones hace un momento. Inténtalo de nuevo más tarde."
 
 #, fuzzy
+msgid "Another update is currently in progress."
+msgstr "En este momento hay otra actualización en marcha."
+
+#, fuzzy
+msgid "Choose the version to update to."
+msgstr "Elige la versión a la que actualizar."
+
+#, fuzzy
+msgid "Gophenberg cannot start this update: %(reason)s"
+msgstr "Gophenberg no puede empezar esta actualización: %(reason)s"
+
+#, fuzzy
+msgid "This install of Gophenberg has no install root, so it updates by hand."
+msgstr "Esta instalación de Gophenberg no tiene raíz de instalación, así que se actualiza a mano."
+
+#, fuzzy
+msgid "This is a custom build of Gophenberg, so it updates by hand."
+msgstr "Esta es una compilación propia de Gophenberg, así que se actualiza a mano."
+
+#, fuzzy
 msgid "Are you sure you want to move \"%s\" to the trash?"
 msgstr "¿Seguro que quieres mover «%s» a la papelera?"
 
