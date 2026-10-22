@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button, InputControl, Stack } from '@gophenberg/frontend-sdk'
+import { InputControl } from '@gophenberg/frontend-sdk'
 import type { RenderModalProps } from '@gophenberg/frontend-sdk/dataviews'
-import { ErrorNotice, useToaster } from '@gopherium/godmin'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { FormBody, useToaster } from '@gopherium/godmin'
+import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { __, _x, sprintf } from '@wordpress/i18n'
 import { useState } from 'react'
 
 import { RenameModal } from '../lists/RenameModal'
+import type { UnsavedText } from '../lists/unsavedText'
 import { useRefresh } from './actions'
 import { createPost, fetchPost, renamePost } from './api'
 import type { Post } from './api'
 import { shownValues } from './conditions'
-import { writesSettled } from './postWrites'
+import { holdWrite, writesSettled } from './postWrites'
 import type { ContentField } from './types'
 import { useContentType } from './useContentType'
 
@@ -41,49 +42,53 @@ async function duplicated(client: QueryClient, post: Post, title: string, declar
 	return createPost(post.type, draft, fallback)
 }
 
+/** What a row modal of the posts list takes beside the props DataViews hands a modal. */
+interface PostModalProps extends RenderModalProps<Post> {
+	/** The text failed writes left unsaved, offered again when the modal opens for the same item. */
+	unsaved: UnsavedText
+}
+
 /**
- * Renders the modal copying one item into a new draft under the title given, its failure kept inside.
- * @param props - The item and the handler closing the modal.
+ * Renders the modal copying one item into a new draft under the title given.
+ * @param props - The item, the handler closing the modal and the unsaved titles.
  * @returns The duplicate form.
  */
-export function DuplicateModal({ items: [post], closeModal }: RenderModalProps<Post>) {
+export function DuplicateModal({ items: [post], closeModal, unsaved }: PostModalProps) {
 	const client = useQueryClient()
 	const refresh = useRefresh()
 	const toaster = useToaster()
 	const { fields } = useContentType()
-	const [title, setTitle] = useState<string>(sprintf(_x('%s (Copy)', 'post', 'gophenberg'), post.title))
-	const duplicate = useMutation({
-		mutationFn: () => duplicated(client, post, title, fields),
-		onSuccess: async () => {
-			await refresh()
-			toaster.show(sprintf(__('"%s" successfully created.', 'gophenberg'), toaster.name(title)))
-			closeModal?.()
-		},
-	})
+	const [title, setTitle] = useState(
+		() => unsaved.get(post.id) ?? sprintf(_x('%s (Copy)', 'post', 'gophenberg'), post.title),
+	)
+	const [busy, setBusy] = useState(false)
+	const duplicate = () => {
+		setBusy(true)
+		void duplicated(client, post, title, fields)
+			.then(
+				async () => {
+					unsaved.delete(post.id)
+					await refresh()
+					toaster.show(sprintf(__('"%s" successfully created.', 'gophenberg'), toaster.name(title)))
+				},
+				(failure: Error) => {
+					unsaved.set(post.id, title)
+					toaster.show(failure.message)
+				},
+			)
+			.finally(() => closeModal?.())
+	}
 	return (
-		<form
-			onSubmit={(event) => {
-				event.preventDefault()
-				duplicate.mutate()
-			}}
+		<FormBody
+			kind="copy"
+			submitLabel={_x('Duplicate', 'action label', 'gophenberg')}
+			cancelLabel={__('Cancel', 'gophenberg')}
+			busy={busy}
+			onSubmit={duplicate}
+			onCancel={closeModal}
 		>
-			<Stack direction="column" gap="lg">
-				<InputControl
-					label={__('Title', 'gophenberg')}
-					value={title}
-					onChange={(event) => setTitle(event.target.value)}
-				/>
-				{duplicate.error === null ? null : <ErrorNotice>{duplicate.error.message}</ErrorNotice>}
-				<Stack direction="row" gap="sm" justify="flex-end">
-					<Button variant="minimal" disabled={duplicate.isPending} onClick={closeModal}>
-						{__('Cancel', 'gophenberg')}
-					</Button>
-					<Button type="submit" loading={duplicate.isPending} disabled={duplicate.isPending}>
-						{_x('Duplicate', 'action label', 'gophenberg')}
-					</Button>
-				</Stack>
-			</Stack>
-		</form>
+			<InputControl label={__('Title', 'gophenberg')} value={title} onChange={(event) => setTitle(event.target.value)} />
+		</FormBody>
 	)
 }
 
@@ -100,18 +105,19 @@ async function renamed(client: QueryClient, post: Post, title: string): Promise<
 }
 
 /**
- * Renders the modal writing a new title for one item, its failure kept inside under the field.
- * @param props - The item and the handler closing the modal.
+ * Renders the modal writing a new title for one item, closed the moment Save is pressed, its failure in a toast.
+ * @param props - The item, the handler closing the modal and the unsaved titles.
  * @returns The rename form.
  */
-export function RenamePostModal(props: RenderModalProps<Post>) {
+export function RenamePostModal(props: PostModalProps) {
 	const client = useQueryClient()
 	const refresh = useRefresh()
 	return (
 		<RenameModal
 			{...props}
 			nameOf={(post) => post.title}
-			rename={(post, title) => renamed(client, post, title)}
+			idOf={(post) => post.id}
+			rename={(post, title) => holdWrite(client, post.id, renamed(client, post, title))}
 			refresh={(post) => refresh([post.id])}
 		/>
 	)

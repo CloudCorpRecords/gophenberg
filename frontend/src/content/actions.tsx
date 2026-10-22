@@ -11,6 +11,8 @@ import { useCallback, useMemo } from 'react'
 
 import { deleteQuestion, deleteWords } from '../lists/itemWords'
 import type { NameCut } from '../lists/itemWords'
+import { useUnsavedText } from '../lists/unsavedText'
+import type { UnsavedText } from '../lists/unsavedText'
 import { postName, restoreWords, trashQuestion, trashWords } from './actionWords'
 import { deletePost, restorePost, trashPost } from './api'
 import type { Post } from './api'
@@ -27,7 +29,7 @@ export function useRefresh(): (moved?: string[]) => Promise<unknown> {
 		(moved: string[] = []) =>
 			Promise.all([
 				client.invalidateQueries({ queryKey: ['posts'] }),
-				...moved.map((id) => client.removeQueries({ queryKey: ['post', id], exact: true })),
+				...moved.map((id) => client.resetQueries({ queryKey: ['post', id], exact: true })),
 			]),
 		[client],
 	)
@@ -91,12 +93,21 @@ function trashViewActions(
 	]
 }
 
+/** The text failed row forms left unsaved, one store per form. */
+interface UnsavedForms {
+	/** The titles failed copies left unsaved. */
+	copies: UnsavedText
+	/** The names failed renames left unsaved. */
+	renames: UnsavedText
+}
+
 /**
  * Returns the actions offered on the rows of a list outside the trash, the view first and the trash last.
  * @param mine - Whether the session may change a post.
  * @param run - Runs one call over the picked posts.
  * @param name - Cuts a title to the length a toast shows.
  * @param served - Whether the site serves the type the list shows.
+ * @param unsaved - The text failed row forms left unsaved.
  * @returns The view, a primary action DataViews also draws on the row, then the duplicate, offered on every post not
  *   in the trash since every role may create, then the rename and the trash, offered on a post the session may change
  *   that is not in the trash yet.
@@ -106,6 +117,7 @@ function listActions(
 	run: BulkRun<Post>,
 	name: NameCut,
 	served: boolean,
+	unsaved: UnsavedForms,
 ): Action<Post>[] {
 	const confirmLabel = __('Move to trash', 'gophenberg')
 	const changeable = (post: Post) => post.status !== 'trash' && mine(post)
@@ -117,7 +129,7 @@ function listActions(
 			isEligible: (post) => post.status !== 'trash',
 			modalHeader: _x('Duplicate', 'action label', 'gophenberg'),
 			modalFocusOnMount: 'firstContentElement',
-			RenderModal: DuplicateModal,
+			RenderModal: (props) => <DuplicateModal {...props} unsaved={unsaved.copies} />,
 		},
 		{
 			id: 'rename',
@@ -125,7 +137,7 @@ function listActions(
 			isEligible: changeable,
 			modalHeader: __('Rename', 'gophenberg'),
 			modalFocusOnMount: 'firstContentElement',
-			RenderModal: RenamePostModal,
+			RenderModal: (props) => <RenamePostModal {...props} unsaved={unsaved.renames} />,
 		},
 		{
 			id: 'trash',
@@ -177,12 +189,14 @@ export function usePostActions(status: string, listed: ContentType, list: ListRu
 	const run = useRunOver(list)
 	const name = useToaster().name
 	const session = useSession().data
+	const copies = useUnsavedText()
+	const renames = useUnsavedText()
 	const { key, active } = listed
 	return useMemo(() => {
 		const mine = (post: Post) => sessionMayChange(session, post.authorId)
 		if (status === 'trash') {
 			return trashViewActions(mine, run, name, key)
 		}
-		return listActions(mine, run, name, active)
-	}, [active, key, name, run, session, status])
+		return listActions(mine, run, name, active, { copies, renames })
+	}, [active, copies, key, name, renames, run, session, status])
 }
