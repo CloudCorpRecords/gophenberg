@@ -5,5 +5,5 @@ import '@wordpress/dataviews/build-style/style.css'
 
 
 
-export { DataForm, DataViews, DataViewsPicker } from '@wordpress/dataviews'
+export { DataForm, DataViews, DataViewsPicker, filterSortAndPaginate } from '@wordpress/dataviews'
 export type * from '@wordpress/dataviews'
