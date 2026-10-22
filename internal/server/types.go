@@ -20,6 +20,7 @@ type typeResponse struct {
 	PluralLabel   string          `json:"plural_label"`
 	Description   string          `json:"description"`
 	RouteWord     string          `json:"route_word"`
+	DerivedWord   string          `json:"derived_route_word"`
 	Hierarchical  bool            `json:"hierarchical"`
 	Revisions     bool            `json:"revisions"`
 	RevisionCap   int             `json:"revision_cap"`
@@ -59,6 +60,7 @@ func newTypeResponse(t content.Type) typeResponse {
 		PluralLabel:   t.PluralLabel,
 		Description:   t.Description,
 		RouteWord:     t.RouteWord,
+		DerivedWord:   t.DerivedRouteWord(),
 		Hierarchical:  t.Hierarchical,
 		Revisions:     t.Revisions,
 		RevisionCap:   t.RevisionCap,

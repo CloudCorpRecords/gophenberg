@@ -6,9 +6,10 @@ import { FormBody, useToaster } from '@gopherium/godmin'
 import { useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { __, _x, sprintf } from '@wordpress/i18n'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 import { RenameModal } from '../lists/RenameModal'
+import { useCloseWhileOpen } from '../lists/closeWhileOpen'
 import { markLatest } from '../lists/unsavedText'
 import type { UnsavedText } from '../lists/unsavedText'
 import { useRefresh } from './actions'
@@ -63,13 +64,7 @@ export function DuplicateModal({ items: [post], closeModal, unsaved }: PostModal
 		() => unsaved.get(post.id) ?? sprintf(_x('%s (Copy)', 'post', 'gophenberg'), post.title),
 	)
 	const [busy, setBusy] = useState(false)
-	const open = useRef(true)
-	useEffect(() => {
-		open.current = true
-		return () => {
-			open.current = false
-		}
-	}, [])
+	const close = useCloseWhileOpen(closeModal)
 	const duplicate = () => {
 		setBusy(true)
 		const stillLatest = markLatest(unsaved, post.id)
@@ -89,11 +84,7 @@ export function DuplicateModal({ items: [post], closeModal, unsaved }: PostModal
 					toaster.show(failure.message)
 				},
 			)
-			.finally(() => {
-				if (open.current) {
-					closeModal?.()
-				}
-			})
+			.finally(close)
 	}
 	return (
 		<FormBody

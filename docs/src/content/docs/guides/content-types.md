@@ -7,20 +7,48 @@ A content type is one kind of content your site holds. Every site
 starts with Posts. This page shows how to add more kinds, like Pages
 or Guides, and how each kind gets its own addresses.
 
-Open **Content Types** in the admin menu. The table lists every
-registered type, the address it answers under, and what may be done
-to it.
+## The list of types
+
+Open **Content Types** in the admin menu. It is a list like the
+[posts list](/guides/posts/), drawn the way WordPress draws its lists.
+Each row shows the type's name with its key under it, its
+description, the address it answers under, and a Status column. The
+Status column marks the **Default** type, a type that **Nests**, a
+**Closed** one, and a type a plugin declared, as **From** and the
+plugin's name. A type with no description shows a dash.
+
+The newest type comes first. Sort by name or by address from a
+column header. **Created**, the moment each type was registered, is
+hidden at first. Turn it on under **View options**. Search finds a
+type by its plural or singular name, its key or its description, and
+**Add filter** narrows the list to the types that hold one of the
+Status marks. The search, the order and the filter stay in the page
+address, so a reload or a shared link shows the same list.
+
+Every action on a type sits in the menu at the end of its row. On a
+phone the list shows one type per row with its Status marks, and the
+menu sits on the row too.
+
+When something you asked for is done, a short message at the bottom
+of the screen says so. When the server refuses it, that message says
+why, in the server's own words.
 
 ## Registering a type
 
 Press **Add Content Type** and give it a singular and a plural name, like
 Guide and Guides. Gophenberg derives the rest: the plural becomes the
-route word, so Guides answer under `/guides`.
+route word, so Guides answer under `/guides`. **Add** stays off until
+both names are filled in.
 
 The **Description** is optional. Write one sentence about what the
 type holds, like "Every guide this site keeps." Gophenberg stores it
 exactly as you typed it. Posts start with "Manage the posts on this
 site."
+
+When the server refuses the type, for example because another type
+already uses its key, the dialog stays open with what you typed, so
+you can change a name and press **Add** again. Closing the dialog
+forgets what was typed, and the next one starts empty.
 
 The names and descriptions Gophenberg gives its own types, like Posts,
 show in the language you read the admin in while they still hold the
@@ -34,16 +62,20 @@ instead, "Manage the items of this content type.", in the language
 you read the admin in.
 
 The new type appears in the admin menu right away, with the same list
-screen and editor Posts have. Press **Fields** on a type to give its
-items typed fields of their own, covered in
-[fields](/guides/fields/).
+screen and editor Posts have. To give its items typed fields of their
+own, place a field group on it, as [fields](/guides/fields/) explains.
 
 ## Describing a type
 
-**Describe** opens the description of a type so you can rewrite it.
-Empty the field and save to clear it. A type a plugin declared has no
-**Describe** button, because it keeps the description its plugin
-gives it.
+**Describe…** in a type's menu opens its description so you can
+rewrite it. Empty the field and save to clear it. A type a plugin
+declared has no **Describe…**, because it keeps the description its
+plugin gives it.
+
+The dialog closes the moment you press **Save**, as WordPress closes
+its Rename. When the server refuses the change, the next
+**Describe…** on that type opens on what you typed, so you can try
+again. **Change address…** keeps a refused route word the same way.
 
 The description travels with its type in **Export definitions**. A
 file exported by an older release holds no descriptions, and
@@ -63,9 +95,10 @@ default type nests, a child of an item called Page cannot take a
 number as its slug.
 
 One type owns the root of the site instead of a route word. It is
-marked **Default** in the table, and its items answer at `/{slug}`
-directly. Press **Make default** on another type to hand the root
-over.
+marked **Default** in the list, and its items answer at `/{slug}`
+directly. Pick **Make default…** in another type's menu to hand the
+root over. The dialog says where both types will answer before
+anything moves, and it stays open until the change is done.
 
 The type that gives up the root takes a route word made from its
 plural label, so **Posts** moves to `/posts`. When the label makes no
@@ -83,10 +116,11 @@ root, the new type gets its route word the same way, and the import is
 refused before it changes anything when that word is one Gophenberg
 keeps.
 
-**Change address** moves a type to a new route word. Every address of
+**Change address…** moves a type to a new route word. Every address of
 that type moves with it, at once, including nested items. Links kept
 outside your site to the old addresses stop working, which is why the
-dialog asks you to confirm.
+dialog says so above the field. **Move every address** stays off
+while the field is empty.
 
 ## Nesting
 
@@ -98,10 +132,11 @@ carries the chain of its parents: `/pages/about/team` is the page
 Nesting goes at most ten levels deep. An item holding children cannot
 be trashed until its children move or go first.
 
-**Let items nest** turns nesting on for a type, at any time. **Stop
-nesting** turns it off, and is refused while any item of the type
-still sits inside another, the ones in the trash included. Move those
-to the top level first. An imported definitions file meets the same
+**Let items nest** in a type's menu turns nesting on for it, at any
+time. **Stop nesting** turns it off, and is refused while any item of
+the type still sits inside another, the ones in the trash included.
+The message then counts those items. Move them to the top level
+first. An imported definitions file meets the same
 rule: a type it marks flat keeps nesting while its items nest, and the
 plan says so before you apply it. A plugin that marks its own type
 flat meets it too, and the type keeps nesting until those items move.
@@ -112,8 +147,15 @@ flat meets it too, and the type keeps nesting until those items move.
 its archive, and its items stop being served, and everything comes
 back with **Activate**.
 
-**Delete** removes a type for good, and is refused while the type
-still holds content. It asks first, in a dialog naming the type, and
-Cancel has the focus when the dialog opens. When the server refuses,
-the dialog stays open and says why. The default type can be neither
-deactivated nor deleted, so the root always answers.
+**Delete…** removes a type for good, and is refused while the type
+still holds content. It asks first, naming the type, and Cancel has
+the focus when the dialog opens. The dialog closes once the server
+answers, and when the server refuses, the message at the bottom of
+the screen says why. The default type can be neither deactivated nor
+deleted, so the root always answers.
+
+Tick the box at the start of several rows to act on them at once. The
+bar under the list then offers **Activate**, **Deactivate** and
+**Delete…**, each for the ticked types it applies to. One message
+counts the types it changed, or, when some were refused, the ones it
+could not change.

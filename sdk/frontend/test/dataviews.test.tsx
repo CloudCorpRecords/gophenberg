@@ -3,7 +3,7 @@
 import { render, screen } from '@testing-library/react'
 import { expect, test } from 'vitest'
 
-import { DataForm, DataViews } from '../dataviews'
+import { DataForm, DataViews, filterSortAndPaginate } from '../dataviews'
 import type { Field, View } from '../dataviews'
 
 interface Post {
@@ -37,4 +37,16 @@ test('re-exports the list view so screens never import the heavy package directl
 
 test('re-exports the form view', () => {
 	expect(typeof DataForm).toBe('function')
+})
+
+test('re-exports the helper that searches, sorts and pages a list held whole', () => {
+	const posts = [
+		{ id: '1', title: 'Welcome to Gophenberg' },
+		{ id: '2', title: 'Notes on the Next Release' },
+	]
+	const searchable: Field<Post>[] = [{ id: 'title', label: 'Title', enableGlobalSearch: true }]
+
+	const shown = filterSortAndPaginate(posts, { ...view, search: 'notes' }, searchable)
+
+	expect(shown).toEqual({ data: [posts[1]], paginationInfo: { totalItems: 1, totalPages: 1 } })
 })
