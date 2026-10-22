@@ -87,6 +87,22 @@ func (e retryError) Unwrap() error {
 	return e.RefusedError
 }
 
+// SwitchedError reports a job whose switch stands although a step after it failed, so its build waits for a restart.
+type SwitchedError struct {
+	Release string
+	Err     error
+}
+
+// Error says that current names the release and that Gophenberg must restart to start it, with the failure.
+func (e SwitchedError) Error() string {
+	return fmt.Sprintf("updater: current names Gophenberg %s, so restart Gophenberg to start it: %v", e.Release, e.Err)
+}
+
+// Unwrap returns the failure after the switch.
+func (e SwitchedError) Unwrap() error {
+	return e.Err
+}
+
 // Planned is a job whose checks before the download passed, holding the update lock until the rest of it ends.
 type Planned struct {
 	run     *run
@@ -340,7 +356,7 @@ func (r *run) switchBuilds(state State) error {
 // putBack deletes what the job wrote, points previous back and writes back the state it found, unless current moved.
 func (r *run) putBack(at Step, err error) error {
 	if r.switched() {
-		return fmt.Errorf("updater: current names Gophenberg %s, so restart Gophenberg to start it: %w", r.to(), err)
+		return SwitchedError{Release: r.to(), Err: err}
 	}
 	r.removeFiles(r.to())
 	if errors.Is(err, errStateChanged) {
