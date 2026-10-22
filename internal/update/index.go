@@ -29,14 +29,23 @@ func SignIndex(body []byte, key ed25519.PrivateKey) string {
 
 // ReadIndex returns the index of channel body holds once a signer the list names signed it in sig, valid at now.
 func (l KeyList) ReadIndex(body, sig []byte, channel string, now time.Time) (Index, error) {
-	if !signedByList(body, strings.TrimSpace(string(sig)), l) {
+	index, err := l.ReadIndexOfAnyAge(body, sig, channel)
+	if err != nil {
+		return Index{}, err
+	}
+	return index, unexpired("index", index.Expires, now)
+}
+
+// ReadIndexOfAnyAge returns the index of channel as ReadIndex does, but takes it whatever its expiry says.
+func (l KeyList) ReadIndexOfAnyAge(body, sig []byte, channel string) (Index, error) {
+	if !signedBy(body, sig, l.Signers()) {
 		return Index{}, errUnsigned
 	}
 	var index Index
 	if err := json.Unmarshal(body, &index); err != nil {
 		return Index{}, fmt.Errorf("update: refused the index, which is not JSON: %w", err)
 	}
-	if err := readable("index", index.Schema, index.Expires, now); err != nil {
+	if err := knownSchema("index", index.Schema); err != nil {
 		return Index{}, err
 	}
 	if index.Channel != channel {
@@ -45,11 +54,12 @@ func (l KeyList) ReadIndex(body, sig []byte, channel string, now time.Time) (Ind
 	return index, checkOffers(index.Offers)
 }
 
-// signedByList reports whether one of the key list's signers signed body.
-func signedByList(body []byte, sig string, list KeyList) bool {
+// signedBy reports whether one of keys signed body in the one line of sig.
+func signedBy(body, sig []byte, keys []ed25519.PublicKey) bool {
 	digest, _ := signature.Digest(bytes.NewReader(body))
-	for _, key := range list.Signers() {
-		if signature.Verify(key, digest, sig) == nil {
+	line := strings.TrimSpace(string(sig))
+	for _, key := range keys {
+		if signature.Verify(key, digest, line) == nil {
 			return true
 		}
 	}

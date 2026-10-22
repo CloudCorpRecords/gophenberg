@@ -150,7 +150,7 @@ func TestReadKeyListRefusesAKeyItCannotTrustInItsRole(t *testing.T) {
 		_, err := update.ReadKeyList(body, signLines(t, body, k.root1), k.trusted(), now)
 
 		if err == nil || !strings.Contains(err.Error(), tc.text) {
-			t.Errorf("ReadKeyList() of a list with %s = %v, want a refusal saying %q", name, err, tc.text)
+			t.Errorf("ReadKeyList() of a list with %s = %v, want it refused saying %q", name, err, tc.text)
 		}
 	}
 }

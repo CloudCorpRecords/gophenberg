@@ -20,8 +20,7 @@ import (
 // now is the moment every test reads the files at.
 var now = time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
 
-// keys holds the keys one test signs with: two roots, a stranger root, a release key, a standby, a timestamp key
-// and a stranger.
+// keys holds the keys one test signs with: three roots, one a stranger, and four Ed25519 keys, one a stranger.
 type keys struct {
 	root1, root2, strangerRoot            *ecdsa.PrivateKey
 	release, standby, timestamp, stranger ed25519.PrivateKey
@@ -131,10 +130,22 @@ func signIndex(body []byte, key ed25519.PrivateKey) []byte {
 	return []byte(update.SignIndex(body, key) + "\n")
 }
 
-// wantRefused fails t unless err is a refusal carrying text.
+// timestamp returns a timestamp file valid for seven days from now, naming the key list 5 and the stable index 9.
+func timestamp() update.Timestamp {
+	return update.Timestamp{Schema: 1, Expires: now.AddDate(0, 0, 7), Keys: 5, Indexes: map[string]int64{"stable": 9}}
+}
+
+// signedTimestamp returns stamp as JSON and its signature file under key.
+func signedTimestamp(t *testing.T, stamp update.Timestamp, key ed25519.PrivateKey) ([]byte, []byte) {
+	t.Helper()
+	body := marshal(t, stamp)
+	return body, signIndex(body, key)
+}
+
+// wantRefused fails t unless err refuses with text.
 func wantRefused(t *testing.T, err error, text string) {
 	t.Helper()
 	if err == nil || !strings.Contains(err.Error(), text) {
-		t.Errorf("error = %v, want a refusal saying %q", err, text)
+		t.Errorf("error = %v, want it refused saying %q", err, text)
 	}
 }

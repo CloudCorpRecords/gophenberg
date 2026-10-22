@@ -15,6 +15,13 @@ import (
 // MaxFileSize is the most bytes a check reads of one file of the update site.
 const MaxFileSize = 64 << 10
 
+const (
+	// takenBefore names the serial a site took from an earlier check.
+	takenBefore = "taken before"
+	// namedByTimestamp names the serial the timestamp file names.
+	namedByTimestamp = "the timestamp file names"
+)
+
 // Config is what a check needs: the update site, the channel, the trusted roots, the client and the site it is for.
 type Config struct {
 	Address *url.URL
@@ -48,7 +55,7 @@ type signed struct {
 	index Index
 }
 
-// Check fetches and verifies the key list and the index, refuses serials older than the ones taken, finds the update.
+// Check fetches and verifies the key list, the timestamp file and the index, refuses older serials, finds the update.
 func Check(ctx context.Context, cfg Config, taken Serials) (*Found, Serials, error) {
 	defer cfg.Client.CloseIdleConnections()
 	files, err := cfg.verified(ctx, taken)
@@ -63,31 +70,55 @@ func (s signed) serials() Serials {
 	return Serials{Keys: s.list.Serial, Index: s.index.Serial}
 }
 
-// verified fetches and verifies the key list and the index, refusing serials older than the ones taken.
+// verified fetches and verifies the key list, the timestamp file and the index, refusing older serials.
 func (c Config) verified(ctx context.Context, taken Serials) (signed, error) {
 	list, err := c.keyList(ctx)
 	if err != nil {
 		return signed{}, err
 	}
-	if err := notOlder("key list", list.Serial, taken.Keys); err != nil {
+	if err := notOlder("key list", list.Serial, taken.Keys, takenBefore); err != nil {
+		return signed{}, err
+	}
+	named, err := c.namedIndexSerial(ctx, list)
+	if err != nil {
 		return signed{}, err
 	}
 	index, err := c.index(ctx, list)
 	if err != nil {
 		return signed{}, err
 	}
-	if err := notOlder("index", index.Serial, taken.Index); err != nil {
+	if err := notOlder("index", index.Serial, taken.Index, takenBefore); err != nil {
+		return signed{}, err
+	}
+	if err := notOlder("index", index.Serial, named, namedByTimestamp); err != nil {
 		return signed{}, err
 	}
 	return signed{list: list, index: index}, nil
 }
 
-// notOlder returns an error when the serial of the file of kind comes before the one taken last.
-func notOlder(kind string, serial, taken int64) error {
-	if serial < taken {
-		return fmt.Errorf("update: refused the %s of serial %d, older than serial %d taken before", kind, serial, taken)
+// notOlder returns an error when the serial of the file of kind comes before floor, the serial source names.
+func notOlder(kind string, serial, floor int64, source string) error {
+	if serial < floor {
+		return fmt.Errorf("update: refused the %s of serial %d, older than serial %d %s", kind, serial, floor, source)
 	}
 	return nil
+}
+
+// namedIndexSerial returns the index serial the timestamp file names for the channel, refusing a file it cannot take.
+func (c Config) namedIndexSerial(ctx context.Context, list KeyList) (int64, error) {
+	body, sig, err := c.fetchSigned(ctx, TimestampPath)
+	if err != nil {
+		return 0, err
+	}
+	stamp, err := list.ReadTimestamp(body, sig, c.Now())
+	if err != nil {
+		return 0, err
+	}
+	serial, err := stamp.indexOf(c.Channel)
+	if err != nil {
+		return 0, err
+	}
+	return serial, notOlder("key list", list.Serial, stamp.Keys, namedByTimestamp)
 }
 
 // keyList fetches the key list and its signatures and reads them under the trusted roots.
