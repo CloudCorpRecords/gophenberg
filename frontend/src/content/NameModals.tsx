@@ -9,6 +9,7 @@ import { __, _x, sprintf } from '@wordpress/i18n'
 import { useEffect, useRef, useState } from 'react'
 
 import { RenameModal } from '../lists/RenameModal'
+import { markLatest } from '../lists/unsavedText'
 import type { UnsavedText } from '../lists/unsavedText'
 import { useRefresh } from './actions'
 import { createPost, fetchPost, renamePost } from './api'
@@ -71,15 +72,20 @@ export function DuplicateModal({ items: [post], closeModal, unsaved }: PostModal
 	}, [])
 	const duplicate = () => {
 		setBusy(true)
+		const stillLatest = markLatest(unsaved, post.id)
 		void duplicated(client, post, title, fields)
 			.then(
 				async () => {
-					unsaved.delete(post.id)
+					if (stillLatest()) {
+						unsaved.delete(post.id)
+					}
 					await refresh()
 					toaster.show(sprintf(__('"%s" successfully created.', 'gophenberg'), toaster.name(title)))
 				},
 				(failure: Error) => {
-					unsaved.set(post.id, title)
+					if (stillLatest()) {
+						unsaved.set(post.id, title)
+					}
 					toaster.show(failure.message)
 				},
 			)

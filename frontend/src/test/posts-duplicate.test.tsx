@@ -468,6 +468,70 @@ test.each([
 	expect(within(opened).getByRole('textbox', { name: label })).toHaveValue('A Third Welcome')
 })
 
+/**
+ * Holds the first copy until the returned gate opens, refusing either the first copy or the later ones.
+ * @param firstRefused - Whether the first copy is the refused one.
+ * @returns The gate the first copy waits on.
+ */
+function holdFirstCopy(firstRefused: boolean): ReturnType<typeof gate> {
+	vi.spyOn(console, 'error').mockImplementation(() => {})
+	const first = gate()
+	let copies = 0
+	server.use(
+		http.post('/api/content', async ({ request }) => {
+			copies += 1
+			const isFirst = copies === 1
+			const body = (await request.json()) as Record<string, unknown>
+			if (isFirst) {
+				await first.held
+			}
+			if (isFirst === firstRefused) {
+				return HttpResponse.json({ error: 'content: trashed', code: 'content_trashed' }, { status: 422 })
+			}
+			return HttpResponse.json({ ...PUBLISHED, id: '019fb000-0000-7000-8000-0000000000ab', title: body.title }, {
+				status: 201,
+			})
+		}),
+	)
+	return first
+}
+
+test.each([
+	{
+		order: 'an older cancelled copy is refused after a newer one is made',
+		firstRefused: true,
+		newer: 'A Saved Copy',
+		newerToast: '"A Saved Copy" successfully created.',
+		olderToast: TRASHED_REASON,
+		offered: 'Welcome to Gophenberg (Copy)',
+	},
+	{
+		order: 'an older cancelled copy is made after a newer one is refused',
+		firstRefused: false,
+		newer: 'A Refused Copy',
+		newerToast: TRASHED_REASON,
+		olderToast: '"A Cancelled Copy" successfully created.',
+		offered: 'A Refused Copy',
+	},
+])('offers the title of the latest copy when $order', async (copies) => {
+	const { firstRefused, newer, newerToast, olderToast, offered } = copies
+	const first = holdFirstCopy(firstRefused)
+	renderAt('/content/post')
+	const older = await openDuplicate()
+	await duplicateAs(older, 'A Cancelled Copy')
+	await userEvent.click(within(older).getByRole('button', { name: 'Cancel' }))
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+	await duplicateAs(await openDuplicate(), newer)
+	await screen.findByText(newerToast, { selector: '.godmin-toast' })
+	await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+	first.release()
+	await screen.findByText(olderToast, { selector: '.godmin-toast' })
+
+	const again = await openDuplicate()
+	expect(within(again).getByRole('textbox', { name: 'Title' })).toHaveValue(offered)
+})
+
 test('closes the dialog on Cancel, making nothing', async () => {
 	renderAt('/content/post')
 	const dialog = await openDuplicate()
