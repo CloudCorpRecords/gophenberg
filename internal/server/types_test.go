@@ -19,6 +19,7 @@ type typeBody struct {
 	PluralLabel   string    `json:"plural_label"`
 	Description   string    `json:"description"`
 	RouteWord     string    `json:"route_word"`
+	DerivedWord   string    `json:"derived_route_word"`
 	Hierarchical  bool      `json:"hierarchical"`
 	Revisions     bool      `json:"revisions"`
 	RevisionCap   int       `json:"revision_cap"`
@@ -93,6 +94,38 @@ func TestTypeListServesTheBuiltInDescription(t *testing.T) {
 	body := decodeBody[typeListBody](t, recorder)
 	if len(body.Items) != 1 || body.Items[0].Description != "Manage the posts on this site." {
 		t.Errorf("items = %+v, want the post carrying its shipped sentence", body.Items)
+	}
+}
+
+func TestTypeListServesTheWordEachTypeTakesOffTheRoot(t *testing.T) {
+	t.Parallel()
+
+	users := newFakeUserStore()
+	addAda(t, users)
+	types := newFakeTypeStore()
+	resume, model, page := describedCar(), describedCar(), pageType()
+	resume.Key, resume.PluralLabel, resume.RouteWord = "resume", "Résumés", "resumes"
+	model.Key, model.PluralLabel, model.RouteWord = "model", "3D Models", "models"
+	page.PluralLabel = "???"
+	types.register(resume)
+	types.register(model)
+	types.register(page)
+	handler := authedServerWithStores(t, server.Config{Users: users, Content: newFakePostStore(), Types: types})
+
+	recorder := doRequest(t, handler, http.MethodGet, "/api/types", "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	served := map[string]string{}
+	for _, item := range decodeBody[typeListBody](t, recorder).Items {
+		served[item.Key] = item.DerivedWord
+	}
+	want := map[string]string{"post": "posts", "resume": "resumes", "model": "model", "page": "untitled"}
+	for key, word := range want {
+		if served[key] != word {
+			t.Errorf("derived_route_word of %s = %q, want %q", key, served[key], word)
+		}
 	}
 }
 
