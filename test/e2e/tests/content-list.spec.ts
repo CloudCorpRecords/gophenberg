@@ -180,8 +180,9 @@ test('renames an item from its row in a dialog that hands the Name field the foc
 	const field = dialog.getByRole('textbox', { name: 'Name' })
 	await expect(field).toBeFocused()
 	await field.fill(`${title} again`)
-	await dialog.getByRole('button', { name: 'Rename', exact: true }).click()
+	await dialog.getByRole('button', { name: 'Save', exact: true }).click()
 
+	await expect(dialog).toBeHidden()
 	await expect(page.locator('#root').getByText('Name updated.')).toBeVisible()
 	await expect(page.getByRole('link', { name: `${title} again`, exact: true })).toBeVisible()
 })
@@ -294,7 +295,7 @@ test('opens the permanent delete confirm of a row on Cancel, as WordPress does',
 	await expect(page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
 })
 
-test('refuses to trash a page that still holds pages, saying why above the list', async ({ page }) => {
+test('refuses to trash a page that still holds pages, saying why in a toast', async ({ page }) => {
 	await page.goto('/admin/content/page')
 	const team = page.getByRole('row').filter({ has: page.getByRole('link', { name: /Team$/ }) })
 
@@ -302,8 +303,9 @@ test('refuses to trash a page that still holds pages, saying why above the list'
 	await page.getByRole('menuitem', { name: 'Trash…', exact: true }).click()
 	await page.getByRole('dialog').getByRole('button', { name: 'Move to trash', exact: true }).click()
 
-	const list = page.getByRole('region', { name: 'Pages' })
-	await expect(list.getByText('This item still holds items nested inside it. Move or delete those first.')).toBeVisible()
+	const reason = 'This item still holds items nested inside it. Move or delete those first.'
+	await expect(page.locator('.godmin-toast').getByText(reason)).toBeVisible()
+	await expect(page.getByRole('region', { name: 'Pages' }).getByRole('alert')).toHaveCount(0)
 	await expect(page.getByRole('link', { name: /Team$/ })).toBeVisible()
 })
 
