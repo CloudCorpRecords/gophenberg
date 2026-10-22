@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -15,8 +16,10 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/cron"
 	"github.com/gopherium/gophenberg/internal/postgres"
+	"github.com/gopherium/gophenberg/internal/server"
 	"github.com/gopherium/gophenberg/internal/sqlite"
 	"github.com/gopherium/gophenberg/internal/update"
+	"github.com/gopherium/gophenberg/internal/updater"
 	"github.com/gopherium/gophenberg/internal/version"
 )
 
@@ -26,7 +29,7 @@ const updateCheckJob = "core/update-check"
 // channelPattern is what a channel name holds: a lowercase letter, then lowercase letters, digits and hyphens.
 var channelPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// updateSettings carries where and how often a site checks for a newer Gophenberg.
+// updateSettings carries where and how often a site checks for a newer Gophenberg, and what the Updates screen reads.
 type updateSettings struct {
 	address   *url.URL
 	channel   string
@@ -35,13 +38,18 @@ type updateSettings struct {
 	every     time.Duration
 	screenAge time.Duration
 	timeout   time.Duration
+	screen    server.UpdatesScreen
 }
 
-// siteUpdates runs the site's checks for a newer Gophenberg and answers what they stored.
+// siteUpdates runs the site's checks for a newer Gophenberg, answers what they stored and starts an update.
 type siteUpdates struct {
 	settings updateSettings
 	store    update.Settings
 	major    func(context.Context) (int, error)
+	install  updater.Settings
+	stamp    string
+	slots    cron.Store
+	admin    *adminUpdates
 }
 
 // updateSettingsFrom reads the update settings, refusing plain HTTP off loopback and roots beside the official site.
@@ -81,18 +89,21 @@ func rootsFrom(env gonsole.Env, address *url.URL) ([]*ecdsa.PublicKey, error) {
 	return append(update.Roots(), trusted...), nil
 }
 
-// updateTimingsFrom reads the interval, the screen check age, the timeout and whether the site checks on its own.
+// updateTimingsFrom reads the interval, the screen timings, the timeout and whether the site checks on its own.
 func updateTimingsFrom(env gonsole.Env, held *updateSettings) error {
 	for _, asked := range []struct {
 		name     string
 		fallback time.Duration
 		into     *time.Duration
+		bounds   []gonsole.Bound
 	}{
-		{"UPDATE_CHECK_INTERVAL", 12 * time.Hour, &held.every},
-		{"UPDATES_SCREEN_CHECK_AGE", time.Minute, &held.screenAge},
-		{"UPDATE_TIMEOUT", 30 * time.Second, &held.timeout},
+		{"UPDATE_CHECK_INTERVAL", 12 * time.Hour, &held.every, nil},
+		{"UPDATES_SCREEN_CHECK_AGE", time.Minute, &held.screenAge, nil},
+		{"UPDATE_TIMEOUT", 30 * time.Second, &held.timeout, nil},
+		{"UPDATES_SCREEN_PROGRESS_INTERVAL", 2 * time.Second, &held.screen.ProgressInterval, browserTimer},
+		{"UPDATES_SCREEN_RESTART_WAIT", 5 * time.Minute, &held.screen.RestartWait, browserTimer},
 	} {
-		stood, err := env.Duration(asked.name, asked.fallback)
+		stood, err := env.Duration(asked.name, asked.fallback, asked.bounds...)
 		if err != nil {
 			return err
 		}
@@ -125,9 +136,45 @@ func (u siteUpdates) Check(ctx context.Context) (update.Result, error) {
 	return update.Run(ctx, u.settings.config(major), u.store)
 }
 
-// siteUpdatesOf returns the checks of the site compose built, under the update settings.
-func siteUpdatesOf(settings runConfig, built site) siteUpdates {
-	return siteUpdates{settings: settings.updates, store: built.settings, major: built.major}
+// Start runs the checks of the update an administrator asked for, then the rest of it on its own.
+func (u siteUpdates) Start(ctx context.Context, asked server.UpdateStart) error {
+	return u.admin.start(ctx, asked)
+}
+
+// Overview returns what the admin shows: what the checks stored, this binary, its install and the next check.
+func (u siteUpdates) Overview(ctx context.Context) (server.UpdatesOverview, error) {
+	result, resultErr := u.Result(ctx)
+	install, installErr := updater.ReadOverview(u.install)
+	next, nextErr := u.nextCheck(ctx)
+	if err := errors.Join(resultErr, installErr, nextErr); err != nil {
+		return server.UpdatesOverview{}, err
+	}
+	reason := updater.CannotUpdate(u.install, u.stamp)
+	return server.UpdatesOverview{
+		Result: result, Overview: install, Running: version.Version(), CanUpdate: reason == "", CannotUpdate: reason,
+		NextCheck: next,
+	}, nil
+}
+
+// nextCheck returns when the check job runs next, now while it is due, and none while the checks are off.
+func (u siteUpdates) nextCheck(ctx context.Context) (*time.Time, error) {
+	if !u.settings.checks {
+		return nil, nil
+	}
+	next, err := cron.NextRun(ctx, u.slots, updateCheckJob)
+	if now := time.Now(); next.Before(now) {
+		next = now
+	}
+	next = next.UTC()
+	return &next, err
+}
+
+// siteUpdatesOf returns the checks and the install of the site compose built, run by a binary of stamp.
+func siteUpdatesOf(settings runConfig, built site, stamp string) siteUpdates {
+	return siteUpdates{
+		settings: settings.updates, store: built.settings, major: built.major, install: settings.install,
+		stamp: stamp, slots: built.cronStore,
+	}
 }
 
 // updateJobs returns the job that checks for a newer Gophenberg every interval, none while the checks are off.

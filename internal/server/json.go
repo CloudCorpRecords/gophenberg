@@ -15,6 +15,7 @@ import (
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/definitions"
 	"github.com/gopherium/gophenberg/internal/media"
+	"github.com/gopherium/gophenberg/internal/updater"
 )
 
 // decodeKnown reads a single JSON request body into T, refusing attributes T does not declare.
@@ -189,4 +190,6 @@ var domainErrors = []struct {
 	{content.ErrFieldHidden, http.StatusUnprocessableEntity, "field_hidden"},
 	{content.ErrFieldReferenced, http.StatusUnprocessableEntity, "field_referenced"},
 	{content.ErrBacklinksSource, http.StatusUnprocessableEntity, "backlinks_source_unknown"},
+	{updater.ErrUpdateRuns, http.StatusConflict, "update_runs"},
+	{ErrUpdateRefused, http.StatusUnprocessableEntity, "update_refused"},
 }

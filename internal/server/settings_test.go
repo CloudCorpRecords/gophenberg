@@ -403,6 +403,29 @@ func TestSettingsPatchLeavesTheListSettingsAsTheEnvironmentNamedThem(t *testing.
 	}
 }
 
+func TestSettingsGetTellsTheUpdatesScreenHowOftenToAskAndHowLongToWait(t *testing.T) {
+	t.Parallel()
+
+	users := newFakeUserStore()
+	addAda(t, users)
+	cfg := serverConfig(users, newFakePostStore())
+	cfg.Settings = newStoredSettings()
+	cfg.UpdatesScreen = server.UpdatesScreen{ProgressInterval: 1500 * time.Millisecond, RestartWait: 2 * time.Minute}
+	handler := authedServerWithStores(t, cfg)
+
+	recorder := askLocale(handler, http.MethodGet, "/api/settings", "")
+
+	var held struct {
+		Progress *int64 `json:"updates_progress_milliseconds"`
+		Wait     *int64 `json:"updates_restart_wait_milliseconds"`
+	}
+	err := json.Unmarshal(recorder.Body.Bytes(), &held)
+	if err != nil || held.Progress == nil || held.Wait == nil || *held.Progress != 1500 || *held.Wait != 120000 {
+		t.Errorf("GET /api/settings = %d %s, want 1500 and 120000 milliseconds for the Updates screen", recorder.Code,
+			recorder.Body.String())
+	}
+}
+
 func TestSettingsPatchReportsAStoreThatWillNotWrite(t *testing.T) {
 	t.Parallel()
 

@@ -65,6 +65,7 @@ func initializeCoreUpdates(sc *godog.ScenarioContext, s *operatorScenario) {
 	sc.Then(`^the update status lists (?:this version|version "([^"]*)") as refused$`, s.statusRefuses)
 	sc.Then(`^the update status lists no refused version$`, s.statusRefusesNone)
 	sc.Then(`^the update status names the backup taken before the switch$`, s.statusNamesBackup)
+	initializeSiteUpdates(sc, s)
 }
 
 // runOfficialBuild runs this version as an official build from a new install root, backing up with a stand-in pg_dump.

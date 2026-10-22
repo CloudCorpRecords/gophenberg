@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func tree(t *testing.T, root string) map[string]string {
 	return held
 }
 
-// wantPutBack fails t unless the install root of f runs 0.20.0 again with no trace of 0.21.0 and state held.
+// wantPutBack fails t unless f runs 0.20.0 again with no trace of 0.21.0 and the state held, its failure aside.
 func (f *jobFixture) wantPutBack(held updater.State) {
 	f.t.Helper()
 	wantLink(f.t, filepath.Join(f.layout.Root, "current"), filepath.Join("versions", running))
@@ -140,8 +141,27 @@ func (f *jobFixture) wantPutBack(held updater.State) {
 	if partials, _ := filepath.Glob(filepath.Join(f.layout.Backups(), "*.partial")); len(partials) > 0 {
 		f.t.Errorf("the backups folder keeps %v, want no partial backup", partials)
 	}
-	if state := readState(f.t, f.layout); !reflect.DeepEqual(state, held) {
+	state := readState(f.t, f.layout)
+	state.Failure = nil
+	if !reflect.DeepEqual(state, held) {
 		f.t.Errorf("the state after a failed job is %+v, want the state before it %+v", state, held)
+	}
+}
+
+// wantFailure fails t unless the state file of f records the job from 0.20.0 to 0.21.0 failing now at step with text.
+func (f *jobFixture) wantFailure(step updater.Step, text string) {
+	f.t.Helper()
+	failure := readState(f.t, f.layout).Failure
+	if failure == nil || !failure.At.Equal(f.now) {
+		f.t.Errorf("the state after a failed job records the failure %+v, want one at %v", failure, f.now)
+		return
+	}
+	named := *failure
+	named.At, named.Error = time.Time{}, ""
+	want := updater.JobFailure{From: running, To: offered, Step: step}
+	if named != want || !strings.Contains(failure.Error, text) {
+		f.t.Errorf("the state after a failed job records the failure %+v, want the job from %s to %s at the step %s "+
+			"saying %q", failure, running, offered, step, text)
 	}
 }
 

@@ -559,5 +559,10 @@ export function authTemplates(): Record<string, string> {
 export function updateTemplates(): Record<string, string> {
 	return {
 		check_too_soon: __('Gophenberg checked for updates moments ago. Try again later.', DOMAIN),
+		custom_build: __('This is a custom build of Gophenberg, so it updates by hand.', DOMAIN),
+		no_install_root: __('This install of Gophenberg has no install root, so it updates by hand.', DOMAIN),
+		update_refused: __('Gophenberg cannot start this update: %(reason)s', DOMAIN),
+		update_runs: __('Another update is currently in progress.', DOMAIN),
+		version_required: __('Choose the version to update to.', DOMAIN),
 	}
 }

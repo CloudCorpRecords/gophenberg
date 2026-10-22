@@ -41,7 +41,7 @@ func commandLine(
 		Env:        settingsEnv(getenv),
 		Database:   "DATABASE_URL",
 		Open:       handleOpener(getenv),
-		Serve:      postgresOnly(getenv, "serve", exits.keep(serve(plugins))),
+		Serve:      postgresOnly(getenv, "serve", exits.keep(serve(binary{plugins: plugins, stamp: stamp}))),
 		Validate:   validate(accountCommands),
 		Migrations: migrations(getenv),
 		Seed:       postgresOnly(getenv, "seed", composed.seed),
@@ -57,10 +57,10 @@ func coreCommands(cfg accounts.Config, updates ...gonsole.Command) []gonsole.Com
 	return append(append(accounts.Commands(cfg), accounts.Records(cfg), aboutCommand()), updates...)
 }
 
-// serve returns the command that serves the site over the compiled plugins.
-func serve(plugins func(sdk.Deps) ([]sdk.Plugin, error)) func(context.Context, gonsole.Call) error {
+// serve returns the command that serves the site of the binary given.
+func serve(compiled binary) func(context.Context, gonsole.Call) error {
 	return func(ctx context.Context, call gonsole.Call) error {
-		return run(ctx, call.Env.Getenv, call.Stderr, plugins)
+		return serveSite(ctx, call.Env.Getenv, call.Stderr, compiled)
 	}
 }
 

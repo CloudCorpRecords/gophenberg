@@ -23,8 +23,11 @@ const (
 // largestPageCap is the most items one admin page may carry and still be asked of the database.
 const largestPageCap = math.MaxInt32
 
-// longestToast is the longest toast a browser timer holds.
-const longestToast = math.MaxInt32 * time.Millisecond
+// longestTimer is the longest wait a browser timer holds.
+const longestTimer = math.MaxInt32 * time.Millisecond
+
+// browserTimer bounds a duration a browser timer counts down: whole milliseconds, at most the longest wait it holds.
+var browserTimer = []gonsole.Bound{gonsole.WholeMilliseconds(), gonsole.AtMost(int64(longestTimer))}
 
 // listSettingsFrom reads what the admin lists read once from the environment.
 func listSettingsFrom(env gonsole.Env) (server.ListSettings, error) {
@@ -32,8 +35,7 @@ func listSettingsFrom(env gonsole.Env) (server.ListSettings, error) {
 	if err != nil {
 		return server.ListSettings{}, err
 	}
-	held.ToastDuration, err = env.Duration("TOAST_DURATION", server.DefaultToastDuration,
-		gonsole.WholeMilliseconds(), gonsole.AtMost(int64(longestToast)))
+	held.ToastDuration, err = env.Duration("TOAST_DURATION", server.DefaultToastDuration, browserTimer...)
 	if err != nil {
 		return server.ListSettings{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/gopherium/gophenberg/internal/updater"
 )
@@ -125,4 +126,87 @@ func TestReadStatusRefusesAStateFileItCannotRead(t *testing.T) {
 	_, err := updater.ReadStatus(settingsOf(t, f.env))
 
 	wantRefused(t, err, "updater: read the update state "+f.layout.StateFile())
+}
+
+func TestReadOverviewOfAnInstallWithNoRootNamesNoUpdateAndNoBackup(t *testing.T) {
+	t.Parallel()
+
+	overview, err := updater.ReadOverview(settingsOf(t, map[string]string{}))
+
+	want := updater.Overview{Refused: []string{}, Backups: updater.BackupCount{Limit: 3}}
+	if err != nil || !reflect.DeepEqual(overview, want) {
+		t.Errorf("ReadOverview() with no install root = %#v, %v, want %#v", overview, err, want)
+	}
+}
+
+func TestReadOverviewNamesTheRefusedVersionsTheLastUpdateItsFailureAndTheBackups(t *testing.T) {
+	t.Parallel()
+
+	failure := &updater.JobFailure{
+		At: time.Date(2026, 10, 22, 9, 12, 0, 0, time.UTC), Step: updater.StepDownload, Error: "updater: refused",
+	}
+	held := switchedTo
+	held.Step, held.Failure = updater.StepRolledBack, failure
+	f := newGuardFixture(t, held)
+	f.env["GOPHENBERG_UPDATE_BACKUPS_KEEP"] = "5"
+	keepFile(t, f.layout, "backups/0.19.0-20261001T120000Z.dump", "an older dump")
+	keepFile(t, f.layout, longJumpBackup, "a dump")
+
+	overview, err := updater.ReadOverview(settingsOf(t, f.env))
+
+	newest := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	want := updater.Overview{
+		Refused: []string{"0.19.5"},
+		Job:     &updater.LastUpdate{Step: updater.StepRolledBack, From: running, To: offered, Failure: failure},
+		Backups: updater.BackupCount{Kept: 2, Limit: 5, Newest: &newest},
+	}
+	if err != nil || !reflect.DeepEqual(overview, want) {
+		t.Errorf("ReadOverview() = %+v, %v, want %+v", overview, err, want)
+	}
+}
+
+func TestReadOverviewNamesAFailureBeforeTheFirstUpdate(t *testing.T) {
+	t.Parallel()
+
+	failure := &updater.JobFailure{At: time.Now().UTC(), Step: updater.StepStage, Error: "updater: refused the build"}
+	f := newGuardFixture(t, updater.State{Failure: failure})
+
+	overview, err := updater.ReadOverview(settingsOf(t, f.env))
+
+	if err != nil || !reflect.DeepEqual(overview.Job, &updater.LastUpdate{Failure: failure}) {
+		t.Errorf("ReadOverview() = %+v, %v, want the failure alone as the last update", overview, err)
+	}
+}
+
+func TestReadOverviewRefusesAStateFileItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	f := newGuardFixture(t, switchedTo)
+	if err := os.WriteFile(f.layout.StateFile(), []byte("step: switched"), 0o644); err != nil {
+		t.Fatalf("writing the state file: %v", err)
+	}
+
+	_, err := updater.ReadOverview(settingsOf(t, f.env))
+
+	wantRefused(t, err, "updater: read the update state "+f.layout.StateFile())
+}
+
+func TestCannotUpdateNamesWhatThePlanRefusesFirst(t *testing.T) {
+	t.Parallel()
+
+	root := map[string]string{"GOPHENBERG_INSTALL_ROOT": t.TempDir()}
+	for _, tc := range []struct {
+		env   map[string]string
+		stamp string
+		want  updater.Reason
+	}{
+		{root, "official", ""},
+		{root, "", updater.CustomBuild},
+		{map[string]string{}, "official", updater.NoInstallRoot},
+		{map[string]string{}, "", updater.CustomBuild},
+	} {
+		if got := updater.CannotUpdate(settingsOf(t, tc.env), tc.stamp); got != tc.want {
+			t.Errorf("CannotUpdate() of %v under the stamp %q = %q, want %q", tc.env, tc.stamp, got, tc.want)
+		}
+	}
 }

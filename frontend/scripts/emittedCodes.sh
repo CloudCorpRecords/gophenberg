@@ -6,4 +6,5 @@
 		grep -oE '"[a-z_]+"' | tr -d '"'
 	grep -ohE 'Refuse\([A-Za-z.]+, "[a-z_]+"' internal/content/*.go |
 		grep -oE ', "[a-z_]+"' | grep -oE '"[a-z_]+"' | tr -d '"'
+	grep -ohE 'Reason = "[a-z_]+"' internal/updater/*.go | grep -oE '"[a-z_]+"' | tr -d '"'
 } | sort -u

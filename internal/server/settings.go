@@ -73,7 +73,7 @@ func listsOf(cfg Config) ListSettings {
 	return held
 }
 
-// settingsResponse names the values the site chose for itself and the list settings it serves read only.
+// settingsResponse names the values the site chose for itself and the list and screen settings it serves read only.
 type settingsResponse struct {
 	LocaleDefault     string `json:"locale_default"`
 	ContentPerPage    int    `json:"content_per_page"`
@@ -84,6 +84,8 @@ type settingsResponse struct {
 	ToastMilliseconds int64  `json:"toast_milliseconds"`
 	ToastNameLength   int    `json:"toast_name_length"`
 	FormatLocale      string `json:"format_locale"`
+	UpdatesProgress   int64  `json:"updates_progress_milliseconds"`
+	UpdatesRestart    int64  `json:"updates_restart_wait_milliseconds"`
 }
 
 // settingsRequest names the values a caller asks the site to choose.
@@ -157,6 +159,8 @@ func (s *server) chosenSettings(ctx context.Context) (settingsResponse, error) {
 		ToastMilliseconds: s.lists.ToastDuration.Milliseconds(),
 		ToastNameLength:   s.lists.ToastNameLength,
 		FormatLocale:      s.lists.FormatLocale,
+		UpdatesProgress:   s.updatesScreen.ProgressInterval.Milliseconds(),
+		UpdatesRestart:    s.updatesScreen.RestartWait.Milliseconds(),
 	}, nil
 }
 

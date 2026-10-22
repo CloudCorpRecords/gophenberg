@@ -62,7 +62,7 @@ so it takes the default.
 | `GOPHENBERG_HTTP_READ_HEADER_TIMEOUT` | No | `10s` | How long a visitor has to send a request's headers |
 | `GOPHENBERG_HTTP_READ_TIMEOUT` | No | `30s` | How long a visitor has to send a whole request |
 | `GOPHENBERG_HTTP_IDLE_TIMEOUT` | No | `2m` | How long an idle connection waits for its next request |
-| `GOPHENBERG_SHUTDOWN_GRACE` | No | `10s` | How long a stop gives running requests to finish, see [stopping the server](#stopping-the-server) |
+| `GOPHENBERG_SHUTDOWN_GRACE` | No | `10s` | How long a stop gives running requests to finish, the stop after an update started from the admin included, see [stopping the server](#stopping-the-server) |
 | `GOPHENBERG_SHUTDOWN_CANCEL_GRACE` | No | `5s` | How long the requests cancelled after that grace get to end |
 | `GOPHENBERG_SHUTDOWN_STOP_GRACE` | No | `5s` | How long the plugins get to stop after that, and after any other command |
 | `GOPHENBERG_CRON_SECRET` | No | | The secret the host's cron sends to run the [cron jobs](/self-hosting/cron/), at least 32 characters. Empty leaves the cron address off |
@@ -81,6 +81,8 @@ so it takes the default.
 | `GOPHENBERG_TRUSTED_KEYS` | No | | Root keys trusted for an update site other than the official one, as P-256 Multikeys separated by commas, beside the two built into the binary. That site's key list must also name a timestamp key, and the site must serve a timestamp file that has not expired, see [your own copy of the update site](/self-hosting/updates-and-backups/#your-own-copy-of-the-update-site) |
 | `GOPHENBERG_UPDATE_TIMEOUT` | No | `30s` | How long a check has to fetch each file |
 | `GOPHENBERG_UPDATES_SCREEN_CHECK_AGE` | No | `1m` | How long after one check the admin waits before it runs another when asked |
+| `GOPHENBERG_UPDATES_SCREEN_PROGRESS_INTERVAL` | No | `2s` | How often the Updates screen asks for the progress of an update it started, in whole milliseconds from `1ms` to `2147483647ms` |
+| `GOPHENBERG_UPDATES_SCREEN_RESTART_WAIT` | No | `5m` | How long the Updates screen waits for the site to come back after an update before it says the site has not come back, in whole milliseconds from `1ms` to `2147483647ms` |
 | `GOPHENBERG_INSTALL_ROOT` | No | | The install root of a server install, an absolute path that holds each build in `versions/` beside a `current` link naming the one that runs. `update:apply` updates only an install that sets it. Empty, as in the Docker image, means the site only tells you about updates, see [updating a server install](/self-hosting/updates-and-backups/#updating-a-server-install) |
 | `GOPHENBERG_UPDATE_DOWNLOAD_CAP_MB` | No | `200` | The most megabytes an update downloads for the release archive |
 | `GOPHENBERG_UPDATE_DOWNLOAD_TIMEOUT` | No | `10m` | How long an update has to download the release archive |
@@ -453,7 +455,10 @@ visitor used `http` or `https`.
 ## Stopping the server
 
 A stop begins when the server receives `SIGTERM`, or `Ctrl-C` in a
-terminal. From then on it takes no new request, and it:
+terminal. It also begins once an update started from the admin
+switched builds, and that stop ends with exit code 75, see
+[updating from the admin](/self-hosting/updates-and-backups/#updating-from-the-admin).
+From then on it takes no new request, and it:
 
 1. Gives the requests still running `GOPHENBERG_SHUTDOWN_GRACE` to
    finish.
@@ -567,6 +572,9 @@ The server refuses to start, and says why, when:
   2147483647, or stands below the largest page size.
 - `GOPHENBERG_TOAST_DURATION` is not a whole number of milliseconds
   from `1ms` to `2147483647ms`, the longest a browser timer holds.
+- `GOPHENBERG_UPDATES_SCREEN_PROGRESS_INTERVAL` or
+  `GOPHENBERG_UPDATES_SCREEN_RESTART_WAIT` is not a whole number of
+  milliseconds from `1ms` to `2147483647ms`, for the same reason.
 - `GOPHENBERG_TOAST_NAME_LENGTH` is not a positive whole number.
 - `GOPHENBERG_FORMAT_LOCALE` is not a language tag such as `es-ES` or
   `en-GB`.

@@ -87,22 +87,59 @@ func (e retryError) Unwrap() error {
 	return e.RefusedError
 }
 
+// SwitchedError reports a job whose switch stands although a step after it failed, so its build waits for a restart.
+type SwitchedError struct {
+	Release string
+	Err     error
+}
+
+// Error says that current names the release and that Gophenberg must restart to start it, with the failure.
+func (e SwitchedError) Error() string {
+	return fmt.Sprintf("updater: current names Gophenberg %s, so restart Gophenberg to start it: %v", e.Release, e.Err)
+}
+
+// Unwrap returns the failure after the switch.
+func (e SwitchedError) Unwrap() error {
+	return e.Err
+}
+
+// Planned is a job whose checks before the download passed, holding the update lock until the rest of it ends.
+type Planned struct {
+	run     *run
+	release func()
+}
+
 // Apply locks, checks, plans, downloads, stages, backs up and switches, returning the state the job ends at.
 func (j Job) Apply(ctx context.Context) (State, error) {
-	facts, err := serverOf(ctx, j.DB)
+	planned, err := j.Plan(ctx)
 	if err != nil {
 		return State{}, err
+	}
+	return planned.Apply(ctx)
+}
+
+// Plan reads the database server, takes the update lock and runs every check that needs no download.
+func (j Job) Plan(ctx context.Context) (*Planned, error) {
+	facts, err := serverOf(ctx, j.DB)
+	if err != nil {
+		return nil, err
 	}
 	release, err := Lock(ctx, j.DB)
 	if err != nil {
-		return State{}, err
+		return nil, err
 	}
-	defer release()
 	r, err := j.planned(ctx, facts)
 	if err != nil {
-		return State{}, err
+		release()
+		return nil, err
 	}
-	return r.apply(ctx)
+	return &Planned{run: r, release: release}, nil
+}
+
+// Apply downloads, stages, backs up and switches, then lets go of the update lock, returning the state the job ends at.
+func (p *Planned) Apply(ctx context.Context) (State, error) {
+	defer p.release()
+	return p.run.apply(ctx)
 }
 
 // serverOf reads the PostgreSQL major of the server db connects to and the size of its database.
@@ -149,13 +186,16 @@ func (r *run) checkConfig() update.Config {
 	return cfg
 }
 
-// retryHint returns err naming the command that retries the version it refused, when it refused one that failed.
+// retryHint returns err refused when the update site stopped the choice, naming how to retry a version that failed.
 func retryHint(err error) error {
 	var refused update.RefusedError
-	if errors.As(err, &refused) {
-		return retryError{RefusedError: refused}
+	switch {
+	case !errors.Is(err, update.ErrNotTaken):
+		return err
+	case errors.As(err, &refused):
+		return refusedError{err: retryError{RefusedError: refused}}
 	}
-	return err
+	return refusedError{err: err}
 }
 
 // running returns the version of the binary that runs the job.
@@ -185,12 +225,12 @@ func (r *run) apply(ctx context.Context) (State, error) {
 			err = s.run(ctx, &state)
 		}
 		if err != nil {
-			return State{}, r.putBack(err)
+			return State{}, r.putBack(s.name, err)
 		}
 	}
 	state.Step, state.Refused = StepSwitched, lifting(r.held.Refused, r.to())
 	if err := r.switchBuilds(state); err != nil {
-		return State{}, r.putBack(err)
+		return State{}, r.putBack(StepSwitched, err)
 	}
 	return state, nil
 }
@@ -314,15 +354,24 @@ func (r *run) switchBuilds(state State) error {
 }
 
 // putBack deletes what the job wrote, points previous back and writes back the state it found, unless current moved.
-func (r *run) putBack(err error) error {
+func (r *run) putBack(at Step, err error) error {
 	if r.switched() {
-		return fmt.Errorf("updater: current names Gophenberg %s, so restart Gophenberg to start it: %w", r.to(), err)
+		return SwitchedError{Release: r.to(), Err: err}
 	}
 	r.removeFiles(r.to())
 	if errors.Is(err, errStateChanged) {
 		return errors.Join(err, r.putPreviousBack())
 	}
-	return errors.Join(err, r.putPreviousBack(), r.write(r.held))
+	return errors.Join(err, r.putPreviousBack(), r.write(r.failed(at, err)))
+}
+
+// failed returns the state the job found, recording the job's versions, the step at and err as its failure now.
+func (r *run) failed(at Step, err error) State {
+	state := r.held
+	state.Failure = &JobFailure{
+		At: r.job.Check.Now().UTC(), From: r.running(), To: r.to(), Step: at, Error: err.Error(),
+	}
+	return state
 }
 
 // switched reports whether the current link already names the build the job switches to, so the switch stands.

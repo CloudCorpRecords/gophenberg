@@ -17,6 +17,7 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/testdb"
+	"github.com/gopherium/gophenberg/internal/version"
 	"github.com/gopherium/gophenberg/sdk"
 )
 
@@ -31,6 +32,13 @@ func emptyDatabaseURL(t *testing.T) string {
 // noPlugins registers no plugins.
 func noPlugins(_ sdk.Deps) ([]sdk.Plugin, error) {
 	return []sdk.Plugin{}, nil
+}
+
+// run serves the site over the plugins as the serve command of this binary does, until ctx ends or serving fails.
+func run(
+	ctx context.Context, getenv func(string) string, stderr io.Writer, plugins func(sdk.Deps) ([]sdk.Plugin, error),
+) error {
+	return serveSite(ctx, getenv, stderr, binary{plugins: plugins, stamp: version.Stamp()})
 }
 
 func TestRunValidatesItsEnvironment(t *testing.T) {

@@ -13,23 +13,78 @@ import (
 	"github.com/gopherium/gouncer/authkit"
 
 	"github.com/gopherium/gophenberg/internal/update"
+	"github.com/gopherium/gophenberg/internal/updater"
 )
 
-// UpdateChecks is what the update routes ask of the site: what the checks stored, and a check run now.
+// ErrUpdateRefused marks the start of an update that a check before its download refused, its message saying why.
+var ErrUpdateRefused = errors.New("server: the start of the update was refused")
+
+// UpdateChecks is what the update routes ask of the site: its overview, what the checks stored, a check and a start.
 type UpdateChecks interface {
+	Overview(ctx context.Context) (UpdatesOverview, error)
 	Result(ctx context.Context) (update.Result, error)
 	Check(ctx context.Context) (update.Result, error)
+	Start(ctx context.Context, asked UpdateStart) error
 }
 
-// handleUpdatesGet answers what the checks for a newer version stored.
+// UpdateStart is what an administrator asks of the start of an update: the version to update to and whether to retry.
+type UpdateStart struct {
+	Version string `json:"version"`
+	Retry   bool   `json:"retry"`
+}
+
+// UpdatesScreen is how often the Updates screen asks for the progress of an update and how long it waits for a restart.
+type UpdatesScreen struct {
+	ProgressInterval time.Duration
+	RestartWait      time.Duration
+}
+
+// UpdatesOverview is what GET /api/updates answers: what the checks found, this binary, its install and the next check.
+type UpdatesOverview struct {
+	update.Result
+	updater.Overview
+	Running      string         `json:"running"`
+	CanUpdate    bool           `json:"can_update"`
+	CannotUpdate updater.Reason `json:"cannot_update,omitempty"`
+	NextCheck    *time.Time     `json:"next_check"`
+}
+
+// handleUpdatesGet answers the overview of the updates: what the checks stored beside this binary and its install.
 func (s *server) handleUpdatesGet(updates UpdateChecks) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		result, err := updates.Result(r.Context())
+		overview, err := updates.Overview(r.Context())
 		if err != nil {
 			respondDomainError(w, err)
 			return
 		}
-		authkit.Respond(w, http.StatusOK, result)
+		authkit.Respond(w, http.StatusOK, overview)
+	}
+}
+
+// handleUpdatesApply starts the update an administrator asks for and answers the overview while the rest runs.
+func (s *server) handleUpdatesApply(updates UpdateChecks) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		asked, err := decodeKnown[UpdateStart](w, r)
+		if err != nil {
+			respondBodyError(w, err)
+			return
+		}
+		if asked.Version == "" {
+			authkit.RespondError(w, http.StatusUnprocessableEntity, authkit.ErrorResponse{
+				Message: "the start of an update needs the version to update to", Code: "version_required",
+			})
+			return
+		}
+		if err := updates.Start(r.Context(), asked); err != nil {
+			respondDomainError(w, err)
+			return
+		}
+		overview, err := updates.Overview(r.Context())
+		if err != nil {
+			respondDomainError(w, err)
+			return
+		}
+		authkit.Respond(w, http.StatusAccepted, overview)
 	}
 }
 

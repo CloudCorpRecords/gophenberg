@@ -75,11 +75,14 @@ func TestPutBackKeepsASwitchThatTookEffectBeforeItsSaveFailed(t *testing.T) {
 	}
 	saveErr := errors.New("updater: point current at 0.21.0: input/output error")
 
-	err := r.putBack(saveErr)
+	err := r.putBack(StepSwitched, saveErr)
 
 	stands := "current names Gophenberg 0.21.0, so restart Gophenberg to start it"
 	if !errors.Is(err, saveErr) || !strings.Contains(err.Error(), stands) {
 		t.Errorf("putBack() = %v, want it to say the switch stands and to carry %v", err, saveErr)
+	}
+	if held := (SwitchedError{}); !errors.As(err, &held) || held.Release != "0.21.0" {
+		t.Errorf("putBack() = %v, want it marked as a switch that stands for Gophenberg 0.21.0", err)
 	}
 	if _, statErr := os.Stat(layout.Build("0.21.0")); statErr != nil {
 		t.Errorf("the build current names is gone (%v), want it kept", statErr)

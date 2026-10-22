@@ -97,7 +97,7 @@ that flag wants. Flags can go before or after the arguments.
 | `0` | The command finished, printed a help page, or ended a dry run |
 | `1` | The command ran and failed |
 | `2` | The command line was misused, such as an unknown command, a missing argument or a missing flag |
-| `75` | `update:apply` or `update:rollback` pointed `current` at another build, so restart Gophenberg to start it |
+| `75` | `update:apply` or `update:rollback` pointed `current` at another build, or `serve` stopped once an update started from the admin did, so restart Gophenberg to start it |
 | `76` | `serve` started a new build that failed its start check after an update, see [the boot guard](/self-hosting/updates-and-backups/#the-boot-guard) |
 
 Every error goes to standard error, on a line that starts with
@@ -387,6 +387,11 @@ with `serve`, since a run with no command only prints the listing.
 On a SQLite database `serve` exits with code 1 before it opens
 anything, see [on a SQLite database](#on-a-sqlite-database).
 
+Once an update an administrator started from the admin switched
+builds, `serve` stops as it does on `SIGTERM` and exits with code 75,
+so the service manager starts the new build, see
+[updating from the admin](/self-hosting/updates-and-backups/#updating-from-the-admin).
+
 ### version
 
 ```text
@@ -562,7 +567,8 @@ the build that runs, an update that still waits for its first start,
 an install root it cannot write to, a `pg_dump` older than the
 server, and too little free disk. A second `update:apply` while one
 runs stops with `another update runs`. If a step fails, it deletes
-what it wrote and leaves `current` as it was.
+what it wrote, leaves `current` as it was and writes which update
+failed, when, at which step and why, which `update:status` shows.
 
 It needs a PostgreSQL database. It does not run the migrations, the
 new build runs them when it starts.
@@ -621,8 +627,16 @@ refused versions: none
 backups kept: /opt/gophenberg/backups/1.4.0-20261020T120000Z.dump
 ```
 
+After an update that failed at a step, it also prints which update
+failed, when, at which step and why, until the next update starts:
+
+```text
+last failure: from 1.4.1 to 1.4.2, at the step download on 2026-10-22T09:12:00Z: updater: refused the archive, no release or standby key the key list names signed it
+```
+
 With `-json` it answers one document holding `root`, `current`,
 `previous`, `update`, `restore` and `backups`. `update` holds the same
-fields as the `-json` answer of `update:apply`. On an install with no
-install root it says that the install updates by hand. It never opens
-the database.
+fields as the `-json` answer of `update:apply`, and `failure` after an
+update that failed at a step, holding `at`, `from`, `to`, `step` and
+`error`. On an install with no install root it says that the install
+updates by hand. It never opens the database.
