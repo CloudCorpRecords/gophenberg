@@ -482,7 +482,8 @@ each with its signature:
 It checks every signature, refuses a file that expired or that is
 older than the last one it took, and keeps what it found for the
 admin. A check installs nothing. On a server install, `update:apply`
-installs the update when you run it, see
+installs the update when you run it, or an administrator starts it
+from the admin, see
 [updating a server install](#updating-a-server-install). Everywhere
 else, such as in the Docker image, you update by hand as
 [updating](#updating) shows.
@@ -550,19 +551,20 @@ container around it. It keeps each build of Gophenberg in its own
 folder, all under one folder called the install root, and
 `GOPHENBERG_INSTALL_ROOT` names that folder, such as
 `/opt/gophenberg`. With it set, `gophenberg update:apply` updates the
-site from the command line, and the first start of the new build
-checks itself and goes back on its own when it fails.
+site from the command line, an administrator can start the same
+update from the admin, and the first start of the new build checks
+itself and goes back on its own when it fails.
 
 Three kinds of install keep the manual steps:
 
 - **The Docker image**, and any install where `GOPHENBERG_INSTALL_ROOT`
   is empty. Update it as [updating](#updating) shows. `update:apply`
-  refuses with `GOPHENBERG_INSTALL_ROOT is empty` and names the version
-  to update to.
+  and the admin refuse with `GOPHENBERG_INSTALL_ROOT is empty` and name
+  the version to update to.
 - **A binary you built yourself**, which `about` calls a
   `custom build`. An official archive would replace it without the
-  plugins you built into it, so `update:apply` refuses and asks you to
-  rebuild it on the new version.
+  plugins you built into it, so `update:apply` and the admin refuse and
+  ask you to rebuild it on the new version.
 - **A site on SQLite**, since only a PostgreSQL site serves for now.
 
 ### The install root
@@ -578,7 +580,7 @@ The install root then holds:
   previous -> versions/1.4.0             the build to go back to
   downloads/                             the archive while it downloads
   backups/1.4.0-20261020T120000Z.dump    the database just before the update
-  state/update.json                      how far the last update got, and the refused versions
+  state/update.json                      how far the last update got, the refused versions and the last failure
 ```
 
 `current` and `previous` are links. Your service always starts
@@ -648,8 +650,47 @@ gophenberg: restart Gophenberg to start 1.4.1
 The server still runs the old build until you restart it, such as
 with `systemctl restart gophenberg`. When a step fails, `update:apply`
 deletes what it wrote, leaves `current` as it was and exits with code
-1, so nothing changed for the site. A second `update:apply` while one
-runs stops with `another update runs`.
+1, so nothing changed for the site. It writes which update failed,
+when, at which step and why into `state/update.json`, and
+`update:status` shows that failure until the next update starts. A
+second `update:apply` while one runs stops with `another update runs`.
+
+### Updating from the admin
+
+An administrator can start the same update from the Updates screen of
+the admin. Before it answers, the server runs every check of the plan.
+When one refuses, the admin shows the reason `update:apply` gives, and
+nothing changes. Otherwise the server runs the download, the stage,
+the backup and the switch on its own, so closing the page does not stop
+the update. An update started from the admin always takes the backup.
+One update runs at a time, so a second start, from the admin or from
+`update:apply`, stops with `another update runs`.
+
+Once it switched builds, the server stops as it does on `SIGTERM`. It
+takes no new request and gives the requests still running
+`GOPHENBERG_SHUTDOWN_GRACE` to finish, see
+[stopping the server](/self-hosting/configuration/#stopping-the-server).
+Then it exits with code 75, the code `update:apply` asks for a restart
+with, and logs:
+
+```text
+gophenberg: restart Gophenberg to start 1.4.1
+```
+
+So an install root needs a service manager that starts Gophenberg
+again when it exits, such as a systemd service with `Restart=always`.
+The next start runs the new build, and [the boot guard](#the-boot-guard)
+checks it as it does after `update:apply`. Without a service manager,
+the site stays down after the switch until you start it again.
+
+When a step fails, the server deletes what it wrote, leaves `current`
+as it was and keeps serving the build that runs. It writes which update
+failed, when, at which step and why into `state/update.json`, and the
+admin and `update:status` show that failure. When the new build fails
+its start check, it goes back on its own, as
+[a version that fails its check](#a-version-that-fails-its-check)
+shows, and the admin can try that version again once you have fixed
+what failed.
 
 ### The boot guard
 
