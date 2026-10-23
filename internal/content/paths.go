@@ -25,12 +25,10 @@ var ErrTooDeep = errors.New("content: the nesting limit is reached")
 // ErrReservedAddress reports that an address names a place the CMS keeps.
 var ErrReservedAddress = errors.New("content: the address is reserved")
 
-// PaginationAddressReserved returns the refusal for an address the root listing keeps for its
-// numbered pages, naming the address so the message says what to change.
-func PaginationAddressReserved(path string) error {
-	return Refuse(ErrReservedAddress, "pagination_address_reserved",
-		fmt.Sprintf("%s: %q", ErrReservedAddress, path),
-		Details{"path": path})
+// ReservedAddress returns the error naming an address the CMS keeps.
+func ReservedAddress(path string) error {
+	return Refuse(ErrReservedAddress, "address_reserved",
+		fmt.Sprintf("%s: %q", ErrReservedAddress, path), Details{"path": path})
 }
 
 // ErrHoldsChildren reports that content still holds content nested under it.
@@ -102,11 +100,8 @@ func Reparent(t Type, c Content, parent *Content, height int) (Content, error) {
 
 // guardAddress returns the reason an address names a place the CMS keeps, if it does.
 func guardAddress(path string) error {
-	if ReservedRoot(FirstSegment(path)) {
-		return ErrReservedAddress
-	}
-	if RootPagination(path) {
-		return ErrReservedAddress
+	if ReservedRoot(FirstSegment(path)) || RootPagination(path) {
+		return ReservedAddress(path)
 	}
 	return nil
 }
