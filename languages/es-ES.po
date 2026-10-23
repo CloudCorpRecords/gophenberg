@@ -18,6 +18,10 @@ msgstr "%(name)s no se puede usar como nombre de tema. Nombra el archivo zip com
 msgid "%(name)s moves to /%(word)s. Every address of both types changes."
 msgstr "El tipo %(name)s pasa a /%(word)s. Cambian todas las direcciones de ambos tipos."
 
+#, fuzzy
+msgid "%(name)s would move to /%(word)s, which Gophenberg keeps for itself. Change its plural name and try again."
+msgstr "El tipo %(name)s pasaría a /%(word)s, que Gophenberg reserva para sí mismo. Cambia su nombre en plural e inténtalo de nuevo."
+
 msgid "(no title)"
 msgstr "(sin título)"
 
@@ -252,8 +256,9 @@ msgstr "Gophenberg no responde en %(value)s. Elige uno de los idiomas de la list
 msgid "Gophenberg has no autosave of yours for this item. Open the item to see the version that is stored."
 msgstr "Gophenberg no tiene ningún guardado automático tuyo de este elemento. Ábrelo para ver la versión guardada."
 
-msgid "Gophenberg keeps this address for itself, so your content cannot answer there. Give the item a different slug."
-msgstr "Gophenberg reserva esta dirección para sí mismo, así que tu contenido no puede usarla. Dale al elemento otra dirección."
+#, fuzzy
+msgid "Gophenberg keeps /%(path)s for itself or for another content type, so your content cannot answer there. Give the item a different slug."
+msgstr "Gophenberg reserva la dirección /%(path)s para sí mismo o para otro tipo de contenido, así que tu contenido no puede usarla. Dale al elemento otro slug."
 
 msgid "Gophenberg keeps this word for itself, so no content type can answer under it. Pick a different route word."
 msgstr "Gophenberg reserva esta palabra para sí mismo, así que ningún tipo de contenido puede usarla. Elige otra palabra de ruta de URL."
@@ -537,9 +542,6 @@ msgstr "El archivo %(file)s llama a este tema %(declared)s, pero se está instal
 msgid "The %(file)s inside %(name)s is not valid JSON, so it could not be read. Fix that file and package the theme again."
 msgstr "El archivo %(file)s dentro de %(name)s no es JSON válido, así que no se ha podido leer. Corrige ese archivo y vuelve a empaquetar el tema."
 
-msgid "The address %(path)s is kept for the front page listing, so no item can answer there. Give the item a different slug and try again."
-msgstr "La dirección %(path)s está reservada para el listado de la página principal, así que ningún elemento puede responder ahí. Dale al elemento otro slug e inténtalo de nuevo."
-
 msgid "The browser kept an unsaved version of this post."
 msgstr "El navegador ha guardado una versión sin guardar de esta entrada."
 
@@ -590,9 +592,6 @@ msgstr "El nombre cambia. Nada de lo guardado en este campo se mueve."
 
 msgid "The number of revisions to keep has to be a whole number, and it cannot be negative. Enter a different number."
 msgstr "El número de revisiones que se conservan tiene que ser un número entero, y no puede ser negativo. Introduce otro número."
-
-msgid "The plural name %(label)s would become the route word %(word)s, which Gophenberg keeps for itself. Change the plural name and try again."
-msgstr "El nombre en plural %(label)s se convertiría en la palabra de ruta de URL %(word)s, que Gophenberg se reserva. Cambia el nombre en plural e inténtalo de nuevo."
 
 msgid "The registry could not be reached."
 msgstr "No se ha podido acceder al registro."
