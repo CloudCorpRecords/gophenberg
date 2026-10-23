@@ -989,10 +989,7 @@ func (s *memoryTypes) handRootOver(at time.Time) (typeCarry, error) {
 		was := stored.RouteWord
 		stored.RouteWord, stored.Default, stored.UpdatedAt = stored.DerivedRouteWord(), false, at
 		if err := stored.ValidateChange(content.Type{}); err != nil {
-			if errors.Is(err, content.ErrRouteWordReserved) {
-				return typeCarry{}, content.LabelRouteWordReserved(stored)
-			}
-			return typeCarry{}, err
+			return typeCarry{}, handOverFailure(stored, err)
 		}
 		if s.routeWordTaken(stored.Key, stored.RouteWord) {
 			return typeCarry{}, content.ErrRouteWordTaken
@@ -1001,6 +998,14 @@ func (s *memoryTypes) handRootOver(at time.Time) (typeCarry, error) {
 		return typeCarry{key: stored.Key, was: was, now: stored.RouteWord, at: at}, nil
 	}
 	return typeCarry{}, nil
+}
+
+// handOverFailure returns the error the hand over carries, naming the type and its word when the CMS keeps that word.
+func handOverFailure(demoted content.Type, err error) error {
+	if !errors.Is(err, content.ErrRouteWordReserved) {
+		return err
+	}
+	return content.DerivedRouteWordReserved(demoted.Key, demoted.PluralLabel, demoted.RouteWord)
 }
 
 // Delete removes the type, or reports it missing, still holding content or still targeted by a stored relation field.

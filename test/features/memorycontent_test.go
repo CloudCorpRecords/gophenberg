@@ -511,12 +511,12 @@ func (s *memoryContent) addressHeld(path string, except uuid.UUID) bool {
 	return false
 }
 
-// offPagination returns the refusal naming an address the root listing keeps for its numbered pages, if it is one.
+// offPagination returns the error naming an address the root listing keeps for its numbered pages, if it is one.
 func offPagination(path string) error {
 	if !content.RootPagination(path) {
 		return nil
 	}
-	return content.PaginationAddressReserved(path)
+	return content.ReservedAddress(path)
 }
 
 // movedOffPagination returns the refusal naming the first moved address the root listing keeps, if there is one.
@@ -862,7 +862,7 @@ func (s *memoryContent) Update(
 		return content.Content{}, content.ErrSlugTaken
 	}
 	if settled.Path != stored.Path && content.RootPagination(settled.Path) {
-		return content.Content{}, content.ErrReservedAddress
+		return content.Content{}, content.ReservedAddress(settled.Path)
 	}
 	carried, err := s.carriedUnder(settled, stored.Path)
 	if err != nil {
