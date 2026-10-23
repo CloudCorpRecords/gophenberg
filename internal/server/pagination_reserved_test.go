@@ -3,26 +3,12 @@
 package server_test
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/server"
 )
-
-// errorMeta reads the data a refused request carries.
-func errorMeta(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
-	t.Helper()
-	var answered struct {
-		Meta map[string]any `json:"meta"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &answered); err != nil {
-		t.Fatalf("reading the error response: %v", err)
-	}
-	return answered.Meta
-}
 
 func TestTypeAPIKeepsPageReservedForPagination(t *testing.T) {
 	t.Parallel()
@@ -86,53 +72,68 @@ func TestContentAPIRefusesAChildAtTheRootPaginationAddress(t *testing.T) {
 	if recorder.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("POST child status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	if code := errorCode(t, recorder); code != "address_reserved" {
-		t.Errorf("code = %q, want address_reserved", code)
+	answered := decodeBody[struct {
+		Code string         `json:"code"`
+		Meta map[string]any `json:"meta"`
+	}](t, recorder)
+	if answered.Code != "address_reserved" {
+		t.Errorf("code = %q, want address_reserved", answered.Code)
+	}
+	if answered.Meta["path"] != "page/2" {
+		t.Errorf("meta = %v, want the path page/2 named", answered.Meta)
 	}
 }
 
-func TestTypeAPINamesTheLabelBlockingARootHandOver(t *testing.T) {
+func TestTypeAPINamesTheTypeAndTheWordItWouldMoveTo(t *testing.T) {
 	t.Parallel()
 
 	users := newFakeUserStore()
 	addAda(t, users)
 	types := newFakeTypeStore()
 	types.register(pageType())
-	types.updateErr = content.LabelRouteWordReserved(content.Type{PluralLabel: "Page", RouteWord: "page"})
+	types.updateErr = content.DerivedRouteWordReserved("post", "Page", "page")
 	handler := authedServerWithStores(t, server.Config{Users: users, Content: newFakePostStore(), Types: types})
 
-	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"description":"Site pages"}`)
+	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"default":true}`)
 
 	if recorder.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("PATCH status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	if code := errorCode(t, recorder); code != "route_word_reserved_by_label" {
-		t.Errorf("code = %q, want route_word_reserved_by_label", code)
+	answered := decodeBody[struct {
+		Code string         `json:"code"`
+		Meta map[string]any `json:"meta"`
+	}](t, recorder)
+	if answered.Code != "derived_route_word_reserved" {
+		t.Errorf("code = %q, want derived_route_word_reserved", answered.Code)
 	}
-	if meta := errorMeta(t, recorder); meta["label"] != "Page" || meta["word"] != "page" {
-		t.Errorf("meta = %v, want the label Page and the word page named", meta)
+	if answered.Meta["type"] != "post" || answered.Meta["name"] != "Page" || answered.Meta["word"] != "page" {
+		t.Errorf("meta = %v, want the type post named Page and the word page", answered.Meta)
 	}
 }
 
-func TestTypeAPINamesTheAddressBlockingARootHandOver(t *testing.T) {
+func TestTypeAPINamesTheAddressAnItemWouldMoveTo(t *testing.T) {
 	t.Parallel()
 
 	users := newFakeUserStore()
 	addAda(t, users)
 	types := newFakeTypeStore()
 	types.register(pageType())
-	types.updateErr = content.PaginationAddressReserved("page/2")
+	types.updateErr = content.ReservedAddress("page/2")
 	handler := authedServerWithStores(t, server.Config{Users: users, Content: newFakePostStore(), Types: types})
 
-	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"description":"Site pages"}`)
+	recorder := doRequest(t, handler, http.MethodPatch, "/api/types/page", `{"default":true}`)
 
 	if recorder.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("PATCH status = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	if code := errorCode(t, recorder); code != "pagination_address_reserved" {
-		t.Errorf("code = %q, want pagination_address_reserved", code)
+	answered := decodeBody[struct {
+		Code string         `json:"code"`
+		Meta map[string]any `json:"meta"`
+	}](t, recorder)
+	if answered.Code != "address_reserved" {
+		t.Errorf("code = %q, want address_reserved", answered.Code)
 	}
-	if meta := errorMeta(t, recorder); meta["path"] != "page/2" {
-		t.Errorf("meta = %v, want the path page/2 named", meta)
+	if answered.Meta["path"] != "page/2" {
+		t.Errorf("meta = %v, want the path page/2 named", answered.Meta)
 	}
 }
