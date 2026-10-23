@@ -88,10 +88,6 @@ export function errorTemplates(): Record<string, string> {
 			'This definitions file is larger than the %(max)s bytes Gophenberg reads in one request. Split it, or raise the limit your site runs with.',
 			DOMAIN,
 		),
-		derived_route_word_reserved: __(
-			'%(name)s would move to /%(word)s, which Gophenberg keeps for itself. Change its plural name and try again.',
-			DOMAIN,
-		),
 		field_key_malformed: __(
 			'A field key has to start with a lowercase letter and then hold only lowercase letters, numbers and hyphens. Rename the field so its key comes out in that shape.',
 			DOMAIN,
@@ -553,6 +549,19 @@ export function authTemplates(): Record<string, string> {
 		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
 		role_unknown: __('Nothing declares that role.', DOMAIN),
 		self_role_refused: __('You cannot change your own role.', DOMAIN),
+	}
+}
+
+/**
+ * Returns the message each code a content type write answers with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function typeTemplates(): Record<string, string> {
+	return {
+		derived_route_word_reserved: __(
+			'%(name)s would move to /%(word)s, which Gophenberg keeps for itself. Change its plural name and try again.',
+			DOMAIN,
+		),
 	}
 }
 

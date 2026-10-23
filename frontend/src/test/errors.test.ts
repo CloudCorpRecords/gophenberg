@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 
 import { errorText } from '../i18n/errors'
-import { errorTemplates, updateTemplates } from '../i18n/errorTemplates'
+import { errorTemplates, typeTemplates, updateTemplates } from '../i18n/errorTemplates'
 import { repositoryRoot } from '../../scripts/config.ts'
 
 test('reads the message a code stands for', () => {
@@ -104,7 +104,7 @@ test('carries a message for every code the server can answer with', () => {
 	const emitted = execFileSync('sh', [script], { cwd: repositoryRoot(), encoding: 'utf8' })
 		.split('\n')
 		.filter((held) => held !== '')
-	const held = { ...errorTemplates(), ...updateTemplates() }
+	const held = { ...errorTemplates(), ...typeTemplates(), ...updateTemplates() }
 
 	expect(emitted.filter((code) => held[code] === undefined)).toEqual([])
 })
