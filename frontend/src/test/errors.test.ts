@@ -109,25 +109,25 @@ test('carries a message for every code the server can answer with', () => {
 	expect(emitted.filter((code) => held[code] === undefined)).toEqual([])
 })
 
-test('names the label a root hand-over trips on', () => {
+test('names the type and the route word a hand over would give it', () => {
 	const held = errorText({
-		error: 'content: route word reserved: the label "Page" would become the route word "page"',
-		code: 'route_word_reserved_by_label',
-		meta: { label: 'Page', word: 'page' },
+		error: 'content: route word reserved: "Page" would answer under "page"',
+		code: 'derived_route_word_reserved',
+		meta: { type: 'post', name: 'Page', word: 'page' },
 	})
 
-	expect(held).toContain('Page')
-	expect(held).toContain('page')
-	expect(held).toMatch(/plural name/i)
+	expect(held).toBe(
+		'Page would move to /page, which Gophenberg keeps for itself. Change its plural name and try again.',
+	)
 })
 
-test('names the address a root hand-over trips on', () => {
+test('names the address no item can answer at', () => {
 	const held = errorText({
 		error: 'content: the address is reserved: "page/2"',
-		code: 'pagination_address_reserved',
+		code: 'address_reserved',
 		meta: { path: 'page/2' },
 	})
 
-	expect(held).toContain('page/2')
-	expect(held).toMatch(/slug/i)
+	expect(held).toContain('Gophenberg keeps /page/2 for itself or for another content type')
+	expect(held).toContain('Give the item a different slug.')
 })
