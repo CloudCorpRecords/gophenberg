@@ -28,12 +28,11 @@ var ErrRouteWordTaken = errors.New("content: route word taken")
 // ErrRouteWordReserved reports that the route word names a place the CMS keeps.
 var ErrRouteWordReserved = errors.New("content: route word reserved")
 
-// LabelRouteWordReserved returns the refusal to hand the root over when the demoted type's
-// label would become a route word the CMS keeps, naming the label and the word it makes.
-func LabelRouteWordReserved(t Type) error {
-	return Refuse(ErrRouteWordReserved, "route_word_reserved_by_label",
-		fmt.Sprintf("%s: the label %q would become the route word %q", ErrRouteWordReserved, t.PluralLabel, t.RouteWord),
-		Details{"label": t.PluralLabel, "word": t.RouteWord})
+// DerivedRouteWordReserved returns the error naming the type and the derived route word the CMS keeps.
+func DerivedRouteWordReserved(key, name, word string) error {
+	return Refuse(ErrRouteWordReserved, "derived_route_word_reserved",
+		fmt.Sprintf("%s: %q would answer under %q", ErrRouteWordReserved, name, word),
+		Details{"type": key, "name": name, "word": word})
 }
 
 // ErrRootTaken reports that another content type already lives at the root.
