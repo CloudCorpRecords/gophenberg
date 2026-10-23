@@ -13,7 +13,7 @@ import (
 func checkPaginationPaths(paths []string) error {
 	for _, path := range paths {
 		if content.RootPagination(path) {
-			return content.PaginationAddressReserved(path)
+			return content.ReservedAddress(path)
 		}
 	}
 	return nil
@@ -29,7 +29,7 @@ func checkPaginationEdit(ctx context.Context, queries *db.Queries, params db.Upd
 		return err
 	}
 	if stored.Path != params.Path {
-		return content.ErrReservedAddress
+		return content.ReservedAddress(params.Path)
 	}
 	return nil
 }
