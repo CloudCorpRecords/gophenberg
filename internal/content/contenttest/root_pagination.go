@@ -108,7 +108,7 @@ func updateRefusesAMoveOntoARootPaginationAddress(t *testing.T, s Stores) {
 	root := nestingPosts(t, s.Types)
 	parent := StoreItem(t, s.Content, root, nil, "Page", author)
 	held := StoreItem(t, s.Content, root, &parent, "About", author)
-	moved := held.Place(content.PageWord, "2")
+	moved := held.Place(content.PageWord, "3")
 	moved.UpdatedAt = time.Now().UTC()
 
 	_, err := s.Content.Update(t.Context(), moved, held.UpdatedAt, nil, 0)
@@ -116,7 +116,7 @@ func updateRefusesAMoveOntoARootPaginationAddress(t *testing.T, s Stores) {
 	if !errors.Is(err, content.ErrReservedAddress) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrReservedAddress)
 	}
-	carriedOnto(t, err, "page/2")
+	carriedOnto(t, err, "page/3")
 	unmoved(t, s.Content, held)
 }
 
