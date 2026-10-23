@@ -201,7 +201,7 @@ func (s *Store) updateTypeFailure(err error) error {
 	return fmt.Errorf("%s: update content type: %w", s.backend.Engine, err)
 }
 
-// handRootOver moves the type holding the root under a word of its own so another may take it.
+// handRootOver moves the type holding the root under a word of its own.
 func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 	row, err := queries.LockDefaultContentType(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -214,7 +214,7 @@ func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 	demoted.RouteWord = demoted.DerivedRouteWord()
 	demoted.Default, demoted.UpdatedAt = false, at
 	if err := demoted.ValidateChange(content.Type{}); err != nil {
-		return handoverRefusal(demoted, err)
+		return handOverFailure(demoted, err)
 	}
 	if _, err := queries.UpdateContentType(ctx, updateParams(demoted)); err != nil {
 		return err
@@ -222,12 +222,12 @@ func handRootOver(ctx context.Context, queries Queries, at time.Time) error {
 	return carryContent(ctx, queries, demoted, row.RouteWord)
 }
 
-// handoverRefusal names the label blocking a root hand-over, or carries any other failure unchanged.
-func handoverRefusal(demoted content.Type, err error) error {
+// handOverFailure returns the error the hand over carries, naming the type and its word when the CMS keeps that word.
+func handOverFailure(demoted content.Type, err error) error {
 	if !errors.Is(err, content.ErrRouteWordReserved) {
 		return err
 	}
-	return content.LabelRouteWordReserved(demoted)
+	return content.DerivedRouteWordReserved(demoted.Key, demoted.PluralLabel, demoted.RouteWord)
 }
 
 // Delete removes the type, or reports it missing or still in use.

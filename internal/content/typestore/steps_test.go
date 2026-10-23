@@ -65,11 +65,6 @@ func takenInBookDetails(key string) error {
 		content.Details{"field": key, "group": "Book details"})
 }
 
-// typeWithPluralLabel returns a type carrying the plural label and the route word it makes.
-func typeWithPluralLabel(label, word string) content.Type {
-	return content.Type{PluralLabel: label, RouteWord: word}
-}
-
 // flatNovel returns the book type edited into novels that stop nesting.
 func flatNovel() content.Type {
 	t := novelUnder("books")
@@ -204,7 +199,7 @@ var typeArms = map[string]arm{
 			return valued(s.Update(ctx, rootBook(true)))
 		},
 		log:  []step{begun, sent("LockContentType", keyed{"book"}), lockedRoot, rolledBack},
-		ends: content.LabelRouteWordReserved(typeWithPluralLabel("Media", "media")),
+		ends: content.DerivedRouteWordReserved("page", "Media", "media"),
 	},
 	"Update taking the root cannot move the previous root under page": {
 		stocked: libraryWith(func(stocked *shelf) { stocked.types[0].PluralLabel = "Page" }),
@@ -212,7 +207,7 @@ var typeArms = map[string]arm{
 			return valued(s.Update(ctx, rootBook(true)))
 		},
 		log:  []step{begun, sent("LockContentType", keyed{"book"}), lockedRoot, rolledBack},
-		ends: content.LabelRouteWordReserved(typeWithPluralLabel("Page", "page")),
+		ends: content.DerivedRouteWordReserved("page", "Page", "page"),
 	},
 	"Update taking the root from a type with no plural label wraps the label failure": {
 		stocked: libraryWith(func(stocked *shelf) { stocked.types[0].PluralLabel = "" }),
